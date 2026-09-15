@@ -1,0 +1,42 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.sln.docstates
+CMakeSettings.json
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Testing/
+
+# Compiled objects / binaries
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+
+# Third-party fetched sources (vendor via CMake FetchContent / submodules, not committed)
+third_party/*
+!third_party/.gitkeep
+
+# Editor / OS
+.vscode/
+*.user
+Thumbs.db
+.DS_Store
+
+# Large data / meshes / results (track via Git LFS or external storage instead)
+*.msh
+*.vtu
+*.vtk
+/data/
+/results/
