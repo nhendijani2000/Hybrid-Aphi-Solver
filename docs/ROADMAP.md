@@ -360,6 +360,33 @@ interest only if a future matched-second-order **A** is revisited (Phase
    diagonal with kappa = 1000 exactly), not just re-checked against the
    gauge variants -- 19/19 checks now passing in
    `tests/test_gauge_variants.cpp`.
+   **Updated (Sept 2026): measured on real meshes, and the trends argue
+   against Method D rather than for it.** With `compare_gauges` running at
+   realistic sizes, three meshes give:
+
+   | mesh | cotree DOFs | kappa_A | kappa_D | kappa_D/kappa_A | nnz_D/nnz_A |
+   |---|---|---|---|---|---|
+   | cube_4 | 480 | 629.8 | 152.8 | 0.243 | 2.97x |
+   | cube_6 | 1512 | 1876.7 | 525.6 | 0.280 | 4.37x |
+   | cube_9 | 4860 | 5731.0 | 2041.7 | 0.356 | 6.49x |
+
+   The ordering reproduces Munteanu's (kappa_D < kappa_A), and the estimates
+   are converged rather than truncation artifacts: raising the estimator's
+   outer iteration cap from 50 to 5000 moves them by less than one part in
+   10^5. But **D's conditioning advantage shrinks as the mesh grows while
+   its fill-in grows**, and D's reduced matrix is non-symmetric by
+   construction, which forecloses COCG/COCR and symmetric-indefinite
+   factorization (`docs/CONDITIONING.md`). Paying 6.5x the nonzeros and a
+   costlier solver class for a 2.8x conditioning edge that is eroding is a
+   poor trade, and it is trending worse -- one of the reasons Phase 04
+   targets Albanese-Rubinacci first.
+   **The caveat that outweighs the rest:** every number above is for
+   `M = C^T C`, a vacuum curl-curl stand-in, *not* the A-Phi system. The
+   real assembled matrix carries the `(j*omega*sigma - omega^2*eps)` mass
+   term, which regularizes exactly the curl-curl null space this comparison
+   is about, so none of it transfers automatically.
+   `docs/TREE_COTREE_GAUGE.md` Sec. 6 has the full analysis; Phase 05 is
+   where it gets re-run on a real assembled system.
 4. **Handle multiple PEC bodies** explicitly (each grounded to its own
    reference node) — a common source of subtle bugs later. **Already done as
    part of step 1**: `build_tree_cotree` discovers PEC-tagged nodes'
@@ -742,6 +769,20 @@ coefficients), and typically ill-conditioned. Scaling and reordering happen
    you empirically rediscover why low-frequency breakdown happens, what your
    gauge choice buys you, and where your own natural-vs-scaled crossover
    actually falls (see `docs/CONDITIONING.md`).
+7. **Re-run the Albanese-Rubinacci vs. Munteanu-unsymmetric comparison on a
+   real assembled system.** Every gauge-conditioning number this project has
+   so far (Phase 03, step 3; `docs/TREE_COTREE_GAUGE.md` Sec. 6) was
+   measured on `M = CᵀC`, a vacuum curl-curl stand-in, because no assembly
+   pipeline existed yet. The real matrix carries the `(jωσ − ω²ε)` mass
+   term, which regularizes exactly the curl-curl null space that comparison
+   turns on — so the measured κ_D < κ_A ordering may not survive, and the
+   fill-in and symmetry costs that already argue against Method D will not
+   change in its favour. This is the point at which a gauge *recommendation*
+   becomes defensible; until then Phase 04's choice of Method A is a
+   pragmatic starting point, not a conclusion. Whether `tools/compare_gauges`
+   grows a mode that takes an assembled system, or this moves into the
+   frequency sweep in step 6, is an implementation detail — running it on
+   the wrong matrix twice is not.
 
 **Grounds this phase:** Yan (2021), §1–2 (low-frequency breakdown mechanism);
 Li, Sun, Dai & Chew (2015), Table I (condition-number / iteration-count
@@ -752,8 +793,9 @@ linear algebra, not specific to any one implementation.
 
 **Ready for 06 when:** you have a frequency-vs-conditioning plot for your two
 test problems, MUMPS (or the alternative you land on) actually linked and
-factoring a real assembled system, and a default solver configuration
-documented.
+factoring a real assembled system, a default solver configuration
+documented, and the gauge comparison (step 7) re-measured on that real
+system rather than on the `CᵀC` stand-in every earlier number came from.
 
 ---
 

@@ -70,6 +70,21 @@ implementations from here on:
   (`SparseMatrix`/`multiply` in `incidence.cpp`, dense per-tet element
   matrices) is still exactly where the phase-by-phase guidance above says
   it should be.
+- **Superseded (Sept 2026), for the two bullets above and item 3's
+  "rather than the COO/`std::map`-based `SparseMatrix` in `incidence.cpp`":
+  that placeholder no longer exists.** Phase 03.5 (`docs/ROADMAP.md`)
+  replaced it with `Sparse<T>` in `include/aphi_solver/sparse_matrix.hpp`
+  — triplet accumulation, one `compress()` into CSR, templated on the
+  scalar so the real incidence operators and the complex assembled blocks
+  share one implementation. `incidence.hpp`'s `SparseMatrix` is now an alias
+  for `Sparse<double>`, `APhiBlockSystem` holds sparse blocks, and the
+  hand-written `coalesce`/`multiply`/`transpose` and the local matvec
+  helpers in `gauge_variants.cpp` were deleted rather than ported. So item 3
+  is satisfied ahead of Phase 05, not still pending. What the text above
+  still describes correctly is the *reasoning*: it was done when the code
+  started doing real linear algebra, which turned out to be the Phase 03/04
+  boundary rather than Phase 05. Dense per-tet element matrices remain
+  appropriate and unchanged — those are 6x6/10x10, not a scaling concern.
 
 ## Style
 

@@ -203,7 +203,56 @@ M^T L^T = L M L^T` whenever `M = M^T` -- symmetric by construction,
 regardless of what `L` is, which is exactly the distinguishing feature the
 name refers to.
 
-## 6. What this derivation does and doesn't rely on the paper for
+## 6. Measured behaviour on real meshes (Sept 2026)
+
+The condition-number ordering in Section 5's contrast is Munteanu's, checked
+here only as a direction of comparison. Once `tools/compare_gauges` could
+run on real meshes, three sizes were measured with `M = C^T C` (vacuum,
+`nu = 1`):
+
+| mesh | cotree DOFs | kappa_A | kappa_D | kappa_D/kappa_A | nnz_D/nnz_A |
+|---|---|---|---|---|---|
+| cube_4 | 480 | 629.8 | 152.8 | 0.243 | 2.97 |
+| cube_6 | 1512 | 1876.7 | 525.6 | 0.280 | 4.37 |
+| cube_9 | 4860 | 5731.0 | 2041.7 | 0.356 | 6.49 |
+
+**The ordering reproduces Munteanu's (`kappa_D < kappa_A`), and the numbers
+are converged**, not artifacts of a truncated estimate: re-running
+`estimate_condition_number` with its outer iteration cap raised from 50 to
+5000 moves `kappa_A`/`kappa_D` by less than one part in 10^5 at both cube_4
+and cube_6, and the estimator itself is independently validated against
+diagonal matrices with analytically known condition numbers
+(`tests/test_gauge_variants.cpp`).
+
+**Why Method D is better conditioned**, in terms of Section 4's algebra:
+the two methods project onto different subspaces. Method A restricts to
+`{a : a_t = 0}` -- an arbitrary *coordinate* subspace, since forcing the
+potential to vanish on a spanning tree bears no relation to the operator.
+Method D's trial space `range(L^T) = {a : a_t = -F^T a_c}` is exactly
+`{a : G^T a = 0}` (Section 3), the discrete gauge-consistent subspace. D
+eliminates along a structurally meaningful direction; A slices arbitrarily.
+
+**But a lower condition number does not make D the better choice here, and
+both trends run against it.** Across those three meshes D's conditioning
+advantage *shrinks* (0.243 -> 0.280 -> 0.356) while its fill-in *grows*
+(2.97x -> 4.37x -> 6.49x). On top of that, D's reduced matrix is
+non-symmetric by construction (Section 5), which forecloses COCG/COCR and
+symmetric-indefinite factorization (`docs/CONDITIONING.md`'s decision
+matrix). Paying 6.5x the nonzeros and a more expensive solver class for a
+2.8x conditioning edge that is eroding with mesh size is a poor trade, and
+it is trending worse -- which is part of why Phase 04 targets
+Albanese-Rubinacci first (`docs/ROADMAP.md`).
+
+**The caveat that outweighs all of the above:** `M = C^T C` is a vacuum
+curl-curl stand-in, *not* the A-Phi system. The assembled Phase 04 matrix
+carries the `(j*omega*sigma - omega^2*eps)` mass term and the A-Phi
+coupling blocks, and that mass term regularizes precisely the curl-curl
+null space this whole comparison is about. So every number in the table is
+a statement about `C^T C`, not about the matrix this solver will actually
+factor. Re-run the comparison in Phase 05 against real assembled systems
+before treating any of it as a gauge recommendation.
+
+## 7. What this derivation does and doesn't rely on the paper for
 
 Attributed to Munteanu's paper, and taken as a design choice rather than
 re-derived: the specific *names* Albanese-Rubinacci/unsymmetric for these
