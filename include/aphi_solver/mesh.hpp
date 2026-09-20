@@ -1,0 +1,121 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <map>
+#include <utility>
+#include <vector>
+
+namespace aphi_solver {
+
+/// A minimal 3-D point/vector type. Deliberately dependency-free, matching the
+/// project's existing style (see complex_matrix.hpp).
+struct Vec3 {
+    double x = 0.0, y = 0.0, z = 0.0;
+
+    Vec3() = default;
+    Vec3(double x_, double y_, double z_) : x(x_), y(y_), z(z_) {}
+
+    Vec3 operator+(const Vec3& o) const { return {x + o.x, y + o.y, z + o.z}; }
+    Vec3 operator-(const Vec3& o) const { return {x - o.x, y - o.y, z - o.z}; }
+    Vec3 operator*(double s) const { return {x * s, y * s, z * s}; }
+    double dot(const Vec3& o) const { return x * o.x + y * o.y + z * o.z; }
+    Vec3 cross(const Vec3& o) const {
+        return {y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x};
+    }
+    double norm() const;
+};
+
+/// A tetrahedron, stored as 4 indices into Mesh::nodes. Local vertex order
+/// 0..3 is arbitrary at read time (whatever the mesh file gives); everything
+/// derived from it (local edge/face numbering below) is defined relative to
+/// that order, per tet.
+using TetVerts = std::array<int, 4>;
+
+/// Local-vertex-pair numbering for a tet's 6 edges. This follows the same
+/// edge order as the vertex labels 5..10 in J.-M. Jin, *The Finite Element
+/// Method in Electromagnetics*, 3rd ed., 2014, Fig. 5.3 (already the source
+/// for this project's P2 nodal Phi element, see docs/FORMULATION.md Sec 5.1) --
+/// using the same order here means a tet's local edge index lines up directly
+/// with which of Phi's 6 edge-midpoint nodes sits on that edge, which matters
+/// once Phase 04 assembles both fields from the same per-tet loop.
+/// In Jin's 1-indexed vertex labels this is (1,2),(1,3),(1,4),(2,3),(3,4),(2,4);
+/// 0-indexed (used throughout this codebase) that is:
+inline constexpr std::array<std::pair<int, int>, 6> kTetLocalEdgeVerts = {{
+    {0, 1},  // local edge 0 -- Jin's edge-midpoint node 5
+    {0, 2},  // local edge 1 -- node 6
+    {0, 3},  // local edge 2 -- node 7
+    {1, 2},  // local edge 3 -- node 8
+    {2, 3},  // local edge 4 -- node 9
+    {1, 3},  // local edge 5 -- node 10
+}};
+
+/// Local face numbering: face i is opposite local vertex i, with the other
+/// three vertices listed in the cyclic order (i+1, i+2, i+3) mod 4. This is
+/// the standard "face opposite vertex i" convention (e.g. Jin 2014's own
+/// tetrahedron figures use it) and is purely a local-indexing choice, not
+/// sourced from any one implementation.
+inline constexpr std::array<std::array<int, 3>, 4> kTetLocalFaceVerts = {{
+    {1, 2, 3},  // face 0, opposite vertex 0
+    {2, 3, 0},  // face 1, opposite vertex 1
+    {3, 0, 1},  // face 2, opposite vertex 2
+    {0, 1, 2},  // face 3, opposite vertex 3
+}};
+
+/// A tetrahedral mesh with derived topology (globally unique edges and
+/// faces, each in a fixed canonical orientation) needed to build the
+/// discrete gradient (G) and curl (C) incidence matrices in incidence.hpp,
+/// and to evaluate basis functions per tet in basis_functions.hpp.
+///
+/// Canonical orientation convention (used throughout, see docs/ROADMAP.md
+/// Phase 02 step 2 and docs/FORMULATION.md): every global edge (i,j) is
+/// stored with i < j, defining its positive direction as i -> j; every
+/// global face (a,b,c) is stored with a < b < c, defining its positive
+/// traversal as a -> b -> c -> a. These are the two facts incidence.hpp's
+/// C and G are built from.
+class Mesh {
+public:
+    std::vector<Vec3> nodes;
+    std::vector<TetVerts> tets;
+
+    /// Globally unique edges, each (i, j) with i < j. Index into this vector
+    /// is the edge's global DOF/row index used by incidence.hpp and
+    /// basis_functions.hpp.
+    std::vector<std::pair<int, int>> edges;
+
+    /// Globally unique faces, each (a, b, c) with a < b < c.
+    std::vector<std::array<int, 3>> faces;
+
+    /// For each tet, the 6 global edge indices in kTetLocalEdgeVerts order.
+    std::vector<std::array<int, 6>> tet_edges;
+
+    /// For each tet, the 4 global face indices in kTetLocalFaceVerts order.
+    std::vector<std::array<int, 4>> tet_faces;
+
+    /// Builds edges, faces, tet_edges, tet_faces from `nodes` and `tets`.
+    /// Must be called once after `tets` is populated (the Gmsh reader in
+    /// gmsh_reader.hpp calls this itself).
+    void build_topology();
+
+    /// Signed volume of tet t (positive iff vertices 0,1,2,3 are a
+    /// right-handed / positively-oriented ordering). Zero or near-zero means
+    /// a degenerate tet.
+    double signed_tet_volume(int t) const;
+
+    int num_nodes() const { return static_cast<int>(nodes.size()); }
+    int num_edges() const { return static_cast<int>(edges.size()); }
+    int num_faces() const { return static_cast<int>(faces.size()); }
+    int num_tets() const { return static_cast<int>(tets.size()); }
+
+    /// Returns the global edge index for the (unordered) vertex pair {i, j},
+    /// or -1 if no such edge exists in this mesh. O(log num_edges) via an
+    /// internal lookup map built by build_topology -- used by
+    /// incidence.hpp's build_curl_matrix, so this needs to be more than a
+    /// linear scan once meshes stop being test-sized.
+    int find_edge(int i, int j) const;
+
+private:
+    std::map<std::pair<int, int>, int> edge_lookup_;
+};
+
+}  // namespace aphi_solver
