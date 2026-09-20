@@ -8,9 +8,12 @@
 
 #include <chrono>
 #include <cmath>
+#include <complex>
 #include <iostream>
 #include <string>
+#include <vector>
 
+#include "aphi_solver/complex_matrix.hpp"
 #include "aphi_solver/gauge_variants.hpp"
 #include "aphi_solver/incidence.hpp"
 #include "aphi_solver/mesh.hpp"
@@ -32,6 +35,7 @@ void check(bool condition, const std::string& what) {
 }
 
 bool nearly(double a, double b, double tol = 1e-6) { return std::abs(a - b) < tol; }
+bool nearly(Complex a, Complex b, double tol = 1e-6) { return std::abs(a - b) < tol; }
 
 Mesh make_single_tet() {
     Mesh m;
@@ -133,6 +137,119 @@ void run_condition_number_analytic_checks() {
     }
 }
 
+// docs/ROADMAP.md Phase 03.5, step 4: the gauge reduction must act on the
+// A-DOF rows/columns of a larger coupled [a; Phi] system while leaving Phi
+// alone, instead of assuming the matrix index space IS the mesh edge index
+// space. Two things make this more than a reindexing exercise, and both are
+// exercised below:
+//
+//  - A-DOFs may be a STRICT SUBSET of the mesh's edges (PEC tangential edges
+//    are removed from the unknown set, docs/FORMULATION.md Sec 5.4), so the
+//    A-DOF -> edge map is not the identity.
+//  - The system matrix is COMPLEX, while the tree/cotree decomposition it is
+//    reduced by is pure topology. The index map carries no scalar type at
+//    all, which is what lets one reduction serve both.
+void test_coupled_system_reduction() {
+    const Mesh mesh = make_two_tets_sharing_a_face();
+    const std::vector<bool> is_pec(static_cast<std::size_t>(mesh.num_nodes()), false);
+    const TreeCotreeResult tc = build_tree_cotree(mesh, is_pec);
+
+    // Drop edge 0 from the unknown set, standing in for a PEC tangential
+    // edge: A-DOFs are now a strict subset of the mesh's edges.
+    std::vector<int> a_dof_edge;
+    for (int e = 1; e < mesh.num_edges(); ++e) a_dof_edge.push_back(e);
+    const int num_a = static_cast<int>(a_dof_edge.size());
+    const int num_phi = 3;
+
+    const GaugeIndexMap map = build_albanese_rubinacci_index_map(a_dof_edge, num_phi, tc);
+
+    check(num_a < mesh.num_edges(), "coupled: A-DOFs are a strict subset of the mesh edges");
+
+    int expected_cotree = 0;
+    for (int e : a_dof_edge) {
+        if (!tc.is_tree_edge[static_cast<std::size_t>(e)]) ++expected_cotree;
+    }
+    check(map.reduced_size == expected_cotree + num_phi,
+          "coupled: reduced size == surviving A-DOFs + all Phi DOFs");
+
+    bool phi_all_kept = true;
+    for (int p = 0; p < num_phi; ++p) {
+        if (map.full_to_reduced[static_cast<std::size_t>(num_a + p)] < 0) phi_all_kept = false;
+    }
+    check(phi_all_kept, "coupled: every Phi DOF survives (Phi is never gauged)");
+
+    bool tree_a_all_dropped = true;
+    for (int k = 0; k < num_a; ++k) {
+        const bool is_tree = tc.is_tree_edge[static_cast<std::size_t>(a_dof_edge[static_cast<std::size_t>(k)])];
+        const bool dropped = map.full_to_reduced[static_cast<std::size_t>(k)] < 0;
+        if (is_tree != dropped) tree_a_all_dropped = false;
+    }
+    check(tree_a_all_dropped, "coupled: exactly the tree-edge A-DOFs are eliminated");
+
+    // A complex coupled system with a recognisable value at every position,
+    // so a misplaced row or column shows up as a wrong number rather than
+    // just a wrong count.
+    const int n_full = num_a + num_phi;
+    SparseMatrixZ full(n_full, n_full);
+    for (int r = 0; r < n_full; ++r) {
+        for (int c = 0; c < n_full; ++c) {
+            full.add(r, c, Complex(static_cast<double>(r + 1), static_cast<double>(c + 1)));
+        }
+    }
+    full.compress();
+
+    const SparseMatrixZ reduced = full.principal_submatrix(map.full_to_reduced, map.reduced_size);
+    check(reduced.rows() == map.reduced_size && reduced.cols() == map.reduced_size,
+          "coupled: reduced matrix is square with the mapped size");
+
+    bool entries_match = true;
+    for (int rr = 0; rr < map.reduced_size; ++rr) {
+        for (int cc = 0; cc < map.reduced_size; ++cc) {
+            const int r_full = map.reduced_to_full[static_cast<std::size_t>(rr)];
+            const int c_full = map.reduced_to_full[static_cast<std::size_t>(cc)];
+            if (!nearly(reduced.at(rr, cc), full.at(r_full, c_full))) entries_match = false;
+        }
+    }
+    check(entries_match, "coupled: every surviving entry keeps its original value at its new position");
+
+    // The Phi-Phi block must come through completely untouched -- it sits at
+    // the bottom-right of both the full and the reduced system, since only
+    // A-DOFs are ever removed and they all precede it.
+    bool phi_block_intact = true;
+    for (int p = 0; p < num_phi; ++p) {
+        for (int q = 0; q < num_phi; ++q) {
+            const int rr = map.full_to_reduced[static_cast<std::size_t>(num_a + p)];
+            const int cc = map.full_to_reduced[static_cast<std::size_t>(num_a + q)];
+            if (!nearly(reduced.at(rr, cc), full.at(num_a + p, num_a + q))) phi_block_intact = false;
+        }
+    }
+    check(phi_block_intact, "coupled: the Phi-Phi block passes through unchanged");
+
+    // Right-hand-side restriction and solution expansion round-trip, with
+    // every eliminated entry coming back as exactly zero -- which for a
+    // tree-edge A-DOF is the gauge condition a_t = 0 itself, not padding.
+    std::vector<Complex> rhs_full(static_cast<std::size_t>(n_full));
+    for (int i = 0; i < n_full; ++i) rhs_full[static_cast<std::size_t>(i)] = Complex(i + 1.0, -(i + 1.0));
+
+    const std::vector<Complex> rhs_reduced = restrict_vector(rhs_full, map);
+    check(static_cast<int>(rhs_reduced.size()) == map.reduced_size, "coupled: restricted RHS has the reduced length");
+
+    const std::vector<Complex> expanded = expand_solution(rhs_reduced, map);
+    check(expanded.size() == rhs_full.size(), "coupled: expanded solution has full length");
+
+    bool round_trip_ok = true;
+    bool eliminated_are_zero = true;
+    for (int i = 0; i < n_full; ++i) {
+        if (map.full_to_reduced[static_cast<std::size_t>(i)] >= 0) {
+            if (!nearly(expanded[static_cast<std::size_t>(i)], rhs_full[static_cast<std::size_t>(i)])) round_trip_ok = false;
+        } else if (expanded[static_cast<std::size_t>(i)] != Complex(0.0, 0.0)) {
+            eliminated_are_zero = false;
+        }
+    }
+    check(round_trip_ok, "coupled: restrict -> expand returns surviving entries unchanged");
+    check(eliminated_are_zero, "coupled: eliminated tree-edge entries expand to exactly zero (a_t = 0)");
+}
+
 }  // namespace
 
 int main() {
@@ -229,6 +346,8 @@ int main() {
         check(std::isfinite(kappa_d) && kappa_d >= 1.0 - 1e-6, label + ": Munteanu-unsymmetric condition number is finite and >= 1");
         std::cout << label << ": kappa_A = " << kappa_a << ", kappa_D = " << kappa_d << "\n";
     }
+
+    test_coupled_system_reduction();
 
     std::cout << g_checks - g_failures << "/" << g_checks << " checks passed.\n";
     return g_failures == 0 ? 0 : 1;

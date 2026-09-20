@@ -251,6 +251,42 @@ public:
         return c;
     }
 
+    /// The principal submatrix on the kept indices: keeps row/column i iff
+    /// `full_to_reduced[i] != -1`, placing it at `full_to_reduced[i]`.
+    ///
+    /// This is the whole of the Albanese-Rubinacci gauge reduction --
+    /// "eliminating those rows and columns which correspond to the tree
+    /// edges" (Munteanu, Sec. IV) is exactly a principal submatrix, which is
+    /// why the method preserves the sparsity pattern with no fill-in. It
+    /// lives here, on the matrix type, rather than in gauge_variants.cpp
+    /// because the index map is the only thing that differs between the two
+    /// callers: a bare edge-indexed curl-curl matrix (where the eliminated
+    /// set is the tree edges) and a coupled [a; Phi] system (where it is the
+    /// tree-edge A-DOFs, with every Phi row and column passing through
+    /// untouched). Templated on the scalar, so the real and complex cases
+    /// share one implementation -- see docs/ROADMAP.md Phase 03.5, step 4.
+    Sparse<T> principal_submatrix(const std::vector<int>& full_to_reduced, int reduced_size) const {
+        require_compressed("principal_submatrix");
+        if (rows_ != cols_) {
+            throw std::invalid_argument("Sparse::principal_submatrix: matrix must be square");
+        }
+        if (static_cast<int>(full_to_reduced.size()) != rows_) {
+            throw std::invalid_argument("Sparse::principal_submatrix: index map length must match matrix size");
+        }
+        Sparse<T> out(reduced_size, reduced_size);
+        for (int r = 0; r < rows_; ++r) {
+            const int rr = full_to_reduced[static_cast<std::size_t>(r)];
+            if (rr < 0) continue;  // eliminated row: skipped before its entries are read at all
+            for (int k = row_ptr_[static_cast<std::size_t>(r)]; k < row_ptr_[static_cast<std::size_t>(r) + 1]; ++k) {
+                const int cc = full_to_reduced[static_cast<std::size_t>(col_index_[static_cast<std::size_t>(k)])];
+                if (cc < 0) continue;  // eliminated column
+                out.add(rr, cc, values_[static_cast<std::size_t>(k)]);
+            }
+        }
+        out.compress();
+        return out;
+    }
+
     /// A copy with every stored value multiplied by `s`. The sparsity
     /// pattern is unchanged, so this is O(nnz) with no structural work --
     /// which is what the frequency-scaling transforms in `conditioning.hpp`

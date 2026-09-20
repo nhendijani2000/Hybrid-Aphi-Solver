@@ -153,34 +153,46 @@ std::vector<double> select_cotree_entries(const std::vector<double>& full, const
     return result;
 }
 
+GaugeIndexMap build_albanese_rubinacci_index_map(const std::vector<int>& a_dof_edge, int num_phi_dofs,
+                                                   const TreeCotreeResult& tc) {
+    const int num_a = static_cast<int>(a_dof_edge.size());
+    GaugeIndexMap map;
+    map.full_to_reduced.assign(static_cast<std::size_t>(num_a + num_phi_dofs), -1);
+    map.reduced_to_full.reserve(static_cast<std::size_t>(num_a + num_phi_dofs));
+
+    for (int k = 0; k < num_a; ++k) {
+        const int edge = a_dof_edge[static_cast<std::size_t>(k)];
+        if (tc.is_tree_edge[static_cast<std::size_t>(edge)]) continue;  // eliminated: a_t = 0
+        map.full_to_reduced[static_cast<std::size_t>(k)] = static_cast<int>(map.reduced_to_full.size());
+        map.reduced_to_full.push_back(k);
+    }
+    // Phi DOFs are never gauged -- the gauge freedom removed here is A's
+    // alone (docs/FORMULATION.md Sec 5.3) -- so every one of them survives.
+    for (int p = 0; p < num_phi_dofs; ++p) {
+        const int full = num_a + p;
+        map.full_to_reduced[static_cast<std::size_t>(full)] = static_cast<int>(map.reduced_to_full.size());
+        map.reduced_to_full.push_back(full);
+    }
+
+    map.reduced_size = static_cast<int>(map.reduced_to_full.size());
+    return map;
+}
+
 GaugeVariant build_albanese_rubinacci_gauge(const SparseMatrix& M, const TreeCotreeResult& tc) {
     GaugeVariant variant;
     variant.name = "Albanese-Rubinacci";
+    // The bare edge-indexed case: every matrix index IS a mesh edge, so the
+    // A-DOF -> edge map is the identity and there are no Phi DOFs. Expressed
+    // through the same index map and the same principal-submatrix primitive
+    // that a coupled [a; Phi] system uses, so the reduction itself has one
+    // implementation rather than two.
     const int num_edges = M.rows();
-    variant.cotree_local_index.assign(static_cast<std::size_t>(num_edges), -1);
-    int num_cotree = 0;
-    for (int e = 0; e < num_edges; ++e) {
-        if (!tc.is_tree_edge[static_cast<std::size_t>(e)]) {
-            variant.cotree_local_index[static_cast<std::size_t>(e)] = num_cotree++;
-        }
-    }
+    std::vector<int> identity(static_cast<std::size_t>(num_edges));
+    for (int e = 0; e < num_edges; ++e) identity[static_cast<std::size_t>(e)] = e;
 
-    // Walk M's CSR rows directly, skipping whole tree rows before touching
-    // their entries at all -- a tree row contributes nothing under a_t = 0.
-    variant.reduced_matrix = SparseMatrix(num_cotree, num_cotree);
-    const auto& row_ptr = M.row_ptr();
-    const auto& col_index = M.col_index();
-    const auto& values = M.values();
-    for (int e = 0; e < num_edges; ++e) {
-        const int r = variant.cotree_local_index[static_cast<std::size_t>(e)];
-        if (r == -1) continue;  // tree row: dropped, per a_t = 0
-        for (int k = row_ptr[static_cast<std::size_t>(e)]; k < row_ptr[static_cast<std::size_t>(e) + 1]; ++k) {
-            const int c = variant.cotree_local_index[static_cast<std::size_t>(col_index[static_cast<std::size_t>(k)])];
-            if (c == -1) continue;  // tree column: dropped for the same reason
-            variant.reduced_matrix.add(r, c, values[static_cast<std::size_t>(k)]);
-        }
-    }
-    variant.reduced_matrix.compress();
+    const GaugeIndexMap map = build_albanese_rubinacci_index_map(identity, 0, tc);
+    variant.cotree_local_index = map.full_to_reduced;
+    variant.reduced_matrix = M.principal_submatrix(map.full_to_reduced, map.reduced_size);
     return variant;
 }
 

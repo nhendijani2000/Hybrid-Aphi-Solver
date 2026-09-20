@@ -77,6 +77,64 @@ struct GaugeVariant {
 /// cotree-row test space, per Munteanu Sec. V).
 std::vector<double> select_cotree_entries(const std::vector<double>& full, const std::vector<int>& cotree_local_index);
 
+/// Which rows/columns of a system the tree-cotree gauge eliminates, and
+/// where the survivors land. Deliberately holds nothing but indices: the
+/// same map applies to a real or a complex matrix, so this is what lets one
+/// implementation of the reduction serve both (`Sparse<T>::
+/// principal_submatrix`). See docs/ROADMAP.md Phase 03.5, step 4.
+struct GaugeIndexMap {
+    /// full_to_reduced[i] == -1 if system index i is eliminated, otherwise
+    /// its index in the reduced system.
+    std::vector<int> full_to_reduced;
+
+    /// The inverse: reduced_to_full[k] is the full-system index of reduced
+    /// index k. Used to scatter a reduced solution back out.
+    std::vector<int> reduced_to_full;
+
+    int reduced_size = 0;
+};
+
+/// Builds the Albanese-Rubinacci index map for a coupled [a; Phi] system,
+/// laid out as `assemble_sparse` produces it: A-DOFs first in
+/// [0, a_dof_edge.size()), then Phi DOFs.
+///
+/// `a_dof_edge[k]` is the mesh edge that A-DOF k represents. In the
+/// full-wave regime that is the identity (N_A == N_edges,
+/// docs/FORMULATION.md Sec 5.2), but it becomes a genuine mapping once PEC
+/// tangential edges are removed from the unknown set (Sec 5.4) or the
+/// reduced low-frequency regime confines A to Omega_c -- which is precisely
+/// why the gauge reduction cannot keep assuming its index space *is* the
+/// mesh edge index space.
+///
+/// Every tree-edge A-DOF is eliminated (a_t = 0); every cotree A-DOF and
+/// every Phi DOF is kept. Phi is never gauged: the gauge freedom being
+/// removed is A's alone (docs/FORMULATION.md Sec 5.3).
+GaugeIndexMap build_albanese_rubinacci_index_map(const std::vector<int>& a_dof_edge, int num_phi_dofs,
+                                                   const TreeCotreeResult& tc);
+
+/// Restricts a full-system right-hand side to the kept indices.
+template <typename T>
+std::vector<T> restrict_vector(const std::vector<T>& full, const GaugeIndexMap& map) {
+    std::vector<T> out(static_cast<std::size_t>(map.reduced_size), T{});
+    for (int k = 0; k < map.reduced_size; ++k) {
+        out[static_cast<std::size_t>(k)] = full[static_cast<std::size_t>(map.reduced_to_full[static_cast<std::size_t>(k)])];
+    }
+    return out;
+}
+
+/// Scatters a reduced solution back to full-system length, leaving every
+/// eliminated entry at exactly zero -- which for a tree-edge A-DOF is not a
+/// placeholder but the gauge condition itself, a_t = 0.
+template <typename T>
+std::vector<T> expand_solution(const std::vector<T>& reduced, const GaugeIndexMap& map) {
+    std::vector<T> out(map.full_to_reduced.size(), T{});
+    for (int k = 0; k < map.reduced_size; ++k) {
+        out[static_cast<std::size_t>(map.reduced_to_full[static_cast<std::size_t>(k)])] =
+            reduced[static_cast<std::size_t>(k)];
+    }
+    return out;
+}
+
 /// Method A -- Albanese & Rubinacci's gauge (Munteanu's "Method A"):
 /// literally sets every tree-edge DOF to zero, a_t = 0, and solves the
 /// principal submatrix of the full curl-curl system M restricted to

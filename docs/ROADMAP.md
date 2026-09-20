@@ -457,7 +457,19 @@ have a settled type signature, so that phase is only about the weak form.
    02, step 5 above; listed here because it is a hard prerequisite for any
    assembly and was the one item of the four that was an outright bug
    rather than a missing piece.
-2. **One templated sparse matrix type, replacing today's split.** The
+2. **Done (Sept 2026) — one templated sparse matrix type, replacing
+   today's split.** Shipped as `Sparse<T>` in
+   `include/aphi_solver/sparse_matrix.hpp` (aliases `SparseMatrixD`,
+   `SparseMatrixZ`), with `incidence.hpp`'s old COO struct now an alias for
+   the real instantiation and `APhiBlockSystem` holding sparse blocks with
+   plain `std::vector<Complex>` right-hand sides. `conditioning.hpp` gains
+   `assemble_sparse` (the production path) alongside `assemble_dense` (the
+   ground truth, deliberately kept independent so their cross-check is not
+   tautological); `equilibration.hpp` moved with them rather than forcing a
+   dense round-trip mid-solve. The migration deleted more than it added:
+   `incidence.cpp`'s hand-written coalesce/multiply/transpose and
+   `gauge_variants.cpp`'s local matvec helpers all became members of the one
+   type. Original text follows. The
    codebase currently has two incompatible halves: `SparseMatrix`
    (`incidence.hpp`) is real-valued COO with a `std::map`-based coalesce,
    and `ComplexMatrix` (`complex_matrix.hpp`) is complex but **dense** —
@@ -488,7 +500,24 @@ have a settled type signature, so that phase is only about the weak form.
    tag, remapped to 0-based node indices. `Mesh` carries integers only —
    what tag `7` *means* is the input file's job, keeping `gmsh_reader.cpp`
    format-agnostic and dependency-free.
-4. **Generalize the gauge reduction to an explicit A-DOF index set.** Both
+4. **Done (Sept 2026) — generalize the gauge reduction to an explicit A-DOF
+   index set.** Shipped as `GaugeIndexMap` +
+   `build_albanese_rubinacci_index_map(a_dof_edge, num_phi_dofs, tc)` in
+   `gauge_variants.hpp`, applied through `Sparse<T>::principal_submatrix`.
+   The split that made this work: the index map holds *only indices* and no
+   scalar type, so one map drives the reduction of a real or a complex
+   matrix, while the reduction itself is one templated primitive. Method A
+   is literally a principal submatrix, which is why it has no fill-in.
+   `a_dof_edge[k]` gives the mesh edge that A-DOF `k` represents — the
+   identity in the full-wave regime, a genuine mapping once PEC tangential
+   edges leave the unknown set. `build_albanese_rubinacci_gauge` now routes
+   through the same path with an identity map and zero Φ DOFs, so there is
+   one implementation rather than two; its 19 existing checks pass
+   unchanged and `compare_gauges` reports bit-identical numbers on
+   `cube_4.msh`. `restrict_vector` / `expand_solution` handle the RHS and
+   the solution, with eliminated tree entries expanding to exactly zero —
+   which is the gauge condition `a_t = 0` itself, not padding. Original
+   text follows. Both
    `build_albanese_rubinacci_gauge` and `build_munteanu_unsymmetric_gauge`
    currently assume the matrix's row/column index space *is* the mesh's
    global edge index space, 1:1 — true for their present callers
