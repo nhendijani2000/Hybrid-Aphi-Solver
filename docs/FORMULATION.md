@@ -304,6 +304,25 @@ Ansys-derived) -- edge-DOF storage (`Edge(e)->get_ADofVal()`), the
 match the textbook first-order Nedelec element exactly, with no enrichment
 or higher-order terms present in the actual discretization.
 
+**`mEdgeSign` is implemented here as `Mesh::tet_edge_signs` (Sept 2026), and
+assembly must use it.** A tet's local vertex order comes from the mesh file
+and is arbitrary, while a global edge DOF is defined on the canonical
+low-index -> high-index direction (`mesh.hpp`). Where the two disagree --
+measured at ~58% of (tet, local edge) pairs on `meshes/cube_*.msh` -- the
+Whitney function built from the local pair is the *negative* of the global
+edge's basis function. `whitney_edge_value_global` /
+`whitney_edge_curl_global` in `basis_functions.hpp` apply the sign; the
+local-oriented `whitney_edge_value` / `whitney_edge_curl` must not be
+scattered into a global DOF directly. Regression cover:
+`tests/test_basis_functions.cpp` now runs a two-tet mesh whose second tet
+lists its vertices non-ascending, and checks both the global circulation
+identity (delta_jm along each edge's canonical direction) and tangential
+continuity of the shared face -- the H(curl) conformity the sign protects.
+Both single-tet fixtures there use `{0,1,2,3}`, which is ascending, so every
+sign is +1 and an orientation bug is invisible to them; that is why the
+two-tet fixture exists. Phi's P2 nodal functions need no sign: the
+edge-midpoint shape function `4*L_v0*L_v1` is symmetric in `v0`, `v1`.
+
 **The "10 points per tet" for A is a post-processing reconstruction, not a
 second-order A basis -- worth stating precisely since it's easy to
 conflate.** The same document shows a separate routine that takes the

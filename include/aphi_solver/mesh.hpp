@@ -89,6 +89,29 @@ public:
     /// For each tet, the 6 global edge indices in kTetLocalEdgeVerts order.
     std::vector<std::array<int, 6>> tet_edges;
 
+    /// For each tet, the orientation of each of its 6 local edges relative to
+    /// the corresponding global edge's canonical direction: +1 if the local
+    /// direction (tets[t][vi] -> tets[t][vj]) agrees with the canonical
+    /// low-index -> high-index direction, -1 if it is reversed.
+    ///
+    /// This is the `mEdgeSign` of the user's prior 3dedyaphi implementation
+    /// (docs/FORMULATION.md Sec 5.1). It is NOT optional bookkeeping: a tet's
+    /// local vertex order comes from the mesh file and is arbitrary, so on a
+    /// real mesh roughly 58% of (tet, local edge) pairs are reversed (measured
+    /// on meshes/cube_*.msh). The Whitney edge function built from local
+    /// vertices vi, vj is the *negative* of the one built from the canonical
+    /// pair whenever that happens, so any assembly that scatters a local edge
+    /// contribution into global edge DOF tet_edges[t][le] must multiply it by
+    /// this sign -- see whitney_edge_value_global in basis_functions.hpp.
+    ///
+    /// Only A's edge functions need this. Phi's P2 nodal functions do not: the
+    /// edge-midpoint shape function 4*L_v0*L_v1 is symmetric in v0 and v1, so
+    /// it is independent of which way the edge is traversed.
+    ///
+    /// signed char rather than int: 6 bytes per tet instead of 24, in a array
+    /// read once per tet in the assembly loop right beside tet_edges.
+    std::vector<std::array<signed char, 6>> tet_edge_signs;
+
     /// For each tet, the 4 global face indices in kTetLocalFaceVerts order.
     std::vector<std::array<int, 4>> tet_faces;
 

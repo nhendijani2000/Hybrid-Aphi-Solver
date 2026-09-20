@@ -28,6 +28,7 @@ void Mesh::build_topology() {
     edges.clear();
     faces.clear();
     tet_edges.assign(tets.size(), {});
+    tet_edge_signs.assign(tets.size(), {});
     tet_faces.assign(tets.size(), {});
     edge_lookup_.clear();
 
@@ -52,6 +53,10 @@ void Mesh::build_topology() {
                 gidx = it->second;
             }
             tet_edges[t][le] = gidx;
+            // +1 when the local traversal v0 -> v1 already matches the stored
+            // canonical direction (low index -> high index), -1 when it is the
+            // reverse -- see Mesh::tet_edge_signs.
+            tet_edge_signs[t][le] = (v0 < v1) ? static_cast<signed char>(1) : static_cast<signed char>(-1);
         }
 
         // Faces (4 per tet), in kTetLocalFaceVerts order (opposite-vertex).

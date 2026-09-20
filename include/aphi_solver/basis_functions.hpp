@@ -45,6 +45,22 @@ Vec3 whitney_edge_value(const TetGeometry& g, int local_edge, const std::array<d
 /// tet (no evaluation point needed): curl(N_ij) = 2 * grad(L_i) x grad(L_j).
 Vec3 whitney_edge_curl(const TetGeometry& g, int local_edge);
 
+/// The same two functions, oriented to match the *global* edge DOF that
+/// `mesh.tet_edges[t][local_edge]` indexes, by applying `mesh.tet_edge_signs`.
+///
+/// Assembly must use these, not the two local-oriented functions above. A
+/// tet's local vertex order is whatever the mesh file supplied, so the local
+/// pair (vi, vj) runs opposite to the global edge's canonical low->high
+/// direction for roughly 58% of (tet, local edge) pairs on a real mesh
+/// (measured on meshes/cube_*.msh). Scattering a local-oriented contribution
+/// into a global edge DOF without the sign silently negates it for those
+/// edges, which breaks tangential continuity between neighbouring tets --
+/// the H(curl) conformity the whole edge-element discretization rests on.
+/// See Mesh::tet_edge_signs and docs/FORMULATION.md Sec 5.1 (`mEdgeSign`).
+Vec3 whitney_edge_value_global(const Mesh& mesh, int t, const TetGeometry& g, int local_edge,
+                               const std::array<double, 4>& L);
+Vec3 whitney_edge_curl_global(const Mesh& mesh, int t, const TetGeometry& g, int local_edge);
+
 /// Second-order (P2, 10-node) nodal basis function for Phi --
 /// docs/FORMULATION.md Sec 5.1's final basis-function decision, verified
 /// against J.-M. Jin (2014), Ch. 5, Eq. (5.52) / Fig. 5.3. `local_node` is

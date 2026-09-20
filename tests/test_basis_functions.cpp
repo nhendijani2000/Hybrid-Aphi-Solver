@@ -234,11 +234,134 @@ void run_checks_on_tet(const Mesh& mesh, const std::string& label) {
     }
 }
 
+// Two tetrahedra sharing the face (1,2,3). The second tet's vertices are
+// deliberately listed in a non-ascending order, so its local edge directions
+// disagree with the global canonical (low -> high) ones. This is the normal
+// case for a mesh read from a file, not a corner case: ~58% of (tet, local
+// edge) pairs are reversed on meshes/cube_*.msh. Both single-tet fixtures
+// above use {0,1,2,3}, which is ascending, so every sign there is +1 and an
+// orientation bug is structurally invisible to them.
+Mesh make_two_tet_mesh() {
+    Mesh m;
+    m.nodes = {Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1), Vec3(1, 1, 1)};
+    m.tets = {{0, 1, 2, 3}, {4, 2, 1, 3}};
+    m.build_topology();
+    return m;
+}
+
+// Circulation of the GLOBALLY-oriented basis function for tet t's local edge
+// `local_edge`, along the straight segment pm -> pn. Same Simpson's rule as
+// edge_circulation above, but through whitney_edge_value_global so the
+// tet_edge_signs correction is included.
+double global_edge_circulation(const Mesh& mesh, int t, const TetGeometry& g, int local_edge, const Vec3& pm,
+                                const Vec3& pn) {
+    const Vec3 tangent = pn - pm;
+    constexpr int kIntervals = 8;
+    double sum = 0.0;
+    for (int k = 0; k <= kIntervals; ++k) {
+        double s = static_cast<double>(k) / kIntervals;
+        Vec3 p = pm + tangent * s;
+        std::array<double, 4> L = evaluate_barycentric(g, p);
+        double f = aphi_solver::whitney_edge_value_global(mesh, t, g, local_edge, L).dot(tangent);
+        double weight;
+        if (k == 0 || k == kIntervals) {
+            weight = 1.0;
+        } else if (k % 2 == 1) {
+            weight = 4.0;
+        } else {
+            weight = 2.0;
+        }
+        sum += weight * f;
+    }
+    return sum * (1.0 / kIntervals) / 3.0;
+}
+
+// The local index (0..5) of global edge `ge` within tet `t`, or -1.
+int local_index_of_global_edge(const Mesh& mesh, int t, int ge) {
+    for (int le = 0; le < 6; ++le) {
+        if (mesh.tet_edges[static_cast<std::size_t>(t)][static_cast<std::size_t>(le)] == ge) return le;
+    }
+    return -1;
+}
+
+// The defining DOF property, stated in GLOBAL terms: the circulation of the
+// global basis function for edge j, integrated along global edge m in that
+// edge's own canonical (low-index -> high-index) direction, is delta_jm --
+// for every tet, whatever order its vertices happen to be listed in.
+//
+// This is what global assembly actually depends on, and it is what the
+// local-only check (#6 above) cannot see. Without Mesh::tet_edge_signs
+// applied, a reversed local edge yields -1 instead of +1 here.
+void run_global_orientation_checks(const Mesh& mesh, const std::string& label) {
+    for (int t = 0; t < mesh.num_tets(); ++t) {
+        const TetGeometry g = compute_tet_geometry(mesh, t);
+        for (int j = 0; j < 6; ++j) {
+            for (int m = 0; m < 6; ++m) {
+                const int ge = mesh.tet_edges[static_cast<std::size_t>(t)][static_cast<std::size_t>(m)];
+                const auto& [gi, gj] = mesh.edges[static_cast<std::size_t>(ge)];  // gi < gj
+                const Vec3& pm = mesh.nodes[static_cast<std::size_t>(gi)];
+                const Vec3& pn = mesh.nodes[static_cast<std::size_t>(gj)];
+                const double circ = global_edge_circulation(mesh, t, g, j, pm, pn);
+                const double expected = (j == m) ? 1.0 : 0.0;
+                check(nearly(circ, expected, 1e-7),
+                      label + ": tet " + std::to_string(t) + " global circulation of edge-basis " +
+                          std::to_string(j) + " along global edge " + std::to_string(m) + " == " +
+                          std::to_string(expected));
+            }
+        }
+    }
+}
+
+// H(curl) conformity: two tets sharing a face must agree on the TANGENTIAL
+// trace of the global basis function of every edge of that shared face.
+// (Only the tangential component is continuous for Whitney elements; the
+// normal component jumps, by design.) This is the physical property the
+// orientation sign exists to protect -- get the sign wrong and neighbouring
+// elements represent the same global DOF as equal and opposite fields.
+void run_tangential_continuity_check(const Mesh& mesh) {
+    const TetGeometry g0 = compute_tet_geometry(mesh, 0);
+    const TetGeometry g1 = compute_tet_geometry(mesh, 1);
+
+    // Shared face of make_two_tet_mesh: nodes 1, 2, 3.
+    const Vec3& q1 = mesh.nodes[1];
+    const Vec3& q2 = mesh.nodes[2];
+    const Vec3& q3 = mesh.nodes[3];
+    const Vec3 centroid = (q1 + q2 + q3) * (1.0 / 3.0);
+    Vec3 n = (q2 - q1).cross(q3 - q1);
+    n = n * (1.0 / n.norm());
+
+    const std::array<std::pair<int, int>, 3> shared_edges = {{{1, 2}, {1, 3}, {2, 3}}};
+    for (const auto& [a, b] : shared_edges) {
+        const int ge = mesh.find_edge(a, b);
+        check(ge >= 0, "two-tet mesh: shared edge (" + std::to_string(a) + "," + std::to_string(b) + ") exists");
+        if (ge < 0) continue;
+
+        const int le0 = local_index_of_global_edge(mesh, 0, ge);
+        const int le1 = local_index_of_global_edge(mesh, 1, ge);
+        check(le0 >= 0 && le1 >= 0, "two-tet mesh: shared edge present in both tets");
+        if (le0 < 0 || le1 < 0) continue;
+
+        const Vec3 v0 = aphi_solver::whitney_edge_value_global(mesh, 0, g0, le0, evaluate_barycentric(g0, centroid));
+        const Vec3 v1 = aphi_solver::whitney_edge_value_global(mesh, 1, g1, le1, evaluate_barycentric(g1, centroid));
+        const Vec3 t0 = v0 - n * v0.dot(n);
+        const Vec3 t1 = v1 - n * v1.dot(n);
+
+        check(nearly(t0, t1, 1e-9), "two-tet mesh: tangential trace of global edge (" + std::to_string(a) + "," +
+                                         std::to_string(b) + ") agrees across the shared face");
+    }
+}
+
 }  // namespace
 
 int main() {
     run_checks_on_tet(make_reference_tet(), "reference tet");
     run_checks_on_tet(make_skewed_tet(), "skewed tet");
+
+    // Orientation-sensitive checks. These need a mesh whose tets do NOT all
+    // list their vertices in ascending order -- see make_two_tet_mesh.
+    const Mesh two_tet = make_two_tet_mesh();
+    run_global_orientation_checks(two_tet, "two-tet mesh");
+    run_tangential_continuity_check(two_tet);
 
     std::cout << g_checks - g_failures << "/" << g_checks << " checks passed.\n";
     return g_failures == 0 ? 0 : 1;

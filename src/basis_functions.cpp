@@ -104,6 +104,17 @@ Vec3 whitney_edge_curl(const TetGeometry& g, int local_edge) {
     return g.grad_L[vi].cross(g.grad_L[vj]) * 2.0;
 }
 
+Vec3 whitney_edge_value_global(const Mesh& mesh, int t, const TetGeometry& g, int local_edge,
+                               const std::array<double, 4>& L) {
+    const double s = mesh.tet_edge_signs[static_cast<std::size_t>(t)][static_cast<std::size_t>(local_edge)];
+    return whitney_edge_value(g, local_edge, L) * s;
+}
+
+Vec3 whitney_edge_curl_global(const Mesh& mesh, int t, const TetGeometry& g, int local_edge) {
+    const double s = mesh.tet_edge_signs[static_cast<std::size_t>(t)][static_cast<std::size_t>(local_edge)];
+    return whitney_edge_curl(g, local_edge) * s;
+}
+
 double p2_nodal_value(int local_node, const std::array<double, 4>& L) {
     if (local_node < 4) {
         double li = L[local_node];
