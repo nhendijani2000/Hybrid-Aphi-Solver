@@ -216,6 +216,16 @@ run on real meshes, three sizes were measured with `M = C^T C` (vacuum,
 | cube_6 | 1512 | 1876.7 | 525.6 | 0.280 | 4.37 |
 | cube_9 | 4860 | 5731.0 | 2041.7 | 0.356 | 6.49 |
 
+**Don't confuse these with the estimator's runtime, which runs the other
+way.** `tools/compare_gauges.cpp` records how long computing each estimate
+takes (0.07 / 0.71 / 7.08 s for Method A, 0.07 / 1.67 / 174.45 s for Method
+D), and Method D is far *slower to estimate* despite being the
+better-conditioned of the two. There is no contradiction: the estimator's
+cost tracks `nnz`, not `kappa`, and D's reduced matrix carries up to 6.49x
+Method A's nonzeros. A table of condition numbers and a table of timings
+for the same two methods therefore point in opposite directions, and both
+are correct.
+
 **The ordering reproduces Munteanu's (`kappa_D < kappa_A`), and the numbers
 are converged**, not artifacts of a truncated estimate: re-running
 `estimate_condition_number` with its outer iteration cap raised from 50 to

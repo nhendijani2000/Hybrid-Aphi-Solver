@@ -37,19 +37,26 @@ namespace {
 // It is a diagnostic, not part of any solve path, and it does not scale:
 // up to `max_iterations` (500) outer steps, each running a CG inner solve
 // of up to min(n, 2000) iterations at O(nnz) apiece, so worst case
-// O(500 * n * nnz). Measured, per reduced DOF count:
+// O(500 * n * nnz). Measured RUNTIME OF THE ESTIMATE (not the condition
+// numbers themselves -- those are in docs/TREE_COTREE_GAUGE.md Sec. 6, and
+// run the other way, kappa_D < kappa_A):
 //
-//     480 (cube_4)   kappa_A   0.07 s   kappa_D     0.07 s
-//    1512 (cube_6)   kappa_A   0.71 s   kappa_D     1.67 s
-//    4860 (cube_9)   kappa_A   7.08 s   kappa_D   174.45 s
+//    reduced DOFs     time to compute kappa_A   time to compute kappa_D
+//     480 (cube_4)             0.07 s                    0.07 s
+//    1512 (cube_6)             0.71 s                    1.67 s
+//    4860 (cube_9)             7.08 s                  174.45 s
 //
-// Method D degrades far faster than Method A because its fill-in grows too
-// (nnz_D/nnz_A is 2.97 at cube_4, 4.37 at cube_6, 6.49 at cube_9), so both
-// factors in n * nnz are rising at once. At cube_9 the whole run takes
-// 181.6 s with the estimate and 0.057 s without it -- and the structural
-// numbers reported alongside (reduced size, nonzeros, fill-in ratio) are
-// O(nnz), meaningful at any size, and identical either way. The cheap
-// useful part should not be hostage to the expensive limited one.
+// Method D costs far more to estimate even though it is the BETTER-
+// conditioned of the two, because the estimate's cost tracks nnz rather
+// than kappa: D's reduced matrix carries 2.97x / 4.37x / 6.49x Method A's
+// nonzeros across those three meshes, so every matvec inside the estimator
+// costs proportionally more. (The remaining gap beyond that ratio is extra
+// iterations, not decomposed further -- it does not change the conclusion.)
+// At cube_9 the whole run takes 181.6 s with the estimate and 0.057 s
+// without it, while the structural numbers reported alongside (reduced
+// size, nonzeros, fill-in ratio) are O(nnz), meaningful at any size, and
+// identical either way. The cheap useful part should not be hostage to the
+// expensive limited one.
 //
 // 2000 is chosen so every mesh checked into meshes/ still reports kappa by
 // default (the largest, cube_6, reduces to 1512 and costs ~2.4 s), while
