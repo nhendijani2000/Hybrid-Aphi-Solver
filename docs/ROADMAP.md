@@ -26,7 +26,7 @@ deferred, later phase once the core solver works end to end.
 | **Owner** | Nastaran Hendijani |
 | **Language** | C++17, CMake |
 | **Repo** | `APhi_Solver_Project_LowFrequency_EDA/APhi_Solver` |
-| **Phases** | 13 (00–12, last deferred) |
+| **Phases** | 14 (00–12 plus 03.5, last deferred) |
 | **Engineering standards** | `docs/ENGINEERING_STANDARDS.md` (speed-first, then memory; parallelize where it genuinely helps; advanced sparse-matrix techniques from Phase 04 onward) |
 
 Track legend used throughout: **Setup/Core** (foundational, not gauge- or
@@ -52,6 +52,7 @@ application-specific) · **Tree-cotree** · **Coulomb gauge** · **EDA** ·
 01. [Formulation lock-in and application scope](#01--formulation-lock-in-and-application-scope) — Core, Full-wave
 02. [Mesh ingestion and basis functions](#02--mesh-ingestion-and-basis-functions) — Core
 03. [Tree-cotree gauge implementation](#03--tree-cotree-gauge-implementation) — Tree-cotree
+03.5. [Numerical foundations for assembly](#035--numerical-foundations-for-assembly) — Core
 04. [Weak form and matrix assembly](#04--weak-form-and-matrix-assembly) — Core
 05. [Linear solver and conditioning](#05--linear-solver-and-low-frequency-conditioning) — Core
 06. [EDA track — sources, ports, conductors](#06--eda-track--sources-ports-conductors) — EDA
@@ -239,6 +240,32 @@ Whitney basis functions.
    order to edge order" principle only, not a directly reusable 3-D formula
    set. Graglia, Wilton & Peterson (1997) and García-Castillo et al. (2000)
    remain identified, unread candidates for that future upgrade.)
+5. **Done (Sept 2026) — global edge-orientation signs for the **A** basis.**
+   A tet's local vertex order comes from the mesh file and is arbitrary,
+   while a global edge DOF is defined on the canonical low-index →
+   high-index direction. Where the two disagree — measured at **~58% of
+   (tet, local edge) pairs** on `meshes/cube_*.msh` — the Whitney function
+   built from the local pair is the *negative* of the global edge's basis
+   function, so scattering it into a global DOF without a sign silently
+   negates more than half of all element contributions and breaks
+   tangential (H(curl)) continuity between neighbouring tets. This is the
+   `mEdgeSign` convention of the user's own prior 3dedyaphi implementation
+   (`docs/FORMULATION.md` §5.1), implemented here as `Mesh::tet_edge_signs`
+   (built in `build_topology`, alongside `tet_edges`) and applied by
+   `whitney_edge_value_global` / `whitney_edge_curl_global` in
+   `basis_functions.hpp` — **which are the forms Phase 04 assembly must
+   call**; the local-oriented `whitney_edge_value` / `whitney_edge_curl`
+   must not be scattered into a global DOF directly. Φ needs no sign: the
+   P2 edge-midpoint shape function `4*L_v0*L_v1` is symmetric in its two
+   vertices. Caught late because both single-tet test fixtures used
+   vertex order `{0,1,2,3}` (ascending, so every sign is +1, making an
+   orientation bug structurally invisible); the regression cover added with
+   the fix is a two-tet mesh whose second tet lists vertices non-ascending,
+   checking the global circulation identity (δ_jm along each edge's
+   canonical direction) and tangential continuity across the shared face.
+   Verified to genuinely catch the bug: with the sign neutralized the new
+   checks fail on exactly the reversed edges (426/431), with it restored
+   431/431.
 
 **Grounds this phase:** Munteanu (tree-cotree condensation properties);
 J.-M. Jin (2014), Ch. 5 (verified Φ-side second-order nodal element);
@@ -249,7 +276,10 @@ Lee, Lee & Lee (2003), §IV–VI (background/motivation only — 2-D scope, see
 
 **Ready for 03 when:** **C** and **G** can be assembled for a test mesh and
 **CG = 0** holds numerically (the discrete curl·grad = 0 identity) — this is
-your first real unit test.
+your first real unit test — and the global edge-orientation invariant of
+step 5 holds on a mesh with non-ascending tet vertex ordering (circulation
+δ_jm along each edge's canonical direction; tangential continuity across a
+shared face). Both are now covered by `tests/`.
 
 ---
 
@@ -402,6 +432,96 @@ as an open question for Phase 06).
 
 ---
 
+## 03.5 · Numerical foundations for assembly
+
+**Track:** Setup/Core
+
+**Added Sept 2026, after a review at the 03 → 04 boundary.** Phase 04 was
+stalling, and the reason turned out to be structural rather than
+mathematical: as originally written it silently required four interlocking
+prerequisites that did not exist yet — a complex sparse matrix type, mesh
+region/boundary tags, a gauge reduction that can act on part of a larger
+block system, and correct global edge orientation — each of which changes
+the *signatures* the others are written against. Attempting them inside
+Phase 04 meant every attempt at assembly code surfaced another gap, so the
+work produced plans instead of matrices. Splitting them out into a phase
+with its own exit gate is the fix; the numbering is fractional on purpose,
+so the many `Phase 04`/`Phase 05` references in `docs/FORMULATION.md`,
+`docs/CONDITIONING.md`, `docs/LINEAR_SOLVER.md` and
+`docs/TREE_COTREE_GAUGE.md` stay valid.
+
+**Goal:** Everything Phase 04's assembly loop needs to already exist and
+have a settled type signature, so that phase is only about the weak form.
+
+1. **Done (Sept 2026) — global edge-orientation signs.** Completed as Phase
+   02, step 5 above; listed here because it is a hard prerequisite for any
+   assembly and was the one item of the four that was an outright bug
+   rather than a missing piece.
+2. **One templated sparse matrix type, replacing today's split.** The
+   codebase currently has two incompatible halves: `SparseMatrix`
+   (`incidence.hpp`) is real-valued COO with a `std::map`-based coalesce,
+   and `ComplexMatrix` (`complex_matrix.hpp`) is complex but **dense** —
+   and `APhiBlockSystem` is built from the dense one. Phase 04 needs
+   complex *sparse*, which neither provides; a dense `K_AA` is already
+   55 MB at `meshes/cube_6.msh` and impossible at any real EDA mesh size.
+   Implement a single `Sparse<T>` (aliases `SparseMatrixD = Sparse<double>`
+   for the incidence operators **C**/**G**, `SparseMatrixZ =
+   Sparse<Complex>` for the system blocks): accumulate as triplets, then
+   `compress()` once to CSR. **Keep a triplet export as well** — MUMPS's
+   assembled centralized input format wants IRN/JCN/A arrays, not CSR, so
+   both shapes are needed regardless (`docs/LINEAR_SOLVER.md`). Migrate
+   `APhiBlockSystem` onto it; keep the dense `ComplexMatrix` only as the
+   small-system ground truth for `solve_dense`, which Phase 05 wants
+   anyway. This is the `docs/ENGINEERING_STANDARDS.md` item 3 requirement
+   ("compressed sparse formats … rather than the COO/`std::map`-based
+   `SparseMatrix`"), which that document already scheduled for Phase 04 but
+   which nothing had been assigned to actually do.
+3. **Mesh region and boundary tag ingestion.** `read_gmsh_msh` currently
+   discards *every* element tag — including each tet's own physical-group
+   id — and skips non-tet elements entirely, so the boundary triangles Gmsh
+   uses to mark PEC walls, ports and the outer truncation never reach
+   `Mesh` at all. Since DOF setup, material lookup and PEC handling all key
+   off "which entity belongs to which named region," this is a hard
+   prerequisite, not a later refinement. Add `Mesh::tet_tags` (one
+   physical-group tag per tet, parallel to `Mesh::tets`) and a tagged
+   boundary-face list capturing Gmsh elm-type 2 triangles with their first
+   tag, remapped to 0-based node indices. `Mesh` carries integers only —
+   what tag `7` *means* is the input file's job, keeping `gmsh_reader.cpp`
+   format-agnostic and dependency-free.
+4. **Generalize the gauge reduction to an explicit A-DOF index set.** Both
+   `build_albanese_rubinacci_gauge` and `build_munteanu_unsymmetric_gauge`
+   currently assume the matrix's row/column index space *is* the mesh's
+   global edge index space, 1:1 — true for their present callers
+   (`test_gauge_variants.cpp` and `compare_gauges.cpp`, which only ever
+   pass `M = CᵀC`), but wrong for Phase 04, where gauge reduction must act
+   on only the A-DOF rows/columns of a larger coupled system while Φ rows
+   and columns pass through untouched. Generalize the existing functions to
+   take that index set rather than writing block-aware duplicates: the
+   reduction math (test space W, trial space V — `docs/TREE_COTREE_GAUGE.md`)
+   is identical either way, and duplicating it is exactly what
+   `docs/ENGINEERING_STANDARDS.md` warns against. Combined with step 2's
+   template, this also resolves the real-vs-complex question in one move
+   rather than forcing a second complex-typed copy of the same three
+   functions.
+5. **Clean up two API collisions before they propagate.** `dense_solve`
+   (real, `gauge_variants.hpp`) vs. `solve_dense` (complex,
+   `complex_matrix.hpp`) differ only in word order, and
+   `estimate_condition_number` exists twice with different types in
+   different headers. Both are survivable today and actively confusing once
+   step 2 makes the scalar type a template parameter.
+
+**Ready for 04 when:** a complex sparse matrix can be built, compressed,
+multiplied by a vector and exported as triplets; `APhiBlockSystem` holds
+sparse blocks; a tagged `.msh` round-trips its tet and boundary-face tags
+through `Mesh`; and **Albanese-Rubinacci** reduces a system in which the
+A-DOFs are a strict subset of the index space, with the existing 19/19 gauge
+checks still passing unchanged. Generalizing Munteanu unsymmetric the same
+way is expected to fall out of the same index-set machinery (step 4) and
+should be done alongside, but it does not gate Phase 04 — per Phase 04 step
+5, Method A is the path to the first validated solve.
+
+---
+
 ## 04 · Weak form and matrix assembly
 
 **Track:** Core
@@ -417,30 +537,96 @@ K_AA  = ∫ (∇×A)·(∇×A′) dΩ        M_AA  = ∫ A·A′ dΩ
 K_AΦ  = ∫ ∇Φ·A′ dΩ                K_ΦΦ = ∫ ∇Φ·∇Φ′ dΩ
 ```
 
-1. **Element-level matrices first**, tested on a single reference tet
-   against hand-computed values, before any global assembly code runs.
-2. **Global sparse assembly** into a CSR (or similar) structure, respecting
-   the tree-cotree reduction from Phase 03 (reduced-size system, not the full
-   singular one) — as a build-time or run-time choice between
-   Albanese-Rubinacci and Munteanu unsymmetric, not hard-coded to one.
-3. **Implement the frequency-scaling choice** (natural/non-symmetric,
+**Prerequisites:** Phase 03.5 above. This phase assumes a complex sparse
+type, mesh tags, index-set-aware gauge reduction, and correct edge
+orientation all already exist — it is about the weak form and nothing else.
+
+1. **A `Problem` struct first, its file format second.** Define the
+   in-memory problem description (material regions keyed by mesh tag,
+   boundary-condition types, gauge choice, frequency-scaling choice,
+   operating frequency, source) as a plain C++ struct, and let JSON parsing
+   be a thin adapter written on top of it afterwards. The struct is the
+   interface DOF setup actually needs; sequencing it first means DOF setup
+   is not blocked on vendoring a JSON library. When the parser does land,
+   have it cross-check that every tag the input file names exists in the
+   loaded mesh — a typo'd region tag should fail loudly, not silently
+   assemble a region with zero material properties.
+2. **DOF numbering**, per `docs/FORMULATION.md` §5.2 and the mixed-order
+   pairing locked in there (first-order Whitney **A**, P2 Φ — reaffirmed
+   Sept 2026): `N_A = N_edges`, `N_Φ = N_vertices + N_edges`.
+   **Φ lives everywhere in the full-wave regime (confirmed Sept 2026).**
+   With displacement current on, Φ is defined over the whole domain —
+   dielectric and free-space regions included — not confined to `Ω_c`.
+   The `Ω_c` restriction belongs *only* to the reduced low-frequency
+   variant (`docs/FORMULATION.md` §3), where `eps -> 0` removes the
+   physical content Φ would carry outside the conductors. So the DOF map
+   needs `Ω_Φ = whole domain` as its default path and `Ω_Φ = Ω_c` (derived
+   from `sigma > 0`, not separately tagged) only when the reduced regime is
+   selected — a domain-restriction input, not a branch in the mathematics.
+   Derive `is_pec` for `build_tree_cotree` from the Phase 03.5
+   boundary-face tags rather than the hand-built `std::vector<bool>`
+   `compare_gauges.cpp` uses today. Independently testable ahead of any
+   assembly: given a known small mesh and a known `Problem`, assert the
+   exact DOF counts and index maps by hand, the way
+   `tests/test_tree_cotree.cpp` already does.
+3. **Element-level matrices**, tested on a single reference tet against
+   hand-computed values, before any global assembly code runs. Two things
+   worth fixing up front rather than discovering mid-implementation:
+   - **Use `whitney_edge_value_global` / `whitney_edge_curl_global`**
+     (Phase 02, step 5), never the local-oriented forms. More than half of
+     all element contributions are wrong otherwise.
+   - **A degree-2 (4-point) tetrahedral quadrature rule is exact for every
+     integrand in this phase** — no guesswork needed. Whitney functions are
+     linear in position, so `M_AA` and the `K_AΦ` coupling are quadratic;
+     `curl(Whitney)` is constant per tet, so `K_AA`'s curl-curl term is
+     exact at a single point; `grad(P2)` is linear, so `K_ΦΦ` is quadratic.
+     Region-wise-constant material coefficients add no degree.
+4. **Validate at DC before going complex.** At `omega = 0` the system
+   decouples exactly (`docs/FORMULATION.md` §2): Φ solves DC conduction
+   alone, **A** solves magnetostatics with the tree-cotree gauge. That
+   makes a real-valued, uncoupled, analytically checkable first milestone
+   (straight wire → `B = mu*I/(2*pi*r)`) which nonetheless exercises the
+   whole pipeline end to end — tags → DOF map → oriented element matrices →
+   global sparse assembly → gauge reduction → sparse solve. It is also
+   already this phase's own "Ready for 05" criterion. Getting a checkable
+   number out roughly half the pipeline sooner is the point; turn `omega`
+   on only once it is green.
+5. **Global sparse assembly** into the Phase 03.5 sparse type, respecting
+   the tree-cotree reduction from Phase 03 (reduced-size system, not the
+   full singular one). **Albanese-Rubinacci (Method A) is the first target
+   (confirmed Sept 2026):** prescribe `a_t = 0` on every tree edge and
+   solve the principal submatrix on the cotree DOFs. It is the simplest
+   reduction available — pure row/column restriction, a genuine submatrix
+   of the assembled system, so it preserves the sparsity pattern with no
+   fill-in and is symmetry-neutral (`docs/CONDITIONING.md`, "Interaction
+   with the tree-cotree gauge choice"). Get a correct end-to-end solve on
+   Method A before wiring the gauge choice as a user-facing knob. Munteanu
+   unsymmetric (Method D) stays implemented and tested, and the
+   `(gauge, frequency_scaling)` selection in step 6 is still designed for
+   both — but Method D's better conditioning is not worth paying for in
+   debugging surface while the pipeline has never produced a validated
+   field. Per-tet element work is embarrassingly parallel; the scatter into
+   the global matrix needs thread-local accumulation plus a merge, or
+   atomics, to stay correct (`docs/ENGINEERING_STANDARDS.md`).
+6. **Implement the frequency-scaling choice** (natural/non-symmetric,
    row-scaling, or scaled-Φ — `docs/CONDITIONING.md` Formulations 1-3) as a
    build-time or run-time flag — keep all forms available since later phases
    compare them, and derive/validate the solver's symmetric-vs-general mode
    from the actual (gauge, scaling) combination rather than trusting it
    blindly (`docs/LINEAR_SOLVER.md`, "Planned: solver-mode selection").
-4. **Right-hand-side assembly** for the source models you'll add properly in
+7. **Right-hand-side assembly** for the source models you'll add properly in
    Phases 06–07; a simple uniform current density is enough here to exercise
    the pipeline.
 
 **Grounds this phase:** general A-Φ weak form, standard in the cited
 literature (Dular et al. 2000; Zhao & Fu 2017)
 
-**Ready for 05 when:** the assembled sub-blocks are complex-symmetric where
-they should be (K_AA, K_ΦΦ symmetric; K_AΦ and K_ΦA transposes of one another
-up to their respective coefficients, per `docs/CONDITIONING.md`), and a
-trivial problem (e.g. straight wire, known field) gives the right sign and
-rough magnitude of **B**.
+**Ready for 05 when:** the DC milestone (step 4) reproduces the straight-wire
+field, the assembled sub-blocks are complex-symmetric where they should be
+(K_AA, K_ΦΦ symmetric; K_AΦ and K_ΦA transposes of one another up to their
+respective coefficients, per `docs/CONDITIONING.md`), and the same trivial
+problem gives the right sign and rough magnitude of **B** at `omega != 0`
+as well.
 
 ---
 
