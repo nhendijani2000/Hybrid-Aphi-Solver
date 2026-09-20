@@ -152,8 +152,31 @@ void test_transpose_and_multiply() {
     q.add(0, 0, 1.0);
     q.add(1, 0, -1.0);
     q.compress();
-    check(p.multiply(q).is_zero(), "multiply: exactly cancelling product is_zero()");
+    const SparseMatrixD pq = p.multiply(q);
+    check(pq.is_zero(), "multiply: exactly cancelling product is_zero()");
+    check(pq.nnz() == 0,
+          "multiply: exact cancellation is pruned, not stored as an explicit zero");
     check(!a.is_zero(), "is_zero: a nonzero matrix is not reported zero");
+
+    // A column whose running sum passes back THROUGH zero before ending
+    // nonzero must still come out with its final value, and exactly once.
+    // Row 0 of L is [1,1,1]; column 0 of R is [1,-1,5], so the accumulator
+    // goes 1 -> 0 -> 5. Testing "is this column new?" by checking the
+    // accumulator against zero (rather than a row stamp) mistakes the
+    // midpoint for a fresh column.
+    SparseMatrixD L(1, 3);
+    L.add(0, 0, 1.0);
+    L.add(0, 1, 1.0);
+    L.add(0, 2, 1.0);
+    L.compress();
+    SparseMatrixD R(3, 1);
+    R.add(0, 0, 1.0);
+    R.add(1, 0, -1.0);
+    R.add(2, 0, 5.0);
+    R.compress();
+    const SparseMatrixD LR = L.multiply(R);
+    check(LR.nnz() == 1, "multiply: a sum passing through zero yields exactly one stored entry");
+    check(nearly(LR.at(0, 0), 5.0), "multiply: a sum passing through zero keeps its final value");
 }
 
 void test_triplet_export() {

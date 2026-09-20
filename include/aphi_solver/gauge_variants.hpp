@@ -40,11 +40,29 @@ struct EssentialIncidenceMatrix {
     int num_cotree_edges = 0;
     int num_free_groups = 0;
 
-    /// Dense [cotree_local_index][free_group_index] values -- dense because
-    /// F is not generally sparse even though G_c/G_t are (each row of F is
-    /// a cumulative sum along a tree path, which can touch many free
-    /// groups); fine at this phase's test-mesh scale.
-    std::vector<std::vector<double>> values;
+    /// F itself, [num_cotree_edges x num_free_groups], sparse.
+    ///
+    /// **Sparse since Sept 2026, and the reason is structural rather than an
+    /// optimization.** This was a dense `vector<vector<double>>` on the
+    /// stated grounds that "each row of F is a cumulative sum along a tree
+    /// path, which can touch many free groups". The first half is right and
+    /// the conclusion does not follow. Writing out the tree solve:
+    /// `G_t^{-1}[m, col]` is `+-1` when group `col` is an ancestor-or-self of
+    /// group `m` and exactly 0 otherwise, so
+    ///
+    ///   F[row, col] = s_col * ( anc(col, g_j) - anc(col, g_i) )
+    ///
+    /// for cotree edge `row` with endpoint groups g_i, g_j. That is nonzero
+    /// iff exactly one endpoint lies in the subtree under `col` -- i.e. iff
+    /// col's tree edge lies on the tree path between the two endpoints.
+    /// **Row `row` of F is exactly the fundamental cycle of cotree edge
+    /// `row`**, whose length is bounded by the spanning tree's diameter
+    /// (O(N^(1/3)) for a 3-D mesh), not by the number of free groups.
+    /// Everything above the two endpoints' common ancestor cancels.
+    ///
+    /// The dense form cost O(V^2) memory and O(V^2) time (one O(V) tree
+    /// solve per free group), which is ~10 GB of F alone at 10^5 edges.
+    SparseMatrix F;
 
     /// Global edge index -> compact cotree-local row index, or -1 for a
     /// tree edge.

@@ -228,6 +228,11 @@ public:
         }
         Sparse<T> c(rows_, b.cols_);
         std::vector<T> accum(static_cast<std::size_t>(b.cols_), T{});
+        // Row-stamped marker rather than testing `accum[col] == 0` to decide
+        // whether a column is new to this row: a running sum that passes
+        // back through exactly zero would otherwise be pushed onto `touched`
+        // a second time and redo work it has already done.
+        std::vector<int> touched_in_row(static_cast<std::size_t>(b.cols_), -1);
         std::vector<int> touched;
         for (int r = 0; r < rows_; ++r) {
             touched.clear();
@@ -237,13 +242,25 @@ public:
                 for (int m = b.row_ptr_[static_cast<std::size_t>(mid)];
                      m < b.row_ptr_[static_cast<std::size_t>(mid) + 1]; ++m) {
                     const int col = b.col_index_[static_cast<std::size_t>(m)];
-                    if (accum[static_cast<std::size_t>(col)] == T{}) touched.push_back(col);
+                    if (touched_in_row[static_cast<std::size_t>(col)] != r) {
+                        touched_in_row[static_cast<std::size_t>(col)] = r;
+                        touched.push_back(col);
+                    }
                     accum[static_cast<std::size_t>(col)] += a_ik * b.values_[static_cast<std::size_t>(m)];
                 }
             }
             std::sort(touched.begin(), touched.end());
             for (int col : touched) {
-                c.add(r, col, accum[static_cast<std::size_t>(col)]);
+                // Entries that cancelled to exactly zero are dropped rather
+                // than stored. They are not part of the product's structure,
+                // and keeping them inflates nnz -- which matters here beyond
+                // memory, because the tree-cotree fill-in comparison in
+                // tools/compare_gauges.cpp reports nnz_D / nnz_A as a
+                // headline number. Only exact zeros are pruned; a
+                // near-cancellation is left alone rather than silently
+                // swallowed by a tolerance.
+                const T& v = accum[static_cast<std::size_t>(col)];
+                if (!(v == T{})) c.add(r, col, v);
                 accum[static_cast<std::size_t>(col)] = T{};
             }
         }

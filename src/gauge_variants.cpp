@@ -44,41 +44,6 @@ std::vector<double> dense_solve(std::vector<std::vector<double>> A, std::vector<
     return b;
 }
 
-namespace {
-
-/// Solves G_t x = b for the tree's own (implicit) node-incidence matrix, via
-/// a single top-down walk of the spanning tree/forest in group-discovery
-/// order: TreeCotreeResult::parent_group is guaranteed to only ever point to
-/// a strictly smaller group id (a parent is always discovered before its
-/// child), so processing groups 0..num_groups-1 in order always has a
-/// group's parent value already computed. `b_by_edge` is indexed by GLOBAL
-/// edge index; only its entries at tree edges are read. O(V) rather than an
-/// O(V^3) dense inversion of G_t -- see docs/ENGINEERING_STANDARDS.md.
-std::vector<double> solve_tree_system(const Mesh& mesh, const TreeCotreeResult& tc,
-                                       const std::vector<int>& free_group_index, int num_free_groups,
-                                       const std::vector<double>& b_by_edge) {
-    std::vector<double> x(static_cast<std::size_t>(num_free_groups), 0.0);
-    for (int g = 0; g < tc.num_groups; ++g) {
-        if (tc.parent_group[static_cast<std::size_t>(g)] == -1) continue;  // reference group: x implicitly 0
-        const int edge = tc.discovering_edge[static_cast<std::size_t>(g)];
-        const auto& e = mesh.edges[static_cast<std::size_t>(edge)];
-        const int v = (tc.node_group[static_cast<std::size_t>(e.first)] == g) ? e.first : e.second;
-        const int p = tc.parent_group[static_cast<std::size_t>(g)];
-        const int p_free = free_group_index[static_cast<std::size_t>(p)];
-        const double xp = (p_free == -1) ? 0.0 : x[static_cast<std::size_t>(p_free)];
-        const double bval = b_by_edge[static_cast<std::size_t>(edge)];
-        // Canonical edge orientation is (e.first, e.second) with
-        // e.first < e.second, giving G(edge, e.first) = -1, G(edge,
-        // e.second) = +1 (build_gradient_matrix's own convention, reused
-        // here group-wise): v == e.second means v sits at the "+1" end.
-        const double xg = (v == e.second) ? (xp + bval) : (xp - bval);
-        x[static_cast<std::size_t>(free_group_index[static_cast<std::size_t>(g)])] = xg;
-    }
-    return x;
-}
-
-}  // namespace
-
 EssentialIncidenceMatrix compute_essential_incidence_matrix(const Mesh& mesh, const TreeCotreeResult& tc) {
     EssentialIncidenceMatrix result;
     const int num_groups = tc.num_groups;
@@ -100,42 +65,73 @@ EssentialIncidenceMatrix compute_essential_incidence_matrix(const Mesh& mesh, co
         }
     }
     result.num_cotree_edges = num_cotree;
-    result.values.assign(static_cast<std::size_t>(num_cotree),
-                          std::vector<double>(static_cast<std::size_t>(num_free), 0.0));
 
-    // One O(V) tree walk per free group gives one COLUMN of G_t^{-1}
-    // (g_t_inv_columns[k][m] == G_t^{-1}[m, k]).
-    std::vector<double> unit_rhs(static_cast<std::size_t>(num_edges), 0.0);
-    std::vector<std::vector<double>> g_t_inv_columns(static_cast<std::size_t>(num_free));
+    // Per-group tree bookkeeping, one pass. parent_group[g] is always a
+    // strictly smaller id (a parent is discovered before its child), so
+    // depth can be filled in increasing g without a traversal.
+    //
+    // sign[g] is the +-1 picked up when descending through group g's
+    // discovering edge: +1 when g's own node is that edge's canonical second
+    // (higher-index) endpoint, -1 when it is the first -- since
+    // build_gradient_matrix puts G(edge, first) = -1 and G(edge, second) =
+    // +1, read group-wise.
+    std::vector<int> depth(static_cast<std::size_t>(num_groups), 0);
+    std::vector<int> sign(static_cast<std::size_t>(num_groups), 0);
     for (int g = 0; g < num_groups; ++g) {
-        if (tc.parent_group[static_cast<std::size_t>(g)] == -1) continue;
-        const int col = result.free_group_index[static_cast<std::size_t>(g)];
-        std::fill(unit_rhs.begin(), unit_rhs.end(), 0.0);
-        unit_rhs[static_cast<std::size_t>(tc.discovering_edge[static_cast<std::size_t>(g)])] = 1.0;
-        g_t_inv_columns[static_cast<std::size_t>(col)] =
-            solve_tree_system(mesh, tc, result.free_group_index, num_free, unit_rhs);
+        const int p = tc.parent_group[static_cast<std::size_t>(g)];
+        if (p == -1) continue;  // reference group: depth 0, never contributes a column
+        depth[static_cast<std::size_t>(g)] = depth[static_cast<std::size_t>(p)] + 1;
+        const auto& e = mesh.edges[static_cast<std::size_t>(tc.discovering_edge[static_cast<std::size_t>(g)])];
+        const int v = (tc.node_group[static_cast<std::size_t>(e.first)] == g) ? e.first : e.second;
+        sign[static_cast<std::size_t>(g)] = (v == e.second) ? 1 : -1;
     }
 
-    // F = G_c * G_t^{-1}: F[row, col] = -G_t^{-1}[fi, col] + G_t^{-1}[fj, col]
-    // = -g_t_inv_columns[col][fi] + g_t_inv_columns[col][fj], for cotree
-    // edge `row` = (i, j) with free-group indices fi, fj (a reference-group
-    // endpoint contributes 0, since its potential is fixed, not a free
-    // unknown).
+    // Each cotree edge's row of F is its fundamental cycle: walk both
+    // endpoints' groups up the tree to their common ancestor, emitting one
+    // entry per tree edge stepped over. Everything above the common ancestor
+    // is shared by both endpoints and cancels, so it is never visited --
+    // which is why this is O(cycle length) per row rather than O(V) per free
+    // group. See EssentialIncidenceMatrix::F for the derivation.
+    result.F = SparseMatrix(num_cotree, num_free);
     for (int e = 0; e < num_edges; ++e) {
         if (tc.is_tree_edge[static_cast<std::size_t>(e)]) continue;
         const int row = result.cotree_local_index[static_cast<std::size_t>(e)];
         const auto& edge = mesh.edges[static_cast<std::size_t>(e)];
-        const int gi = tc.node_group[static_cast<std::size_t>(edge.first)];
-        const int gj = tc.node_group[static_cast<std::size_t>(edge.second)];
-        const int fi = result.free_group_index[static_cast<std::size_t>(gi)];
-        const int fj = result.free_group_index[static_cast<std::size_t>(gj)];
-        for (int col = 0; col < num_free; ++col) {
-            double val = 0.0;
-            if (fi != -1) val -= g_t_inv_columns[static_cast<std::size_t>(col)][static_cast<std::size_t>(fi)];
-            if (fj != -1) val += g_t_inv_columns[static_cast<std::size_t>(col)][static_cast<std::size_t>(fj)];
-            result.values[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] = val;
+        int gi = tc.node_group[static_cast<std::size_t>(edge.first)];
+        int gj = tc.node_group[static_cast<std::size_t>(edge.second)];
+
+        auto emit = [&](int g, double s) {
+            result.F.add(row, result.free_group_index[static_cast<std::size_t>(g)],
+                          s * static_cast<double>(sign[static_cast<std::size_t>(g)]));
+        };
+
+        while (gi != gj) {
+            const int di = depth[static_cast<std::size_t>(gi)];
+            const int dj = depth[static_cast<std::size_t>(gj)];
+            if (di > dj) {
+                emit(gi, -1.0);
+                gi = tc.parent_group[static_cast<std::size_t>(gi)];
+            } else if (dj > di) {
+                emit(gj, +1.0);
+                gj = tc.parent_group[static_cast<std::size_t>(gj)];
+            } else {
+                // Equal depth and still distinct. If both are roots, the two
+                // endpoints sit in different trees of the spanning FOREST
+                // (separately grounded PEC bodies) -- there is no common
+                // ancestor, nothing cancels, and both paths are already
+                // fully emitted.
+                if (tc.parent_group[static_cast<std::size_t>(gi)] == -1 ||
+                    tc.parent_group[static_cast<std::size_t>(gj)] == -1) {
+                    break;
+                }
+                emit(gi, -1.0);
+                gi = tc.parent_group[static_cast<std::size_t>(gi)];
+                emit(gj, +1.0);
+                gj = tc.parent_group[static_cast<std::size_t>(gj)];
+            }
         }
     }
+    result.F.compress();
     return result;
 }
 
@@ -214,60 +210,52 @@ GaugeVariant build_munteanu_unsymmetric_gauge(const SparseMatrix& M, const TreeC
     const int num_cotree = F.num_cotree_edges;
     variant.cotree_local_index = F.cotree_local_index;
 
-    // Dense L^T (E x num_cotree): identity on cotree rows, -F^T on tree rows
-    // (a = L^T a_c reconstructs the full solution -- see
-    // recover_munteanu_unsymmetric_solution, which does the same thing for
-    // an actual solved a_c rather than building the whole operator).
-    std::vector<std::vector<double>> Lt(static_cast<std::size_t>(num_edges),
-                                         std::vector<double>(static_cast<std::size_t>(num_cotree), 0.0));
+    // L^T (E x num_cotree), sparse: the identity on cotree rows, -F^T on
+    // tree rows, so a = L^T a_c reconstructs the full edge solution. The
+    // tree row belonging to group g is minus F's column for that group,
+    // which is one row of F^T -- so the whole tree part is just F
+    // transposed, scattered to the discovering edges.
+    SparseMatrix Lt(num_edges, num_cotree);
     for (int e = 0; e < num_edges; ++e) {
         if (!tc.is_tree_edge[static_cast<std::size_t>(e)]) {
-            Lt[static_cast<std::size_t>(e)][static_cast<std::size_t>(F.cotree_local_index[static_cast<std::size_t>(e)])] = 1.0;
+            Lt.add(e, F.cotree_local_index[static_cast<std::size_t>(e)], 1.0);
         }
     }
-    std::vector<int> tree_edge_to_group(static_cast<std::size_t>(num_edges), -1);
+    const SparseMatrix Ft = F.F.transposed();  // num_free_groups x num_cotree
+    const auto& ft_row_ptr = Ft.row_ptr();
+    const auto& ft_col = Ft.col_index();
+    const auto& ft_val = Ft.values();
     for (int g = 0; g < tc.num_groups; ++g) {
-        if (tc.parent_group[static_cast<std::size_t>(g)] != -1) {
-            tree_edge_to_group[static_cast<std::size_t>(tc.discovering_edge[static_cast<std::size_t>(g)])] = g;
+        if (tc.parent_group[static_cast<std::size_t>(g)] == -1) continue;
+        const int e = tc.discovering_edge[static_cast<std::size_t>(g)];
+        const int free_row = F.free_group_index[static_cast<std::size_t>(g)];
+        for (int k = ft_row_ptr[static_cast<std::size_t>(free_row)];
+             k < ft_row_ptr[static_cast<std::size_t>(free_row) + 1]; ++k) {
+            Lt.add(e, ft_col[static_cast<std::size_t>(k)], -ft_val[static_cast<std::size_t>(k)]);
         }
     }
-    for (int e = 0; e < num_edges; ++e) {
-        if (!tc.is_tree_edge[static_cast<std::size_t>(e)]) continue;
-        const int g = tree_edge_to_group[static_cast<std::size_t>(e)];
-        const int free_col = F.free_group_index[static_cast<std::size_t>(g)];
-        for (int col = 0; col < num_cotree; ++col) {
-            Lt[static_cast<std::size_t>(e)][static_cast<std::size_t>(col)] =
-                -F.values[static_cast<std::size_t>(col)][static_cast<std::size_t>(free_col)];
-        }
-    }
+    Lt.compress();
 
     // Reduced matrix = (select cotree rows of M) * L^T -- an oblique
     // Petrov-Galerkin projection (test space = plain cotree selector, trial
-    // space = L^T), computed here via dense multiplication at this phase's
-    // test-mesh scale (see docs/ENGINEERING_STANDARDS.md).
-    const auto M_dense = M.to_dense();
-    std::vector<std::vector<double>> product(static_cast<std::size_t>(num_edges),
-                                              std::vector<double>(static_cast<std::size_t>(num_cotree), 0.0));
-    for (int r = 0; r < num_edges; ++r) {
-        for (int k = 0; k < num_edges; ++k) {
-            const double mrk = M_dense[static_cast<std::size_t>(r)][static_cast<std::size_t>(k)];
-            if (mrk == 0.0) continue;
-            for (int c = 0; c < num_cotree; ++c) {
-                product[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)] += mrk * Lt[static_cast<std::size_t>(k)][static_cast<std::size_t>(c)];
-            }
-        }
-    }
-
-    variant.reduced_matrix = SparseMatrix(num_cotree, num_cotree);
+    // space = L^T). Both factors are sparse and the product goes through
+    // Sparse::multiply (Gustavson), so no dense E x E intermediate is ever
+    // formed. It used to densify M, which is ~80 GB at 10^5 edges and the
+    // reason Method D could not run on a real mesh at all.
+    SparseMatrix ScM(num_cotree, num_edges);
+    const auto& m_row_ptr = M.row_ptr();
+    const auto& m_col = M.col_index();
+    const auto& m_val = M.values();
     for (int e = 0; e < num_edges; ++e) {
-        if (tc.is_tree_edge[static_cast<std::size_t>(e)]) continue;
         const int row = F.cotree_local_index[static_cast<std::size_t>(e)];
-        for (int c = 0; c < num_cotree; ++c) {
-            const double val = product[static_cast<std::size_t>(e)][static_cast<std::size_t>(c)];
-            if (val != 0.0) variant.reduced_matrix.add(row, c, val);
+        if (row == -1) continue;  // tree row: not in the test space
+        for (int k = m_row_ptr[static_cast<std::size_t>(e)]; k < m_row_ptr[static_cast<std::size_t>(e) + 1]; ++k) {
+            ScM.add(row, m_col[static_cast<std::size_t>(k)], m_val[static_cast<std::size_t>(k)]);
         }
     }
-    variant.reduced_matrix.compress();
+    ScM.compress();
+
+    variant.reduced_matrix = ScM.multiply(Lt);
     return variant;
 }
 
@@ -280,14 +268,15 @@ std::vector<double> recover_munteanu_unsymmetric_solution(const std::vector<doub
         const int c = F.cotree_local_index[static_cast<std::size_t>(e)];
         if (c != -1) a[static_cast<std::size_t>(e)] = a_c[static_cast<std::size_t>(c)];
     }
+    // a_t = -F^T a_c, for every tree edge at once: one O(nnz) transposed
+    // matvec instead of a per-group loop over every cotree column, which
+    // was scanning the dense F column by column.
+    const std::vector<double> ft_ac = F.F.matvec_transpose(a_c);
     for (int g = 0; g < tc.num_groups; ++g) {
         if (tc.parent_group[static_cast<std::size_t>(g)] == -1) continue;
         const int free_col = F.free_group_index[static_cast<std::size_t>(g)];
-        double at = 0.0;
-        for (int col = 0; col < F.num_cotree_edges; ++col) {
-            at -= F.values[static_cast<std::size_t>(col)][static_cast<std::size_t>(free_col)] * a_c[static_cast<std::size_t>(col)];
-        }
-        a[static_cast<std::size_t>(tc.discovering_edge[static_cast<std::size_t>(g)])] = at;
+        a[static_cast<std::size_t>(tc.discovering_edge[static_cast<std::size_t>(g)])] =
+            -ft_ac[static_cast<std::size_t>(free_col)];
     }
     return a;
 }
