@@ -10,12 +10,24 @@ by tree-cotree splitting and later also by Coulomb gauge, aimed at EDA
 range. An exact open boundary via a FEM–boundary-integral hybrid is planned as a
 deferred, later phase once the core solver works end to end.
 
+> **Updated (Sept 2026):** the target application set now explicitly names
+> **terahertz phased array antennas** — sub-micron semiconductor feeds
+> (photoconductive antenna gaps, HEMT gates, via transitions) integrated with
+> electrically large radiating apertures — as a primary beachhead alongside
+> general EDA. This sharpens scope; it changes nothing about the formulation,
+> gauges, or solver strategy already below. See `docs/THZ_PHASED_ARRAY_SCOPE.md`
+> for the full rationale, the new capabilities it adds (Floquet boundary
+> conditions, multi-port active impedance, an explicit ACA-over-MLFMA choice
+> for Phase 12), and an honest caveat on which numbers in it are illustrative
+> vs. benchmarked.
+
 | | |
 |---|---|
 | **Owner** | Nastaran Hendijani |
 | **Language** | C++17, CMake |
 | **Repo** | `APhi_Solver_Project_LowFrequency_EDA/APhi_Solver` |
 | **Phases** | 13 (00–12, last deferred) |
+| **Engineering standards** | `docs/ENGINEERING_STANDARDS.md` (speed-first, then memory; parallelize where it genuinely helps; advanced sparse-matrix techniques from Phase 04 onward) |
 
 Track legend used throughout: **Setup/Core** (foundational, not gauge- or
 application-specific) · **Tree-cotree** · **Coulomb gauge** · **EDA** ·
@@ -63,15 +75,23 @@ an explicit, written boundary on what source material this project may draw on.
    papers folder with `CMakeLists.txt`, `src/`, `include/aphi_solver/`,
    `tests/`, `docs/REFERENCES.md`, and a `.gitignore` tuned for Visual
    Studio/CMake builds.
-2. **Install Visual Studio 2022 Community.** Download from
-   `visualstudio.microsoft.com`. In the installer, select the **"Desktop
-   development with C++"** workload — this pulls in the MSVC compiler, the
-   Windows SDK, and CMake tools for Visual Studio.
-3. **Install the GitHub Copilot extension.** Inside Visual Studio:
-   `Extensions → Manage Extensions → search "GitHub Copilot" → Download`,
-   restart Visual Studio to finish installing, then `Extensions → GitHub
-   Copilot → Sign in` with your GitHub account (create one at github.com if
-   you don't have one — a free account is enough to start).
+2. **Install Visual Studio Community (currently 2026).** Go to
+   `visualstudio.microsoft.com/downloads` directly — **not** the "Downloads
+   for Visual Studio Subscribers" / older-versions page, which is a
+   paid-subscription (MSDN) portal and isn't needed. The free **Community**
+   edition is a "Free download" button right on the main downloads page, no
+   sign-in wall. In the installer, select the C++ desktop-development
+   workload (named "Desktop development with C++" in older versions; check
+   the 2026 installer's exact wording) — this pulls in the MSVC compiler,
+   the Windows SDK, and CMake tools for Visual Studio; confirm CMake tools
+   are checked before installing.
+3. **GitHub Copilot is now built into Visual Studio 2026** rather than a
+   separate Extensions-marketplace install — look for the Copilot Chat
+   window in the IDE and sign in with your GitHub account from there
+   (create one at github.com if you don't have one — a free account is
+   enough to start). If you end up on an older Visual Studio version
+   instead, the original path still applies: `Extensions → Manage
+   Extensions → search "GitHub Copilot" → Download`, restart, then sign in.
 4. **Open the project.** `File → Open → CMake...` and point it at
    `APhi_Solver/CMakeLists.txt`. Visual Studio configures the CMake cache
    automatically; `Build → Build All` should succeed on the placeholder
@@ -105,6 +125,15 @@ require. **Updated:** the project's target shifted from low-frequency-only to
 an all-frequency-stable formulation, so the equations below are the full
 form — not the reduced low-frequency system this phase originally specified.
 
+> **Written up in full (Sept 2026):** `docs/FORMULATION.md` now carries this
+> phase's complete deliverable — the equations below re-derived from
+> Maxwell's equations rather than only asserted, the DC special case, the
+> reduced low-frequency variant, the DOF layout (including the gauge-reduction
+> forward pointer to Phase 03), and both target test problems (a coaxial
+> via/power-plane analog for EDA, a PEC sphere Mie benchmark at k·a = 1 for
+> scattering). Phase 01's "Ready for 02" checklist is satisfied by that
+> document.
+
 ```
 ∇×(1/μ ∇×A) + (jωσ−ω²ε)A + (σ+jωε)∇Φ = J_imp
 −∇·[(jωσ−ω²ε)A + (σ+jωε)∇Φ] = 0
@@ -130,8 +159,8 @@ form — not the reduced low-frequency system this phase originally specified.
 4. **Separate the boundary-condition question from the formulation
    question.** A simple zero-tangential-field (PEC) truncation wall cannot
    represent radiation to infinity, regardless of which field variables you
-   use internally — that's fixed in Phase 07 (ABC/PML now, exact FEM-BI
-   coupling later in Phase 12), not here.
+   use internally — that's fixed in Phase 07 (a first-order ABC now, exact
+   FEM-BI coupling later in Phase 12), not here.
 5. **Write out, for your own reference, why A-Φ is better conditioned here
    than E- or H-field formulations** (per Lee/Lee/Lee 2003, §II) — this
    becomes the one-paragraph pitch for the whole project.
@@ -144,6 +173,16 @@ form — not the reduced low-frequency system this phase originally specified.
    power-plane / via structure for EDA; a radiating dipole or PEC/lossy
    sphere at a real operating frequency for scattering) — these become the
    running test cases for every later phase.
+8. **Updated (Sept 2026): note the terahertz multiscale case as a third,
+   sharper version of the same scattering/EDA-adjacent problem.** A phased
+   array feed (photoconductive gap, HEMT gate, or via transition at tens to
+   hundreds of nm) driving an electrically large radiating aperture pushes
+   the spatial-scale ratio that motivates A-Φ over E-/H-field formulations
+   past 10⁴:1 — more extreme than a typical EDA interconnect, but the same
+   underlying breakdown mechanism from step 5 above. This doesn't add a third
+   target problem yet (Phases 06/07 add the array-specific machinery first);
+   it's a reason to keep the full-form equations and not defer to a
+   quasi-static shortcut. See `docs/THZ_PHASED_ARRAY_SCOPE.md`.
 
 **Grounds this phase:** Zhao & Fu (2017) and Yan (2021) (all-frequency-stable
 A-Φ); Lee, Lee & Lee (2003); Dular et al. (2000)
@@ -171,15 +210,42 @@ Whitney basis functions.
    gradient/divergence operator **G** (node–edge), exactly as defined in the
    Munteanu paper — these are sparse, entry-per-orientation, and cheap to
    build once mesh connectivity exists.
-3. **Implement lowest-order Whitney edge elements** for **A** (tangential
-   continuity) and nodal (Lagrange P1) elements for Φ (the `F¹_A` / `F⁰_Φ`
-   spaces).
-4. **Defer higher-order/hierarchical bases** (Lee 2003's hierarchical hp
-   scheme) to Phase 10 — get a correct lowest-order pipeline working
-   end-to-end first.
+3. **Basis functions — updated Sept 2026 (final), see `docs/FORMULATION.md`
+   §5.1 for the full decision record and history.** Two earlier stances were
+   superseded (kept for the record in FORMULATION.md): matched first order
+   (Whitney **A** + Lagrange P1 Φ), then a brief matched-second-order plan
+   for both fields. **Locked decision: mixed order.** Φ uses the verified
+   10-node quadratic nodal element from Jin (2014), Ch. 5, Eq. (5.52)/Fig.
+   5.3. **A** uses the classic first-order (lowest-order) Whitney/Nédélec
+   tetrahedral edge element — 6 DOF per tet, one per edge — verified both
+   against Bossavit (1998) and against the user's own confirmed prior
+   implementation (`BasisFunction.docx` / `EdModel.cpp`, from her university
+   "3dedyaphi" codebase; confirmed not Ansys-derived). This is a **deliberate
+   mixed-order pairing**, not an oversight: `grad(P2 Phi)` is not exactly
+   representable in the first-order **A** edge space (see the from-scratch
+   proof in `docs/FORMULATION.md` §5.1), which caps the A-Phi coupling
+   term's accuracy at first order — an accepted, documented trade-off, not a
+   stability problem. Tree-cotree gauging is unaffected (Phase 03 below).
+   The same source document also describes a separate 10-point-per-tet
+   reconstruction of the solved **A** field (for combined plotting with Φ);
+   that is a post-processing utility for later phases, not part of this
+   phase's discretization.
+4. **True higher-order/hierarchical bases and hp-adaptivity**, and any
+   future matched-second-order upgrade to **A**, stay deferred to Phase 10
+   — get a correct pipeline working end-to-end first. (Lee 2003's
+   hierarchical hp scheme was considered as a Phase 10 reference, but note
+   it is a 2-D triangular-element scheme, not 3-D tetrahedral — see
+   `docs/FORMULATION.md` §5.1 — so it illustrates the general "match nodal
+   order to edge order" principle only, not a directly reusable 3-D formula
+   set. Graglia, Wilton & Peterson (1997) and García-Castillo et al. (2000)
+   remain identified, unread candidates for that future upgrade.)
 
-**Grounds this phase:** Munteanu (tree-cotree condensation properties); Lee,
-Lee & Lee (2003), §IV–VI
+**Grounds this phase:** Munteanu (tree-cotree condensation properties);
+J.-M. Jin (2014), Ch. 5 (verified Φ-side second-order nodal element);
+Bossavit (1998), Ch. 5 (verified first-order Whitney/Nédélec **A**); the
+user's own prior implementation (`BasisFunction.docx` / `EdModel.cpp`);
+Lee, Lee & Lee (2003), §IV–VI (background/motivation only — 2-D scope, see
+`docs/FORMULATION.md` §5.1)
 
 **Ready for 03 when:** **C** and **G** can be assembled for a test mesh and
 **CG = 0** holds numerically (the discrete curl·grad = 0 identity) — this is
@@ -199,20 +265,77 @@ a dielectric — a case tree-cotree doesn't handle cleanly, and where the
 generalized (penalty) Coulomb gauge alone is not guaranteed to be reliable
 either.
 
-1. **Implement the spanning-tree search** over the mesh graph (Lee 2003
-   Algorithms 1–2: node numbering with PEC/ground handling, then tree/cotree
-   edge marking) — this is graph theory on your edge/node incidence lists, no
-   field solve required yet.
-2. **Implement at least two gauging variants** from Munteanu's projection
-   framework so you can compare them empirically rather than trust one
-   blindly: **Albanese–Rubinacci** (simplest, keeps sparsity, but worse
-   conditioning) and **Munteanu unsymmetric** (similarly simple, keeps the
-   original condition number best per her numerical tests).
-3. **Instrument condition-number reporting** from day one (even a crude
-   power-iteration estimate) — this single number is what will guide every
-   gauge decision for the rest of the project.
+**Resolved (Sept 2026):** an earlier draft of this note flagged an open
+question here — whether tree-cotree gauging applies to the whole element or
+only a lowest-order subspace — raised while a matched second-order **A**
+was the working plan. Phase 02's final decision kept **A** at plain
+first-order (Whitney/Nédélec, mixed with a second-order Φ; see
+`docs/FORMULATION.md` §5.1), so that question no longer applies here: the
+classical tree-cotree treatment below goes through exactly as originally
+written, with no dependency on the still-unread Graglia/Wilton/Peterson
+(1997) or García-Castillo et al. (2000) candidates. Those remain of
+interest only if a future matched-second-order **A** is revisited (Phase
+10).
+
+1. **Done (Sept 2026).** Implemented the spanning-tree search over the mesh
+   graph, grounded in S.-C. Lee, J.-F. Lee, R. Lee (2003) Sec. V (fetched and
+   checked against the actual paper before writing any code): node numbering
+   with PEC/ground handling, then tree/cotree edge marking, fused into a
+   single BFS pass (`include/aphi_solver/tree_cotree.hpp`,
+   `src/tree_cotree.cpp`; 73/73 checks in `tests/test_tree_cotree.cpp`). A
+   CSR `NodeAdjacency` and a `UnionFind` (path compression + union by rank)
+   were used for this rather than the `std::map`-based lookups elsewhere in
+   the codebase, per `docs/ENGINEERING_STANDARDS.md`.
+2. **Done (Sept 2026).** Implemented two gauging variants from Munteanu's
+   projection framework (fetched and verified against the actual paper --
+   `docs/REFERENCES.md` has the full verification record and one disclosed
+   caveat about a symbol collision in the OCR'd equations 19-20, resolved by
+   deriving the reduced-matrix formula from her general framework instead of
+   copying that specific equation text): **Albanese–Rubinacci** (simplest,
+   keeps sparsity, but worse conditioning -- `build_albanese_rubinacci_gauge`)
+   and **Munteanu unsymmetric** (denser, but better-conditioned per her
+   numerical tests -- `build_munteanu_unsymmetric_gauge`), in
+   `include/aphi_solver/gauge_variants.hpp` / `src/gauge_variants.cpp`. The
+   "essential incidence matrix" F the unsymmetric variant needs is computed
+   via an O(V) tree back-substitution (not a general dense matrix inversion),
+   exploiting that the tree's own node-incidence structure lets each group's
+   potential be written as a cumulative sum down from its reference root.
+   The full step-by-step derivation of both reduced-matrix formulas (not
+   just a summary of what was/wasn't trusted from the paper) is written up
+   independently in `docs/TREE_COTREE_GAUGE.md`.
+3. **Done (Sept 2026).** Instrumented condition-number reporting via a crude
+   power-iteration estimate (`estimate_condition_number`, largest/smallest
+   eigenvalue of A^T*A via power/inverse-power iteration -- correct for both
+   variants uniformly, since Method D's reduced matrix is not symmetric and
+   so its eigenvalues alone would not give a meaningful condition number).
+   On both of this project's (tiny) test meshes, the unsymmetric variant
+   came out better-conditioned than Albanese-Rubinacci (single tet: kappa_A
+   = 4, kappa_D = 1; two tets sharing a face: kappa_A ≈ 13.1, kappa_D ≈ 2.0)
+   -- the right *direction* relative to Munteanu's own kappa_D < kappa_A
+   ordering, though these meshes are far too small to confirm her full
+   ordering or exact values. `tests/test_gauge_variants.cpp` also checks a
+   stronger, independent correctness property: for a manufactured,
+   automatically-consistent source j = M*z, both gauge variants recover a
+   vector potential whose curl matches curl(z) exactly, even though the two
+   recovered potentials differ from each other and from z (different valid
+   gauges, same physical field) -- 16/16 checks passing.
+   **Updated (Sept 2026):** `estimate_condition_number` was rewritten to be
+   sparse (matrix-free A^T*A matvecs, Conjugate Gradient inner solve instead
+   of dense Gaussian elimination -- see `docs/ENGINEERING_STANDARDS.md` and
+   `docs/REFERENCES.md`, "Matrix conditioning"), brought forward from its
+   originally-planned Phase 04/05 slot so a gauge-comparison tool can run on
+   realistic mesh sizes rather than only Phase 03's tiny validation meshes.
+   Verified independently against diagonal test matrices with analytically-
+   known condition numbers (identity, diag(1,2,4,100), and a 500x500
+   diagonal with kappa = 1000 exactly), not just re-checked against the
+   gauge variants -- 19/19 checks now passing in
+   `tests/test_gauge_variants.cpp`.
 4. **Handle multiple PEC bodies** explicitly (each grounded to its own
-   reference node) — a common source of subtle bugs later.
+   reference node) — a common source of subtle bugs later. **Already done as
+   part of step 1**: `build_tree_cotree` discovers PEC-tagged nodes'
+   connected components automatically (via UnionFind) and gives each
+   distinct body its own reference group rather than merging them, per
+   `tests/test_tree_cotree.cpp`'s disconnected-PEC-bodies test case.
 5. **Build a mixed conductor/dielectric port test case early, and benchmark
    two gauge alternatives against it.** The standard tree-cotree recipe
    grounds the spanning tree through whole PEC bodies; a port face that is
@@ -237,6 +360,31 @@ either.
    interface conditions as part of the gauge itself rather than patching
    them on afterward. Decide the default only once you have numbers from
    this test case, not from the literature alone.
+   **Updated (Sept 2026): implement Chew's generalized Lorenz gauge first.**
+   It adds no new unknowns (no Lagrange-multiplier field, no saddle-point
+   solver, no inf-sup pairing to get right) and its frequency-dependent
+   gauge condition is a more natural fit for a solver whose whole premise is
+   full-wave/radiating behavior, whereas Ansari's method comes from the
+   galvanic/inductive geophysical literature. This is a prioritization for
+   implementation order, not a decision made from the literature alone —
+   Ansari's explicit Lagrange-multiplier Coulomb gauge stays in as the
+   required benchmark comparison on the same synthetic geometry before
+   either one is called the default, exactly as the sentence above already
+   requires. Note also that, like the classical Lorenz gauge, Chew's
+   generalized version is frequency-dependent and should be expected to
+   degenerate at ω = 0 the same way — the dedicated DC/magnetostatic solve
+   already planned in Phase 01, step 3 covers that case regardless of which
+   AC gauge is chosen here.
+6. **Updated (Sept 2026): extend the mixed-port benchmark to a multi-port
+   array topology before calling either gauge validated for phased-array
+   feeds.** The single-port test above generalizes to *many* ports sharing a
+   common ground/substrate plane, which is the actual feed topology for a
+   phased array. There's no specific reason in the literature to expect the
+   Lagrange-multiplier Coulomb gauge or Chew's generalized Lorenz gauge to
+   behave differently with more ports present, but that's an assumption, not
+   a result — check it on a small synthetic array (e.g. a 2×2 or 4×4 feed
+   grid) rather than assuming the single-port result generalizes for free.
+   See `docs/THZ_PHASED_ARRAY_SCOPE.md`.
 
 **Grounds this phase:** Munteanu, §IV–VI (variants A–E, condition-number
 ordering κ_D < κ_C < κ_A < κ_E < κ_B); Lee, Lee & Lee (2003), §V; Rapetti,
@@ -259,7 +407,10 @@ as an open question for Phase 06).
 **Track:** Core
 
 **Goal:** A sparse assembly pipeline producing the coupled A-Φ block system,
-with the symmetric row-scaling option available as a solver-conditioning knob.
+with both the tree-cotree gauge choice and the frequency-scaling choice
+available as solver-conditioning knobs — see `docs/CONDITIONING.md`'s
+"Interaction with the tree-cotree gauge choice" (Sept 2026) for why these two
+knobs aren't independent and what the input file should actually expose.
 
 ```
 K_AA  = ∫ (∇×A)·(∇×A′) dΩ        M_AA  = ∫ A·A′ dΩ
@@ -270,10 +421,14 @@ K_AΦ  = ∫ ∇Φ·A′ dΩ                K_ΦΦ = ∫ ∇Φ·∇Φ′ dΩ
    against hand-computed values, before any global assembly code runs.
 2. **Global sparse assembly** into a CSR (or similar) structure, respecting
    the tree-cotree reduction from Phase 03 (reduced-size system, not the full
-   singular one).
-3. **Implement the symmetric row-scaling option** (divide the Φ-row by jω) as
-   a build-time or run-time flag — keep both the natural and symmetric forms
-   available since later phases compare them.
+   singular one) — as a build-time or run-time choice between
+   Albanese-Rubinacci and Munteanu unsymmetric, not hard-coded to one.
+3. **Implement the frequency-scaling choice** (natural/non-symmetric,
+   row-scaling, or scaled-Φ — `docs/CONDITIONING.md` Formulations 1-3) as a
+   build-time or run-time flag — keep all forms available since later phases
+   compare them, and derive/validate the solver's symmetric-vs-general mode
+   from the actual (gauge, scaling) combination rather than trusting it
+   blindly (`docs/LINEAR_SOLVER.md`, "Planned: solver-mode selection").
 4. **Right-hand-side assembly** for the source models you'll add properly in
    Phases 06–07; a simple uniform current density is enough here to exercise
    the pipeline.
@@ -368,6 +523,17 @@ dielectrics, and a usable port abstraction.
 4. **Run your Phase 01 EDA test problem end-to-end** and sanity-check against
    a hand or textbook estimate (e.g. DC resistance, or a simple RLC estimate
    for a via).
+5. **Updated (Sept 2026): add multi-port active impedance / active
+   reflection coefficient extraction, Γ_active,m(θ,φ).** This is distinct
+   from the S-parameter/impedance extraction in step 3 above: ordinary
+   S-parameters characterize ports one or two at a time, but a phased array
+   needs the impedance *seen by each element while every other element is
+   simultaneously excited at its own scanned phase* — the quantity that
+   predicts scan blindness. Build this as a post-processing step on top of
+   the existing port machinery, not a parallel solve path; it's what makes
+   the beam-steering sweep in Phase 07/12 (factorize once, cheap
+   forward/backward substitution per angle) actually useful for array work.
+   See `docs/THZ_PHASED_ARRAY_SCOPE.md`.
 
 **Grounds this phase:** Dular et al. (2000), massive/stranded inductor source
 formulations
@@ -393,12 +559,27 @@ step, upgraded to an exact treatment in Phase 12.
    target frequency range — the all-frequency-stable formulation from Phase
    01 is what makes this valid beyond low-frequency, not a limitation to work
    around anymore.
-2. **Add an outer boundary treatment: ABC or PML, as an interim, approximate
-   open boundary.** Either has its own error budget (an ABC is only accurate
-   for a given incidence-angle range; PML adds volumetric DOFs and has known
-   low-frequency degeneracy issues of its own) — document which you chose
-   and its accuracy limits, since Phase 12 replaces this with an exact
-   boundary-integral coupling once the core solver is proven.
+2. **Add an outer boundary treatment.** **Updated (Sept 2026): implement a
+   first-order ABC (Silver-Müller/Sommerfeld type), not PML.** PML's known
+   low-frequency degeneracy would put a second low-frequency failure mode
+   right next to a formulation whose whole premise is that it doesn't have
+   one — a direct conflict with the all-frequency-stability pitch driving
+   every other choice in this project. PML is also the larger implementation
+   lift here: it needs an added volumetric absorbing layer (mesh changes),
+   anisotropic complex-tensor assembly inside it, and empirical
+   thickness/grading tuning, on top of translating a technique whose
+   published form is for E/H fields onto the coupled A-Φ system while
+   preserving the chosen gauge inside the layer. A first-order ABC costs a
+   short field-to-potential substitution instead (E = −∂A/∂t − ∇Φ applied to
+   the standard Silver-Müller condition) and drops in as a single boundary
+   term in the existing weak form, no new DOFs or mesh changes. Its
+   trade-off — accuracy that degrades away from near-normal incidence — is a
+   documented, bounded limitation, not a new failure regime. No published
+   ABC or PML formulated directly in A and Φ was found in a literature
+   check (see `docs/OPEN_BOUNDARY_ABC.md` for the search and the from-scratch
+   derivation used instead); this is expected to be interim and
+   documented, since Phase 12 replaces it with an exact boundary-integral
+   coupling once the core solver is proven.
 3. **Add near-to-far-field / RCS post-processing** on top of the field
    solution.
 4. **Run your Phase 01 scattering test problem** (e.g. a dipole or PEC/lossy
@@ -406,13 +587,24 @@ step, upgraded to an exact treatment in Phase 12.
    recoverable cross-section against the known analytical solution (Mie
    series, or a canonical dipole result) — this is also your baseline for
    the Phase 12 comparison later.
+5. **Updated (Sept 2026): add Floquet periodic boundary conditions on a
+   single unit cell** (infinite-array approximation, applied to both **A**
+   and Φ) — the standard first modeling step for any phased array (scan
+   blindness estimation, central-element active impedance) and far cheaper
+   than the finite-array FEM-BI hybrid in Phase 12. Sequence this *before*
+   committing to the full boundary-integral work: it's a fast way to
+   validate the A-Φ core against COMSOL on a real periodic-array problem,
+   using the Phase 06 active-impedance extraction, while Phase 12's dense
+   boundary-integral machinery is still being built. See
+   `docs/THZ_PHASED_ARRAY_SCOPE.md`.
 
 **Grounds this phase:** Zhao & Fu (2017); Yan (2021) (frequency range this
 formulation now targets)
 
 **Ready for 08 when:** the scattering test problem matches its analytical
 solution within a documented tolerance across the frequency range you've
-committed to, with the ABC/PML choice and its known limitations written down.
+committed to, with the ABC choice and its known angle-dependent accuracy
+limits written down.
 
 ---
 
@@ -486,9 +678,19 @@ something that can take on COMSOL-sized meshes in reasonable time.
 2. **Parallelize assembly** (element-level parallelism is embarrassingly
    parallel) and evaluate a parallel/multithreaded sparse solver or
    preconditioner.
-3. **Add hierarchical/higher-order basis functions and hp-adaptivity**
-   (deferred from Phase 02) — per Lee 2003, this both improves accuracy per
-   DOF and improves stability in the h-adaptive regime.
+3. **Add true hierarchical/higher-order basis functions and hp-adaptivity.**
+   Phase 02 settled on a mixed-order pairing (first-order **A**,
+   second-order Φ; Sept 2026) rather than raising both fields together, so
+   this phase now covers two possible upgrades, either or both: (a) a
+   matched second-order **A** (Graglia, Wilton & Peterson 1997 and/or
+   García-Castillo et al. 2000, still unread, identified as candidates), to
+   remove the A-Phi coupling accuracy cap documented in
+   `docs/FORMULATION.md` §5.1; and (b) true hierarchical/hp-adaptive bases
+   beyond second order generally. The general principle (matching nodal and
+   edge order improves accuracy per DOF and stability in the h-adaptive
+   regime) follows Lee 2003, though that paper's own scheme is 2-D
+   triangular and not directly reusable here — a 3-D hierarchical reference
+   will need to be identified when this phase is reached.
 4. **Evaluate GPU or matrix-free approaches** for the largest target
    problems, once CPU performance is well understood and profiled — don't
    start here.
@@ -523,6 +725,14 @@ deferred from Phase 00.
 5. **Stand up a continuous COMSOL-comparison benchmark** (extending Phase
    08) that runs on every significant change — this becomes both your
    internal quality bar and, eventually, your sales material.
+6. **Updated (Sept 2026): sharpen the beachhead target.** Rather than a
+   generic "competes with COMSOL on EDA and scattering" pitch, the named
+   target is multiscale sub-THz/THz systems where sub-micron semiconductor
+   feeds must be co-designed with radiating apertures — photoconductive THz
+   antenna arrays, on-chip antenna-circuit co-design, and automotive radar
+   packages are the example verticals. This changes the pitch and the
+   benchmark problems worth showcasing in step 5, not what gets built first;
+   Phases 00–10 are unchanged. See `docs/THZ_PHASED_ARRAY_SCOPE.md`.
 
 **Definition of done for the FEM-only solver (v1):** a documented,
 reproducible benchmark set where the solver matches or beats COMSOL on
@@ -536,7 +746,7 @@ not a blocker for this one.
 
 **Track:** Full-wave, Scattering — **Deferred**
 
-**Goal:** Replace the ABC/PML approximation from Phase 07 with an exact,
+**Goal:** Replace the ABC approximation from Phase 07 with an exact,
 non-approximate open boundary by coupling the interior FEM solve to a
 boundary integral equation on the truncation surface. Deliberately deferred:
 this is a substantial, separate undertaking on the scale of what
@@ -572,13 +782,22 @@ alongside the product work.
    dielectric or PEC sphere) before trusting it on anything else.
 4. **Address the dense BI matrix's cost before it becomes a bottleneck.** A
    direct dense solve is fine for small truncation surfaces, but real
-   antenna/RCS-scale problems need a fast method — the fast multipole method
-   or adaptive cross approximation — to avoid O(N²)/O(N³) scaling. This is
-   itself a substantial subsystem; budget for it as such rather than as a
-   footnote.
+   antenna/RCS-scale problems need a fast method to avoid O(N²)/O(N³)
+   scaling. **Updated (Sept 2026): prefer Adaptive Cross Approximation (ACA)
+   over MLFMA as the default**, not just one of two equally-weighted
+   options — MLFMA's analytic multipole expansion of the Helmholtz kernel is
+   well known to degrade at sub-wavelength scales (the spherical Hankel
+   functions involved become ill-conditioned as their argument shrinks),
+   which is exactly the regime a multiscale THz array with sub-micron feed
+   detail lives in. ACA is purely algebraic (a low-rank cross-approximation
+   on kernel-evaluated matrix blocks), kernel-independent, and has no
+   analogous low-frequency failure mode — consistent with the
+   all-frequency-stability reasoning behind every other formulation choice
+   in this roadmap. This is itself a substantial subsystem; budget for it as
+   such rather than as a footnote. See `docs/THZ_PHASED_ARRAY_SCOPE.md`.
 5. **Re-run the Phase 08 benchmark suite** (extended with radiating/open-region
    analytical cases) under the FEM-BI hybrid and compare accuracy and cost
-   against the Phase 07 ABC/PML baseline.
+   against the Phase 07 ABC baseline.
 6. **Treat this as a candidate paper, not only an implementation task.** A
    literature check (Sept 2026) found close but distinct prior work: a
    broadband A-Φ solver using discrete exterior calculus with no BI coupling

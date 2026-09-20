@@ -56,15 +56,89 @@ DC singularity of Formulation 1 -- but the recovered `Phi` is now itself scaled 
 `omega`, which can reintroduce numerical trouble in a different place (very small
 `Phi'` values at very low frequency, if `Phi` itself doesn't vanish as `omega -> 0`).
 
+## Formulation 3 -- solve the natural non-symmetric system directly
+
+Skip both of the above and solve the coupled A-Phi system exactly as assembled,
+with `K_APhi != K_PhiA^T`. This has no `j*omega` anywhere in the conditioning
+step, so it has none of Formulations 1-2's DC-degeneracy trade-off -- there's no
+extra transform that needs special-casing as `omega -> 0`.
+
+Trade-off: you need a general (non-symmetric) sparse solver rather than a
+symmetric-indefinite one. `docs/LINEAR_SOLVER.md` confirms MUMPS supports this
+directly (a general-unsymmetric matrix type, alongside its symmetric modes), so
+this doesn't cost you the solver choice already made -- but a general LU
+factorization typically costs roughly 2x the memory and factorization time of a
+symmetric-indefinite factorization on the same matrix (full partial pivoting
+over the whole matrix instead of exploiting one triangle), and it forecloses
+COCG/COCR-type short-recurrence iterative solvers if this project ever goes
+iterative instead of direct (those require complex-symmetric structure; a
+non-symmetric system would need GMRES or BiCGStab instead).
+
 ## Choosing between them
 
-There is no built-in default crossover frequency in this code, and there
-shouldn't be one assumed from outside your own measurements. Use the Phase 05
-frequency sweep from the project roadmap: for your actual mesh and materials, plot
-`estimate_condition_number` (or, at real problem sizes, iterative-solver iteration
-count) against frequency for both formulations, and read off where the curves
-cross. `recommend_strategy(frequency_hz, crossover_hz)` takes that measured value
-as an explicit argument -- it does not embed one.
+Decide by measurement, the same way as always in this project -- there is no
+built-in default crossover frequency in this code, and there shouldn't be one
+assumed from outside your own measurements. Use the Phase 05 frequency sweep
+from the project roadmap: for your actual mesh and materials, plot
+`estimate_condition_number` (or, at real problem sizes, iterative-solver
+iteration count and factorization memory) against frequency for all three
+formulations, and read off where the curves cross. `recommend_strategy` takes
+measured values as explicit arguments -- it does not embed one. Formulation 3
+adds a genuine axis to that comparison, not just a fallback: it may be the
+right choice even away from `omega -> 0` if factorization memory at your
+target mesh sizes turns out to be the binding constraint, per
+`docs/ENGINEERING_STANDARDS.md`'s "speed first, then memory, but it's a
+trade-off."
+
+## Interaction with the tree-cotree gauge choice (Sept 2026)
+
+The frequency-scaling choice above and the tree-cotree gauge choice
+(`docs/TREE_COTREE_GAUGE.md`, Albanese-Rubinacci vs. Munteanu unsymmetric) both
+affect whether the final reduced system is symmetric, but they act at
+different points in the pipeline, and they do not combine independently:
+
+- **Albanese-Rubinacci (Method A)** eliminates tree-edge DOFs by pure
+  row/column restriction (deleting rows and columns of the assembled system).
+  Restriction never introduces asymmetry that wasn't already there, so Method A
+  is symmetry-neutral: whatever symmetry Formulation 1/2/3 gave the coupled
+  system going in, Method A's reduction preserves coming out.
+- **Munteanu unsymmetric (Method D)** eliminates tree-edge DOFs by an oblique
+  (Petrov-Galerkin) projection -- a different subspace selects rows than
+  substitutes columns. `docs/TREE_COTREE_GAUGE.md` Sec. 5 proves this makes the
+  reduced matrix non-symmetric even when the input is symmetric. This is not a
+  side effect; it is what "unsymmetric" in the method's own name refers to.
+
+That gives four combinations, only three of which are meaningful:
+
+| Gauge | Frequency scaling | Result |
+|---|---|---|
+| Albanese-Rubinacci | Formulation 1 or 2 (on) | Fully symmetric reduced system -- the only combination that actually achieves this. |
+| Albanese-Rubinacci | Formulation 3 (off) | Non-symmetric (from the coupling-block mismatch alone); simplest code, no DC-fragile transform anywhere. |
+| Munteanu unsymmetric | Formulation 3 (off) | Non-symmetric (from the coupling-block mismatch *and* the gauge's own projection); best-conditioned per `tests/test_gauge_variants.cpp`'s kappa_D < kappa_A results, at the memory/factorization cost of Formulation 3 plus Method D's own fill-in (`M_ct*F^T` is generally denser than `M`'s own blocks). |
+| Munteanu unsymmetric | Formulation 1 or 2 (on) | **Still non-symmetric.** The scaling only fixes the coupling-block mismatch; Method D's projection reintroduces asymmetry regardless. This combination pays Formulation 1/2's DC-degeneracy cost for zero symmetry benefit -- there is no reason to select it. |
+
+**Solver-mode dispatch: a static lookup, not a per-solve numerical check
+(revised Sept 2026).** Whether a given `(gauge, frequency_scaling)`
+combination yields a symmetric matrix is not uncertain -- it is proven above,
+algebraically, for all four combinations. So the solver front-end should
+decide symmetric-vs-general dispatch with a cheap O(1) lookup on those two
+enum values (the table above, encoded directly), not by computing
+`||A - A^T||` from the actual assembled entries on every solve -- that would
+be paying an O(nnz) cost (still cheap in absolute terms, but needless) to
+re-derive something already established by proof.
+
+What a numerical `||A - A^T|| / ||A||` check is actually useful for is
+different: not verifying the *math* (settled above) but catching a future
+*implementation bug* that silently violates it -- an edit to the assembly or
+gauge code that gets a block wrong, breaking the proven invariant in practice
+even though the static lookup still claims it holds. That risk is real enough
+in a commercial numerical tool to guard against, but the right place for the
+guard is the **test suite**, not the solve path: assert, once per code
+change (e.g. in `tests/test_conditioning.cpp`), that each of the three valid
+combinations actually produces a matrix with the symmetry this document
+claims for it. That costs nothing at solve time, ever, while still catching
+a regression the moment it's introduced -- rather than paying even a cheap
+check on every production solve for something the proof already guarantees.
 
 Why not just hard-code a threshold: a specific number like "1 Hz" is a property of
 a particular mesh, material set, and solver -- not a universal constant of the

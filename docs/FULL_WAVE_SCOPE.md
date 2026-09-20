@@ -31,8 +31,9 @@ infinity -- a dipole or scattering problem needs fields that genuinely extend to
 infinity, not vanish at an artificial wall. But that's a *boundary-condition*
 problem, not a *field-variable* problem -- an E-field full-wave FEM with the same
 PEC wall would have the identical failure. So the fix belongs in the open-boundary
-treatment (Phase 07: ABC/PML now, Phase 12: exact FEM-BI coupling later), not in
-abandoning the A-Phi potential formulation.
+treatment (Phase 07: a first-order ABC now -- see `docs/OPEN_BOUNDARY_ABC.md` --
+Phase 12: exact FEM-BI coupling later), not in abandoning the A-Phi potential
+formulation.
 
 ## FEM-BI hybrid: deferred, not abandoned
 
@@ -47,9 +48,9 @@ coupling, and -- critical for any real problem size -- a fast method (FMM or
 ACA) to avoid the dense BI matrix's O(N^2)/O(N^3) cost.
 
 Decision: defer this to Phase 12, after Phases 00-11 produce a working, validated
-FEM-only solver (full-wave A-Phi + ABC/PML open boundary). Don't let the two
-undertakings force each other's timeline -- see the roadmap artifact for the full
-phase breakdown.
+FEM-only solver (full-wave A-Phi + first-order ABC open boundary). Don't let the
+two undertakings force each other's timeline -- see the roadmap artifact for the
+full phase breakdown.
 
 ### Updated (Sept 2026): prefer a potential-based BEM over classical EFIE/MFIE/CFIE
 

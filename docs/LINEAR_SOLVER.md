@@ -18,6 +18,14 @@ benchmark against.
   this project's A-Phi matrices actually have -- see `docs/CONDITIONING.md`),
   with scaling and fill-reducing reordering (AMD, and METIS if linked in)
   built in.
+- MUMPS also supports a general (non-symmetric) matrix type directly, as one
+  of three modes alongside symmetric-positive-definite and
+  symmetric-indefinite (confirmed via MFEM's `MUMPSSolver` wrapper
+  documentation, docs.mfem.org, Sept 2026). This matters because
+  `docs/CONDITIONING.md`'s "Formulation 3" (skip the frequency-dependent
+  symmetrizing scaling and solve the naturally non-symmetric A-Phi system
+  directly) doesn't require a different solver library -- just a different
+  mode of the same one.
 - Licensing: MUMPS is distributed under **CeCILL-C**, a permissive/weak-copyleft
   license compatible with linking into closed-source commercial software (its
   bundled AMD ordering is separately BSD-3-clause). See the license page at
@@ -37,6 +45,32 @@ benchmark against.
 This is a decision to revisit once Phase 04 produces real assembled systems to
 benchmark MUMPS against on your actual meshes -- treat "MUMPS" above as the
 leading candidate, not a final commitment made in the abstract.
+
+## Planned: solver-mode selection in the input file (design, Sept 2026)
+
+Once Phase 04+ defines a real input-file format, it should expose two
+independent choices -- `gauge: albanese_rubinacci | munteanu_unsymmetric`
+(`docs/TREE_COTREE_GAUGE.md`) and `frequency_scaling: none | row_scaling |
+scaled_phi` (`docs/CONDITIONING.md`'s Formulations 3/1/2) -- rather than
+hard-coding either. Both are genuine, measured trade-offs (conditioning vs.
+sparsity/fill-in for the gauge; DC-degeneracy vs. memory/factorization cost for
+the scaling), not settled questions, and this project's whole practice has
+been to let the user pick from real numbers rather than assume a default.
+
+This is *not* a third independent "symmetric vs. non-symmetric solve" flag,
+though. Whether the reduced system actually ends up symmetric is fully
+determined -- by proof, not measurement -- by the (gauge, frequency_scaling)
+combination -- see `docs/CONDITIONING.md`'s decision matrix -- and one
+combination (Munteanu-unsymmetric gauge + scaling on) looks like it should
+give a symmetric system but doesn't. So the solver-mode (MUMPS
+symmetric-indefinite vs. general) should be *derived* from the combination
+actually selected via a cheap static lookup on those two settings, not taken
+as a third free-standing input-file field a user could set inconsistently
+with the other two, and not re-verified numerically on every solve -- the
+numerical `||A - A^T|| / ||A||` check belongs in the test suite, as a
+one-time-per-code-change guard against an implementation bug breaking the
+proven invariant, not on the solve path (`docs/CONDITIONING.md`,
+"Interaction with the tree-cotree gauge choice").
 
 ## What's implemented now vs. what's waiting on real assembly
 
