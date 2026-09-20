@@ -532,7 +532,30 @@ have a settled type signature, so that phase is only about the weak form.
    template, this also resolves the real-vs-complex question in one move
    rather than forcing a second complex-typed copy of the same three
    functions.
-5. **Clean up two API collisions before they propagate.** `dense_solve`
+5. **Done (Sept 2026) — make Method D sparse.** Found while auditing what
+   still densifies after step 2. `build_munteanu_unsymmetric_gauge`
+   densified `M` (E x E) and built a dense `L^T`, and
+   `compute_essential_incidence_matrix` built `F` dense via one O(V) tree
+   solve per free group — O(V^2) time and memory, roughly 80 GB for `M` and
+   10 GB for `F` at 10^5 edges, so Method D could not run on a real mesh at
+   all. Method A was never affected (it is a pure principal submatrix),
+   which is why this did not block the chosen path; but every fill-in
+   number `compare_gauges` reported was only obtainable on toy meshes.
+   The fix came from a structural observation rather than a data-structure
+   swap: `G_t^{-1}[m, col]` is `+-1` exactly when group `col` is an
+   ancestor of `m`, so **row `r` of F is exactly the fundamental cycle of
+   cotree edge `r`** — a tree path bounded by the spanning tree's diameter,
+   with everything above the endpoints' common ancestor cancelling. F is
+   now built by walking both endpoints up to their common ancestor, and the
+   reduction is a sparse-sparse product. `solve_tree_system` was deleted
+   (the cycle walk replaced its purpose). Verified identical, not merely
+   passing: `compare_gauges` reports the same kappa and nnz on `cube_4` and
+   `cube_6` as the dense implementation, checked by building the previous
+   commit side by side. Gauge-build time (excluding the condition-number
+   estimate, which dominates wall time at these sizes): cube_4 22.9 -> 17.6
+   ms, cube_6 87.3 -> 24.2 ms — the old path grows ~3.8x when the mesh
+   grows 3x, the new one ~1.4x.
+6. **Clean up two API collisions before they propagate.** `dense_solve`
    (real, `gauge_variants.hpp`) vs. `solve_dense` (complex,
    `complex_matrix.hpp`) differ only in word order, and
    `estimate_condition_number` exists twice with different types in
