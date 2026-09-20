@@ -34,3 +34,7 @@ add_test(NAME aphi_tests_tree_cotree COMMAND aphi_tests_tree_cotree)
 add_executable(aphi_tests_gauge_variants test_gauge_variants.cpp)
 target_link_libraries(aphi_tests_gauge_variants PRIVATE aphi_core)
 add_test(NAME aphi_tests_gauge_variants COMMAND aphi_tests_gauge_variants)
+
+add_executable(aphi_tests_sparse_matrix test_sparse_matrix.cpp)
+target_link_libraries(aphi_tests_sparse_matrix PRIVATE aphi_core)
+add_test(NAME aphi_tests_sparse_matrix COMMAND aphi_tests_sparse_matrix)
