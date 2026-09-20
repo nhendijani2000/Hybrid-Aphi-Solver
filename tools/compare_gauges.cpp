@@ -31,6 +31,34 @@ using namespace aphi_solver;
 
 namespace {
 
+// Above this many reduced DOFs, the condition-number estimate is skipped
+// unless --force-kappa is given.
+//
+// It is a diagnostic, not part of any solve path, and it does not scale:
+// up to `max_iterations` (500) outer steps, each running a CG inner solve
+// of up to min(n, 2000) iterations at O(nnz) apiece, so worst case
+// O(500 * n * nnz). Measured, per reduced DOF count:
+//
+//     480 (cube_4)   kappa_A   0.07 s   kappa_D     0.07 s
+//    1512 (cube_6)   kappa_A   0.71 s   kappa_D     1.67 s
+//    4860 (cube_9)   kappa_A   7.08 s   kappa_D   174.45 s
+//
+// Method D degrades far faster than Method A because its fill-in grows too
+// (nnz_D/nnz_A is 2.97 at cube_4, 4.37 at cube_6, 6.49 at cube_9), so both
+// factors in n * nnz are rising at once. At cube_9 the whole run takes
+// 181.6 s with the estimate and 0.057 s without it -- and the structural
+// numbers reported alongside (reduced size, nonzeros, fill-in ratio) are
+// O(nnz), meaningful at any size, and identical either way. The cheap
+// useful part should not be hostage to the expensive limited one.
+//
+// 2000 is chosen so every mesh checked into meshes/ still reports kappa by
+// default (the largest, cube_6, reduces to 1512 and costs ~2.4 s), while
+// anything substantially bigger has to ask. docs/CONDITIONING.md is
+// explicit that this estimator is not meant for production mesh sizes at
+// all -- past Phase 04 the iterative solver's own iteration count is the
+// practical conditioning proxy.
+constexpr int kKappaGuardDofs = 2000;
+
 void print_usage(const char* argv0) {
     std::cerr << "Usage: " << argv0 << " <mesh.msh> [--gauge=A|D|both] [--pec-nodes=i,j,k,...] [--skip-kappa]\n\n"
               << "  --gauge=A|D|both   Which gauge variant(s) to build and report (default: both)\n"
@@ -42,6 +70,8 @@ void print_usage(const char* argv0) {
               << "                     size, nonzeros, fill-in. Use this on large meshes where\n"
               << "                     you only need to check fill-in/size quickly and don't\n"
               << "                     need the (slower) conditioning comparison right now.\n"
+              << "  --force-kappa      Compute the condition-number estimate even above the\n"
+              << "                     " << kKappaGuardDofs << "-reduced-DOF guard, where it is skipped by default.\n"
               << "  --help             Show this message\n\n"
               << "Note: M = C^T*C (vacuum, nu=1) is used as the test matrix -- there is no real\n"
               << "assembly pipeline yet (Phase 04), so this is the same honest stand-in\n"
@@ -55,6 +85,7 @@ struct Args {
     bool want_a = true;
     bool want_d = true;
     bool skip_kappa = false;
+    bool force_kappa = false;
     std::vector<int> pec_nodes;
 };
 
@@ -93,6 +124,8 @@ Args parse_args(int argc, char** argv) {
             args.pec_nodes = parse_int_list(a.substr(12));
         } else if (a == "--skip-kappa") {
             args.skip_kappa = true;
+        } else if (a == "--force-kappa") {
+            args.force_kappa = true;
         } else if (a.rfind("--", 0) == 0) {
             throw std::runtime_error("unrecognized option: " + a);
         } else if (args.mesh_path.empty()) {
@@ -116,7 +149,7 @@ double elapsed_ms(std::chrono::steady_clock::time_point t0, std::chrono::steady_
 // not just hidden from the printout. See --skip-kappa in print_usage() for
 // why: on large meshes the conditioning estimate is the slow part, and this
 // lets you check structural stats (size/nnz/fill-in) without paying for it.
-double report_variant(const GaugeVariant& variant, bool skip_kappa) {
+double report_variant(const GaugeVariant& variant, bool skip_kappa, bool force_kappa) {
     const int n = variant.reduced_matrix.rows();
     const long long nnz = static_cast<long long>(variant.reduced_matrix.nnz());
     const double density = (n > 0) ? static_cast<double>(nnz) / (static_cast<double>(n) * static_cast<double>(n)) : 0.0;
@@ -127,6 +160,12 @@ double report_variant(const GaugeVariant& variant, bool skip_kappa) {
 
     if (skip_kappa) {
         std::cout << "    condition number estimate: skipped (--skip-kappa)\n";
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (n > kKappaGuardDofs && !force_kappa) {
+        std::cout << "    condition number estimate: skipped -- " << n << " reduced DOFs is over the "
+                  << kKappaGuardDofs << "-DOF guard\n"
+                  << "      (cost grows ~O(n^2); pass --force-kappa to run it anyway)\n";
         return std::numeric_limits<double>::quiet_NaN();
     }
 
@@ -185,18 +224,21 @@ int main(int argc, char** argv) {
     double kappa_a = 0.0, kappa_d = 0.0;
     if (args.want_a) {
         gauge_a = build_albanese_rubinacci_gauge(M, tc);
-        kappa_a = report_variant(gauge_a, args.skip_kappa);
+        kappa_a = report_variant(gauge_a, args.skip_kappa, args.force_kappa);
     }
     if (args.want_d) {
         const EssentialIncidenceMatrix F = compute_essential_incidence_matrix(mesh, tc);
         gauge_d = build_munteanu_unsymmetric_gauge(M, tc, F);
-        kappa_d = report_variant(gauge_d, args.skip_kappa);
+        kappa_d = report_variant(gauge_d, args.skip_kappa, args.force_kappa);
     }
 
     if (args.want_a && args.want_d) {
         std::cout << "\n";
-        if (args.skip_kappa) {
-            std::cout << "  kappa_D / kappa_A = skipped (--skip-kappa)\n";
+        // Keyed off the returned values rather than the flags: an estimate
+        // can be absent because of --skip-kappa or because of the size
+        // guard, and the ratio is equally unavailable either way.
+        if (std::isnan(kappa_a) || std::isnan(kappa_d)) {
+            std::cout << "  kappa_D / kappa_A = not computed (see above)\n";
         } else {
             std::cout << "  kappa_D / kappa_A = " << (kappa_d / kappa_a)
                       << (kappa_d < kappa_a ? "  (D better-conditioned)" : "  (A better-conditioned or equal)") << "\n";
