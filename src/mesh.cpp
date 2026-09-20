@@ -31,9 +31,17 @@ void Mesh::build_topology() {
     tet_edge_signs.assign(tets.size(), {});
     tet_faces.assign(tets.size(), {});
     edge_lookup_.clear();
+    face_lookup_.clear();
+
+    // Keep tet_tags parallel to tets. The Gmsh reader fills it as it reads,
+    // so sizes already agree there; a mesh built directly in code (every
+    // test fixture) has no tags at all, and -1 is what "untagged" means.
+    if (tet_tags.size() != tets.size()) {
+        tet_tags.assign(tets.size(), -1);
+    }
 
     std::map<std::pair<int, int>, int>& edge_index = edge_lookup_;
-    std::map<std::array<int, 3>, int> face_index;
+    std::map<std::array<int, 3>, int>& face_index = face_lookup_;
 
     for (std::size_t t = 0; t < tets.size(); ++t) {
         const TetVerts& tv = tets[t];
@@ -95,6 +103,12 @@ int Mesh::find_edge(int i, int j) const {
     const auto key = edge_key(i, j);
     auto it = edge_lookup_.find(key);
     return (it == edge_lookup_.end()) ? -1 : it->second;
+}
+
+int Mesh::find_face(int a, int b, int c) const {
+    const auto key = face_key(a, b, c);
+    auto it = face_lookup_.find(key);
+    return (it == face_lookup_.end()) ? -1 : it->second;
 }
 
 }  // namespace aphi_solver

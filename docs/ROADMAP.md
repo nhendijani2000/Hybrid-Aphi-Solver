@@ -488,7 +488,23 @@ have a settled type signature, so that phase is only about the weak form.
    ("compressed sparse formats … rather than the COO/`std::map`-based
    `SparseMatrix`"), which that document already scheduled for Phase 04 but
    which nothing had been assigned to actually do.
-3. **Mesh region and boundary tag ingestion.** `read_gmsh_msh` currently
+3. **Done (Sept 2026) — mesh region and boundary tag ingestion.** Shipped as
+   `Mesh::tet_tags` (Gmsh's first tag per tet, its physical-group id) and
+   `Mesh::tagged_boundary_faces` (a `TaggedFace` per elm-type 2 triangle:
+   node triple remapped to 0-based indices and sorted ascending, plus its
+   tag), with `Mesh::find_face` added alongside `find_edge` so a tagged
+   triangle resolves against the topology derived from the tets. Two
+   invariants worth keeping: `build_topology` fills `tet_tags` with -1 when
+   sizes disagree, so `tet_tags.size() == tets.size()` holds for meshes
+   built in code as well as read from a file; and tagged faces are stored
+   sorted to match `Mesh::faces`' canonical orientation, so no reordering is
+   needed at the lookup. No meaning is attached to any tag here -- what tag
+   7 *is* stays the input file's job, which keeps `gmsh_reader.cpp`
+   format-agnostic. Regression cover in `tests/test_gmsh_reader.cpp` (7 ->
+   22 checks): two tets with *different* tags so a shared value cannot pass
+   by accident, interior and outer tagged triangles, a type-1 line element
+   that must still be skipped, an untagged mesh (`num-tags == 0`), and a
+   hand-built mesh. Original text follows. `read_gmsh_msh` currently
    discards *every* element tag — including each tet's own physical-group
    id — and skips non-tet elements entirely, so the boundary triangles Gmsh
    uses to mark PEC walls, ports and the outer truncation never reach

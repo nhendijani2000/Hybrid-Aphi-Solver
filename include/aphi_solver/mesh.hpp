@@ -73,10 +73,37 @@ inline constexpr std::array<std::array<int, 3>, 4> kTetLocalFaceVerts = {{
 /// global face (a,b,c) is stored with a < b < c, defining its positive
 /// traversal as a -> b -> c -> a. These are the two facts incidence.hpp's
 /// C and G are built from.
+/// A boundary triangle that carried a tag in the mesh file (Gmsh elm-type
+/// 2), used to mark PEC walls, ports and the outer truncation surface.
+/// `nodes` is sorted ascending to match Mesh::faces' canonical orientation
+/// (mesh.hpp's convention), so a tagged face can be looked up directly
+/// against the derived topology via Mesh::find_face.
+///
+/// What a tag *means* -- copper, PEC, port 1 -- is the input file's job,
+/// not the mesh's. Mesh carries integers only, which is what keeps
+/// gmsh_reader.cpp format-agnostic and dependency-free.
+struct TaggedFace {
+    std::array<int, 3> nodes{};
+    int tag = -1;
+};
+
 class Mesh {
 public:
     std::vector<Vec3> nodes;
     std::vector<TetVerts> tets;
+
+    /// Physical-group tag of each tet, parallel to `tets` (Gmsh's
+    /// convention: the first of an element's tags is its physical-group id).
+    /// `build_topology` guarantees `tet_tags.size() == tets.size()`, filling
+    /// -1 for a mesh built without tags (every hand-built test mesh, and any
+    /// file whose elements carry no tags).
+    std::vector<int> tet_tags;
+
+    /// Tagged boundary triangles from the mesh file, in file order. Not
+    /// derived from `tets` -- these come only from surface elements the mesh
+    /// file actually contained, so this is empty for a mesh built in code or
+    /// read from a file with no surface elements.
+    std::vector<TaggedFace> tagged_boundary_faces;
 
     /// Globally unique edges, each (i, j) with i < j. Index into this vector
     /// is the edge's global DOF/row index used by incidence.hpp and
@@ -137,8 +164,17 @@ public:
     /// linear scan once meshes stop being test-sized.
     int find_edge(int i, int j) const;
 
+    /// Returns the global face index for the (unordered) vertex triple
+    /// {a, b, c}, or -1 if no such face exists in this mesh. Same cost and
+    /// same intended use as find_edge: occasional point queries, not a
+    /// per-entity traversal. Needed to resolve a `tagged_boundary_faces`
+    /// entry against the topology derived from the tets -- a tagged triangle
+    /// that resolves to -1 is not a face of any tet in the volume mesh.
+    int find_face(int a, int b, int c) const;
+
 private:
     std::map<std::pair<int, int>, int> edge_lookup_;
+    std::map<std::array<int, 3>, int> face_lookup_;
 };
 
 }  // namespace aphi_solver

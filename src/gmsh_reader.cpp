@@ -1,5 +1,6 @@
 #include "aphi_solver/gmsh_reader.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
@@ -8,7 +9,8 @@ namespace aphi_solver {
 
 namespace {
 
-constexpr int kGmshTetType = 4;  // Gmsh elm-type 4 == 4-node tetrahedron.
+constexpr int kGmshTetType = 4;       // Gmsh elm-type 4 == 4-node tetrahedron.
+constexpr int kGmshTriangleType = 2;  // Gmsh elm-type 2 == 3-node triangle.
 
 std::string trim(const std::string& s) {
     const auto a = s.find_first_not_of(" \t\r\n");
@@ -92,27 +94,53 @@ Mesh read_gmsh_msh(const std::string& path) {
                 std::istringstream elem_line(line);
                 long long elm_number, elm_type, num_tags;
                 elem_line >> elm_number >> elm_type >> num_tags;
+
+                // Gmsh's convention: the first tag is the element's
+                // physical-group id, the second its elementary geometrical
+                // entity. Only the first is kept; -1 means the element
+                // carried no tags at all.
+                int physical_tag = -1;
                 for (long long tg = 0; tg < num_tags; ++tg) {
-                    long long discard_tag;
-                    elem_line >> discard_tag;
+                    long long tag_value;
+                    elem_line >> tag_value;
+                    if (tg == 0) physical_tag = static_cast<int>(tag_value);
                 }
+
+                auto read_local_node = [&]() {
+                    long long node_id;
+                    elem_line >> node_id;
+                    auto it = gmsh_id_to_local.find(node_id);
+                    if (it == gmsh_id_to_local.end()) {
+                        throw GmshReadError("read_gmsh_msh: element references unknown node id " +
+                                             std::to_string(node_id));
+                    }
+                    return it->second;
+                };
+
                 if (elm_type == kGmshTetType) {
                     TetVerts tv{};
                     for (int v = 0; v < 4; ++v) {
-                        long long node_id;
-                        elem_line >> node_id;
-                        auto it = gmsh_id_to_local.find(node_id);
-                        if (it == gmsh_id_to_local.end()) {
-                            throw GmshReadError("read_gmsh_msh: element references unknown node id " +
-                                                 std::to_string(node_id));
-                        }
-                        tv[static_cast<std::size_t>(v)] = it->second;
+                        tv[static_cast<std::size_t>(v)] = read_local_node();
                     }
                     mesh.tets.push_back(tv);
+                    mesh.tet_tags.push_back(physical_tag);
+                } else if (elm_type == kGmshTriangleType) {
+                    // Surface elements are how Gmsh marks PEC walls, ports
+                    // and the outer truncation boundary. Stored sorted, to
+                    // match Mesh::faces' canonical ascending orientation, so
+                    // Mesh::find_face resolves them directly. No meaning is
+                    // attached to the tag here -- that is the input file's
+                    // job (docs/ROADMAP.md Phase 03.5, step 3).
+                    TaggedFace face;
+                    for (int v = 0; v < 3; ++v) {
+                        face.nodes[static_cast<std::size_t>(v)] = read_local_node();
+                    }
+                    std::sort(face.nodes.begin(), face.nodes.end());
+                    face.tag = physical_tag;
+                    mesh.tagged_boundary_faces.push_back(face);
                 }
-                // Non-tet elements (points, lines, triangles used for boundary
-                // tagging) are intentionally not stored here -- see the header
-                // comment for why.
+                // Other element types (points, lines, higher-order cells)
+                // are still skipped: nothing in this solver consumes them.
             }
             if (!std::getline(in, line) || trim(line) != "$EndElements") {
                 throw GmshReadError("read_gmsh_msh: expected $EndElements");
