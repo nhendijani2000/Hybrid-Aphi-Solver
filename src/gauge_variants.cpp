@@ -156,7 +156,7 @@ std::vector<double> select_cotree_entries(const std::vector<double>& full, const
 GaugeVariant build_albanese_rubinacci_gauge(const SparseMatrix& M, const TreeCotreeResult& tc) {
     GaugeVariant variant;
     variant.name = "Albanese-Rubinacci";
-    const int num_edges = M.rows;
+    const int num_edges = M.rows();
     variant.cotree_local_index.assign(static_cast<std::size_t>(num_edges), -1);
     int num_cotree = 0;
     for (int e = 0; e < num_edges; ++e) {
@@ -164,15 +164,23 @@ GaugeVariant build_albanese_rubinacci_gauge(const SparseMatrix& M, const TreeCot
             variant.cotree_local_index[static_cast<std::size_t>(e)] = num_cotree++;
         }
     }
-    variant.reduced_matrix.rows = num_cotree;
-    variant.reduced_matrix.cols = num_cotree;
-    for (const auto& entry : M.entries) {
-        const int r = variant.cotree_local_index[static_cast<std::size_t>(entry.row)];
-        const int c = variant.cotree_local_index[static_cast<std::size_t>(entry.col)];
-        if (r == -1 || c == -1) continue;  // one or both endpoints on a tree edge: dropped, per a_t = 0
-        variant.reduced_matrix.add(r, c, entry.value);
+
+    // Walk M's CSR rows directly, skipping whole tree rows before touching
+    // their entries at all -- a tree row contributes nothing under a_t = 0.
+    variant.reduced_matrix = SparseMatrix(num_cotree, num_cotree);
+    const auto& row_ptr = M.row_ptr();
+    const auto& col_index = M.col_index();
+    const auto& values = M.values();
+    for (int e = 0; e < num_edges; ++e) {
+        const int r = variant.cotree_local_index[static_cast<std::size_t>(e)];
+        if (r == -1) continue;  // tree row: dropped, per a_t = 0
+        for (int k = row_ptr[static_cast<std::size_t>(e)]; k < row_ptr[static_cast<std::size_t>(e) + 1]; ++k) {
+            const int c = variant.cotree_local_index[static_cast<std::size_t>(col_index[static_cast<std::size_t>(k)])];
+            if (c == -1) continue;  // tree column: dropped for the same reason
+            variant.reduced_matrix.add(r, c, values[static_cast<std::size_t>(k)]);
+        }
     }
-    variant.reduced_matrix.coalesce();
+    variant.reduced_matrix.compress();
     return variant;
 }
 
@@ -190,7 +198,7 @@ GaugeVariant build_munteanu_unsymmetric_gauge(const SparseMatrix& M, const TreeC
                                                const EssentialIncidenceMatrix& F) {
     GaugeVariant variant;
     variant.name = "Munteanu unsymmetric";
-    const int num_edges = M.rows;
+    const int num_edges = M.rows();
     const int num_cotree = F.num_cotree_edges;
     variant.cotree_local_index = F.cotree_local_index;
 
@@ -238,8 +246,7 @@ GaugeVariant build_munteanu_unsymmetric_gauge(const SparseMatrix& M, const TreeC
         }
     }
 
-    variant.reduced_matrix.rows = num_cotree;
-    variant.reduced_matrix.cols = num_cotree;
+    variant.reduced_matrix = SparseMatrix(num_cotree, num_cotree);
     for (int e = 0; e < num_edges; ++e) {
         if (tc.is_tree_edge[static_cast<std::size_t>(e)]) continue;
         const int row = F.cotree_local_index[static_cast<std::size_t>(e)];
@@ -248,7 +255,7 @@ GaugeVariant build_munteanu_unsymmetric_gauge(const SparseMatrix& M, const TreeC
             if (val != 0.0) variant.reduced_matrix.add(row, c, val);
         }
     }
-    variant.reduced_matrix.coalesce();
+    variant.reduced_matrix.compress();
     return variant;
 }
 
@@ -275,35 +282,16 @@ std::vector<double> recover_munteanu_unsymmetric_solution(const std::vector<doub
 
 namespace {
 
-// y = A * x -- a single pass over A's own (row, col, value) triplets;
-// O(nnz) time, no dense storage. This and sparse_matvec_transpose below are
-// the two primitives estimate_condition_number needs; neither ever
-// materializes a dense matrix.
-std::vector<double> sparse_matvec(const SparseMatrix& A, const std::vector<double>& x) {
-    std::vector<double> y(static_cast<std::size_t>(A.rows), 0.0);
-    for (const auto& e : A.entries) {
-        y[static_cast<std::size_t>(e.row)] += e.value * x[static_cast<std::size_t>(e.col)];
-    }
-    return y;
-}
-
-// y = A^T * x, read directly off A's own triplets (scattering into the
-// column index instead of the row index) -- avoids ever forming A^T.
-std::vector<double> sparse_matvec_transpose(const SparseMatrix& A, const std::vector<double>& x) {
-    std::vector<double> y(static_cast<std::size_t>(A.cols), 0.0);
-    for (const auto& e : A.entries) {
-        y[static_cast<std::size_t>(e.col)] += e.value * x[static_cast<std::size_t>(e.row)];
-    }
-    return y;
-}
-
 // B*v for B = A^T*A, via two sparse matvecs -- B itself is never formed, so
 // this stays O(nnz) regardless of how dense A^T*A would be if it were ever
 // written out (which, for a tree-cotree-reduced matrix, can be
 // substantially denser than A itself -- see docs/TREE_COTREE_GAUGE.md
-// Sec. 4-5 on Method D's fill-in).
+// Sec. 4-5 on Method D's fill-in). The two matvec primitives used to be
+// hand-written here over the old COO triplets; they are now `Sparse<T>`'s
+// own CSR members (docs/ROADMAP.md Phase 03.5, step 2), so this is the only
+// piece left that is specific to the condition-number estimate.
 std::vector<double> ata_matvec(const SparseMatrix& A, const std::vector<double>& v) {
-    return sparse_matvec_transpose(A, sparse_matvec(A, v));
+    return A.matvec_transpose(A.matvec(v));
 }
 
 double dot(const std::vector<double>& a, const std::vector<double>& b) {
@@ -369,7 +357,7 @@ bool cg_solve_ata(const SparseMatrix& A, const std::vector<double>& b, std::vect
 }  // namespace
 
 double estimate_condition_number(const SparseMatrix& A, int max_iterations, double tol) {
-    const int n = A.rows;
+    const int n = A.rows();
     if (n <= 1) return 1.0;
 
     // Largest eigenvalue of B = A^T*A (== largest squared singular value of

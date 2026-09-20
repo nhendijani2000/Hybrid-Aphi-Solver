@@ -82,8 +82,8 @@ int main() {
 
     const auto g = aphi_solver::build_gradient_matrix(m);
     const auto c = aphi_solver::build_curl_matrix(m);
-    const auto cg = aphi_solver::multiply(c, g);
-    check(aphi_solver::is_zero_matrix(cg), "read_gmsh_msh: CG = 0 holds on a mesh read from a file");
+    const auto cg = c.multiply(g);
+    check(cg.is_zero(), "read_gmsh_msh: CG = 0 holds on a mesh read from a file");
 
     // A missing file must raise GmshReadError, not crash or return silently.
     bool missing_file_threw = false;

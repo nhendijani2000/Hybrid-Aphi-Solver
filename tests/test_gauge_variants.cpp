@@ -49,9 +49,9 @@ Mesh make_two_tets_sharing_a_face() {
     return m;
 }
 
-// transpose(SparseMatrix) now lives in incidence.hpp/.cpp (promoted Sept
-// 2026 once tools/compare_gauges.cpp needed the same operation) -- no local
-// copy here anymore.
+// Transpose and multiply are members of the sparse type itself since the
+// Phase 03.5 migration to Sparse<T> (docs/ROADMAP.md) -- no local copy and
+// no free-function wrapper here anymore.
 
 std::vector<double> dense_matvec(const std::vector<std::vector<double>>& A, const std::vector<double>& x) {
     std::vector<double> y(A.size(), 0.0);
@@ -69,7 +69,7 @@ std::vector<double> dense_matvec(const std::vector<std::vector<double>>& A, cons
 // problem, not a placeholder invented for testing.
 SparseMatrix build_test_M(const Mesh& mesh) {
     const SparseMatrix C = build_curl_matrix(mesh);
-    return multiply(transpose(C), C);
+    return C.transposed().multiply(C);
 }
 
 // Independent verification of estimate_condition_number itself (Sept 2026,
@@ -85,12 +85,12 @@ SparseMatrix build_test_M(const Mesh& mesh) {
 // inputs where the right answer is known by construction rather than by
 // trusting the estimator's own output.
 SparseMatrix make_diagonal_matrix(const std::vector<double>& diag_values) {
-    SparseMatrix A;
-    A.rows = static_cast<int>(diag_values.size());
-    A.cols = static_cast<int>(diag_values.size());
+    const int n = static_cast<int>(diag_values.size());
+    SparseMatrix A(n, n);
     for (std::size_t i = 0; i < diag_values.size(); ++i) {
         A.add(static_cast<int>(i), static_cast<int>(i), diag_values[i]);
     }
+    A.compress();
     return A;
 }
 
@@ -178,7 +178,7 @@ int main() {
 
         // --- Method D builds cleanly and has the right shape. ---
         const GaugeVariant gauge_d = build_munteanu_unsymmetric_gauge(M, tc, F);
-        check(gauge_d.reduced_matrix.rows == gauge_a.reduced_matrix.rows,
+        check(gauge_d.reduced_matrix.rows() == gauge_a.reduced_matrix.rows(),
               label + ": both gauge variants reduce to the same size");
 
         // --- The key physical cross-check: both gauge variants are valid

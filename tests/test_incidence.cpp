@@ -62,12 +62,12 @@ void check_cg_zero(const Mesh& mesh, const std::string& label) {
     const SparseMatrix g = aphi_solver::build_gradient_matrix(mesh);
     const SparseMatrix c = aphi_solver::build_curl_matrix(mesh);
 
-    check(g.rows == mesh.num_edges() && g.cols == mesh.num_nodes(), label + ": G has the expected shape");
-    check(c.rows == mesh.num_faces() && c.cols == mesh.num_edges(), label + ": C has the expected shape");
+    check(g.rows() == mesh.num_edges() && g.cols() == mesh.num_nodes(), label + ": G has the expected shape");
+    check(c.rows() == mesh.num_faces() && c.cols() == mesh.num_edges(), label + ": C has the expected shape");
 
-    const SparseMatrix cg = aphi_solver::multiply(c, g);
-    check(cg.rows == mesh.num_faces() && cg.cols == mesh.num_nodes(), label + ": C*G has the expected shape");
-    check(aphi_solver::is_zero_matrix(cg), label + ": C*G == 0 (discrete curl.grad = 0 identity)");
+    const SparseMatrix cg = c.multiply(g);
+    check(cg.rows() == mesh.num_faces() && cg.cols() == mesh.num_nodes(), label + ": C*G has the expected shape");
+    check(cg.is_zero(), label + ": C*G == 0 (discrete curl.grad = 0 identity)");
 }
 
 }  // namespace

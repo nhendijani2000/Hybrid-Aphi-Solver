@@ -117,8 +117,8 @@ double elapsed_ms(std::chrono::steady_clock::time_point t0, std::chrono::steady_
 // why: on large meshes the conditioning estimate is the slow part, and this
 // lets you check structural stats (size/nnz/fill-in) without paying for it.
 double report_variant(const GaugeVariant& variant, bool skip_kappa) {
-    const int n = variant.reduced_matrix.rows;
-    const long long nnz = static_cast<long long>(variant.reduced_matrix.entries.size());
+    const int n = variant.reduced_matrix.rows();
+    const long long nnz = static_cast<long long>(variant.reduced_matrix.nnz());
     const double density = (n > 0) ? static_cast<double>(nnz) / (static_cast<double>(n) * static_cast<double>(n)) : 0.0;
 
     std::cout << "  " << variant.name << ":\n"
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
     // M = CT * C (vacuum stand-in) -- see the file header comment for why
     // this, not a real assembled A-Phi matrix, is used.
     const SparseMatrix C = build_curl_matrix(mesh);
-    const SparseMatrix M = multiply(transpose(C), C);
+    const SparseMatrix M = C.transposed().multiply(C);
 
     GaugeVariant gauge_a, gauge_d;
     double kappa_a = 0.0, kappa_d = 0.0;
@@ -201,8 +201,8 @@ int main(int argc, char** argv) {
             std::cout << "  kappa_D / kappa_A = " << (kappa_d / kappa_a)
                       << (kappa_d < kappa_a ? "  (D better-conditioned)" : "  (A better-conditioned or equal)") << "\n";
         }
-        const long long nnz_a = static_cast<long long>(gauge_a.reduced_matrix.entries.size());
-        const long long nnz_d = static_cast<long long>(gauge_d.reduced_matrix.entries.size());
+        const long long nnz_a = static_cast<long long>(gauge_a.reduced_matrix.nnz());
+        const long long nnz_d = static_cast<long long>(gauge_d.reduced_matrix.nnz());
         std::cout << "  nnz_D / nnz_A = " << (static_cast<double>(nnz_d) / static_cast<double>(nnz_a))
                   << "  (Method D's fill-in relative to Method A's exact submatrix)\n";
     }
