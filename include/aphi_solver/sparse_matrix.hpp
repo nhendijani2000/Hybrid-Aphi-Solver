@@ -251,6 +251,17 @@ public:
         return c;
     }
 
+    /// A copy with every stored value multiplied by `s`. The sparsity
+    /// pattern is unchanged, so this is O(nnz) with no structural work --
+    /// which is what the frequency-scaling transforms in `conditioning.hpp`
+    /// need (they rescale whole blocks by j*omega or 1/(j*omega)).
+    Sparse<T> scaled(const T& s) const {
+        require_compressed("scaled");
+        Sparse<T> out(*this);
+        for (T& v : out.values_) v *= s;
+        return out;
+    }
+
     /// True iff every stored entry has magnitude <= tol. `std::abs` covers
     /// both scalar types (absolute value for double, modulus for complex).
     bool is_zero(double tol = 1e-9) const {

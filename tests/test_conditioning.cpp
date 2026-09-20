@@ -5,6 +5,8 @@
 #include <complex>
 #include <iostream>
 #include <string>
+#include <tuple>
+#include <vector>
 
 #include "aphi_solver/complex_matrix.hpp"
 #include "aphi_solver/conditioning.hpp"
@@ -13,6 +15,7 @@ using aphi_solver::Complex;
 using aphi_solver::ComplexMatrix;
 using aphi_solver::APhiBlockSystem;
 using aphi_solver::ConditioningStrategy;
+using aphi_solver::SparseMatrixZ;
 
 namespace {
 
@@ -38,6 +41,28 @@ bool matrices_near(const ComplexMatrix& a, const ComplexMatrix& b, double tol = 
     return true;
 }
 
+// Sparse blocks are compared through the dense bridge: at these sizes that
+// is the clearest thing to read, and it checks the values rather than the
+// storage pattern (two sparse matrices can hold the same matrix with
+// different explicit-zero sets).
+bool matrices_near(const SparseMatrixZ& a, const SparseMatrixZ& b, double tol = 1e-6) {
+    return matrices_near(aphi_solver::to_dense_matrix(a), aphi_solver::to_dense_matrix(b), tol);
+}
+
+bool vectors_near(const std::vector<Complex>& a, const std::vector<Complex>& b, double tol = 1e-6) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (!near(a[i], b[i], tol)) return false;
+    return true;
+}
+
+SparseMatrixZ make_block(int rows, int cols, const std::vector<std::tuple<int, int, Complex>>& entries) {
+    SparseMatrixZ m(rows, cols);
+    for (const auto& [r, c, v] : entries) m.add(r, c, v);
+    m.compress();
+    return m;
+}
+
 // A small (n_A = 2, n_Phi = 1) test system. K_PhiA and K_PhiPhi are deliberately
 // built as j*omega times a "clean" value, so symmetric row scaling should recover
 // exactly K_APhi^T and a real K_PhiPhi -- this is the property the transform is
@@ -46,38 +71,22 @@ APhiBlockSystem make_test_system(double omega) {
     const Complex j_omega(0.0, omega);
 
     APhiBlockSystem sys;
-    sys.K_AA = ComplexMatrix(2, 2);
-    sys.K_AA(0, 0) = Complex(5.0, 0.0);
-    sys.K_AA(0, 1) = Complex(0.2, 0.0);
-    sys.K_AA(1, 0) = Complex(0.2, 0.0);
-    sys.K_AA(1, 1) = Complex(4.0, 0.0);
+    sys.K_AA = make_block(2, 2,
+                           {{0, 0, Complex(5.0, 0.0)},
+                            {0, 1, Complex(0.2, 0.0)},
+                            {1, 0, Complex(0.2, 0.0)},
+                            {1, 1, Complex(4.0, 0.0)}});
 
-    sys.K_APhi = ComplexMatrix(2, 1);
-    sys.K_APhi(0, 0) = Complex(1.0, 0.0);
-    sys.K_APhi(1, 0) = Complex(0.5, 0.0);
+    sys.K_APhi = make_block(2, 1, {{0, 0, Complex(1.0, 0.0)}, {1, 0, Complex(0.5, 0.0)}});
 
-    sys.K_PhiA = ComplexMatrix(1, 2);
-    sys.K_PhiA(0, 0) = j_omega * Complex(1.0, 0.0);
-    sys.K_PhiA(0, 1) = j_omega * Complex(0.5, 0.0);
+    sys.K_PhiA = make_block(1, 2, {{0, 0, j_omega * Complex(1.0, 0.0)}, {0, 1, j_omega * Complex(0.5, 0.0)}});
 
-    sys.K_PhiPhi = ComplexMatrix(1, 1);
-    sys.K_PhiPhi(0, 0) = j_omega * Complex(3.0, 0.0);
+    sys.K_PhiPhi = make_block(1, 1, {{0, 0, j_omega * Complex(3.0, 0.0)}});
 
-    sys.rhs_A = ComplexMatrix(2, 1);
-    sys.rhs_A(0, 0) = Complex(1.0, 0.5);
-    sys.rhs_A(1, 0) = Complex(0.3, -0.2);
-
-    sys.rhs_Phi = ComplexMatrix(1, 1);
-    sys.rhs_Phi(0, 0) = Complex(0.7, 0.1);
+    sys.rhs_A = {Complex(1.0, 0.5), Complex(0.3, -0.2)};
+    sys.rhs_Phi = {Complex(0.7, 0.1)};
 
     return sys;
-}
-
-ComplexMatrix stack(const ComplexMatrix& top, const ComplexMatrix& bottom) {
-    ComplexMatrix out(top.rows() + bottom.rows(), top.cols());
-    out.set_block(0, 0, top);
-    out.set_block(top.rows(), 0, bottom);
-    return out;
 }
 
 void test_symmetric_row_scaling_arithmetic() {
@@ -85,10 +94,12 @@ void test_symmetric_row_scaling_arithmetic() {
     APhiBlockSystem sys = make_test_system(omega);
     APhiBlockSystem scaled = aphi_solver::apply_symmetric_row_scaling(sys, omega);
 
-    // K_PhiA_scaled should equal K_APhi^T exactly, by construction of the test system.
-    check(matrices_near(scaled.K_PhiA, sys.K_APhi.hermitian()),
+    // K_PhiA_scaled should equal K_APhi^T exactly, by construction of the test
+    // system. The plain transpose, not the conjugate one: the A-Phi system is
+    // complex symmetric, not Hermitian (docs/CONDITIONING.md).
+    check(matrices_near(scaled.K_PhiA, sys.K_APhi.transposed()),
           "symmetric row scaling recovers K_APhi^T in K_PhiA");
-    check(near(scaled.K_PhiPhi(0, 0), Complex(3.0, 0.0)),
+    check(near(scaled.K_PhiPhi.at(0, 0), Complex(3.0, 0.0)),
           "symmetric row scaling recovers a real K_PhiPhi");
     check(matrices_near(scaled.K_AA, sys.K_AA), "symmetric row scaling leaves K_AA untouched");
 }
@@ -108,12 +119,12 @@ void test_symmetric_row_scaling_preserves_solution() {
     const double omega = 2.0 * M_PI * 60.0;
     APhiBlockSystem sys = make_test_system(omega);
 
-    ComplexMatrix rhs_natural = stack(sys.rhs_A, sys.rhs_Phi);
-    ComplexMatrix x_natural = aphi_solver::solve_dense(aphi_solver::assemble_dense(sys), rhs_natural);
+    ComplexMatrix x_natural =
+        aphi_solver::solve_dense(aphi_solver::assemble_dense(sys), aphi_solver::assemble_dense_rhs(sys));
 
     APhiBlockSystem scaled = aphi_solver::apply_symmetric_row_scaling(sys, omega);
-    ComplexMatrix rhs_scaled = stack(scaled.rhs_A, scaled.rhs_Phi);
-    ComplexMatrix x_scaled = aphi_solver::solve_dense(aphi_solver::assemble_dense(scaled), rhs_scaled);
+    ComplexMatrix x_scaled =
+        aphi_solver::solve_dense(aphi_solver::assemble_dense(scaled), aphi_solver::assemble_dense_rhs(scaled));
 
     check(matrices_near(x_natural, x_scaled, 1e-6),
           "dividing the Phi row by j*omega does not change the physical solution");
@@ -123,18 +134,20 @@ void test_scaled_scalar_potential_round_trip() {
     const double omega = 2.0 * M_PI * 60.0;
     APhiBlockSystem sys = make_test_system(omega);
 
-    ComplexMatrix rhs_natural = stack(sys.rhs_A, sys.rhs_Phi);
-    ComplexMatrix x_natural = aphi_solver::solve_dense(aphi_solver::assemble_dense(sys), rhs_natural);
-    ComplexMatrix phi_natural = x_natural.block(sys.num_A(), 0, sys.num_Phi(), 1);
+    ComplexMatrix x_natural =
+        aphi_solver::solve_dense(aphi_solver::assemble_dense(sys), aphi_solver::assemble_dense_rhs(sys));
+    const std::vector<Complex> phi_natural =
+        aphi_solver::from_column(x_natural.block(sys.num_A(), 0, sys.num_Phi(), 1));
 
     APhiBlockSystem transformed = aphi_solver::apply_scaled_scalar_potential(sys, omega);
-    ComplexMatrix rhs_transformed = stack(transformed.rhs_A, transformed.rhs_Phi);
-    ComplexMatrix x_transformed = aphi_solver::solve_dense(aphi_solver::assemble_dense(transformed), rhs_transformed);
-    ComplexMatrix phi_prime = x_transformed.block(sys.num_A(), 0, sys.num_Phi(), 1);
+    ComplexMatrix x_transformed = aphi_solver::solve_dense(aphi_solver::assemble_dense(transformed),
+                                                            aphi_solver::assemble_dense_rhs(transformed));
+    const std::vector<Complex> phi_prime =
+        aphi_solver::from_column(x_transformed.block(sys.num_A(), 0, sys.num_Phi(), 1));
 
-    ComplexMatrix phi_recovered = aphi_solver::recover_scaled_scalar_potential(phi_prime, omega);
+    const std::vector<Complex> phi_recovered = aphi_solver::recover_scaled_scalar_potential(phi_prime, omega);
 
-    check(matrices_near(phi_recovered, phi_natural, 1e-6),
+    check(vectors_near(phi_recovered, phi_natural, 1e-6),
           "Phi = j*omega*Phi' recovers the same physical Phi as the natural system");
 
     ComplexMatrix a_natural = x_natural.block(0, 0, sys.num_A(), 1);
@@ -166,6 +179,32 @@ void test_condition_number_known_diagonal() {
     check(near(kappa_identity, 1.0, 1e-6), "condition number of the identity is 1");
 }
 
+// assemble_sparse is the production path (what a sparse direct solver is
+// handed); assemble_dense is the small-system ground truth. They must agree
+// entry for entry, including getting every block's row/column offset right --
+// an off-by-one in one of the four block placements is the obvious way this
+// goes wrong, and it would otherwise only show up as a wrong field much
+// later.
+void test_sparse_and_dense_assembly_agree() {
+    const double omega = 2.0 * M_PI * 60.0;
+    APhiBlockSystem sys = make_test_system(omega);
+
+    const SparseMatrixZ sparse_full = aphi_solver::assemble_sparse(sys);
+    const ComplexMatrix dense_full = aphi_solver::assemble_dense(sys);
+
+    check(sparse_full.rows() == sys.num_A() + sys.num_Phi() && sparse_full.cols() == sparse_full.rows(),
+          "assemble_sparse has the combined [a; Phi] shape");
+    check(matrices_near(aphi_solver::to_dense_matrix(sparse_full), dense_full),
+          "assemble_sparse and assemble_dense agree entry for entry");
+
+    // Spot-check the off-diagonal block offsets directly, so a symmetric
+    // mistake in both assembly routines could not pass the comparison above.
+    check(near(sparse_full.at(0, sys.num_A()), Complex(1.0, 0.0)),
+          "assemble_sparse places K_APhi at (0, n_A)");
+    check(near(sparse_full.at(sys.num_A(), 0), Complex(0.0, omega)),
+          "assemble_sparse places K_PhiA at (n_A, 0)");
+}
+
 }  // namespace
 
 int main() {
@@ -175,6 +214,7 @@ int main() {
     test_scaled_scalar_potential_round_trip();
     test_recommend_strategy();
     test_condition_number_known_diagonal();
+    test_sparse_and_dense_assembly_agree();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

@@ -23,21 +23,29 @@ namespace aphi_solver {
 /// matters downstream: it's what makes symmetric-indefinite factorization and
 /// COCG/COCR-type iterative solvers applicable in the first place (Phase 05).
 
+/// These operate on the sparse system type as of Phase 03.5
+/// (`docs/ROADMAP.md`). Equilibration runs on the assembled matrix
+/// immediately before factorization, so keeping it on the dense
+/// `ComplexMatrix` would have forced a dense round-trip in the middle of the
+/// production solve path -- the one place that cannot afford it. Both
+/// operations are naturally sparse anyway: `diag(d) A diag(d)` scales each
+/// stored value by `d[row] * d[col]` and never changes the sparsity pattern.
+
 /// Computes a real, positive diagonal scaling vector `d` (length A.rows()) via
 /// symmetric Ruiz-style iteration: repeatedly rescale so each row/column's
 /// largest-magnitude entry approaches 1. A zero row is left unscaled (d = 1 there)
 /// rather than dividing by zero. `iterations` of ~5-10 is normally enough for the
 /// scaling to converge; more rarely helps.
-std::vector<double> compute_symmetric_equilibration(const ComplexMatrix& A, int iterations = 10);
+std::vector<double> compute_symmetric_equilibration(const SparseMatrixZ& A, int iterations = 10);
 
 /// Returns diag(d) * A * diag(d).
-ComplexMatrix apply_symmetric_equilibration(const ComplexMatrix& A, const std::vector<double>& d);
+SparseMatrixZ apply_symmetric_equilibration(const SparseMatrixZ& A, const std::vector<double>& d);
 
-/// Returns diag(d) * b (elementwise scaling of a right-hand-side vector/matrix).
-ComplexMatrix scale_rhs(const ComplexMatrix& b, const std::vector<double>& d);
+/// Returns diag(d) * b (elementwise scaling of a right-hand-side vector).
+std::vector<Complex> scale_rhs(const std::vector<Complex>& b, const std::vector<double>& d);
 
 /// Recovers the physical solution x = diag(d) * y after solving the equilibrated
 /// system (diag(d) A diag(d)) y = diag(d) b.
-ComplexMatrix recover_equilibrated_solution(const ComplexMatrix& y, const std::vector<double>& d);
+std::vector<Complex> recover_equilibrated_solution(const std::vector<Complex>& y, const std::vector<double>& d);
 
 }  // namespace aphi_solver

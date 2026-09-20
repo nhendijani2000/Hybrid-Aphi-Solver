@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "aphi_solver/sparse_matrix.hpp"
+
 namespace aphi_solver {
 
 using Complex = std::complex<double>;
@@ -67,6 +69,21 @@ private:
     int cols_;
     std::vector<Complex> data_;
 };
+
+/// Bridges from the sparse production type to this dense one. Since Phase
+/// 03.5 the assembled system is sparse (`sparse_matrix.hpp`), while this
+/// dense type remains the small-system ground truth that `solve_dense`
+/// below operates on -- these two conversions are the seam between them,
+/// and like `solve_dense` itself they are for verification-scale problems
+/// only, never a production path.
+ComplexMatrix to_dense_matrix(const SparseMatrixZ& m);
+
+/// Wraps a dense vector as an n x 1 ComplexMatrix, for handing a
+/// right-hand side to `solve_dense`.
+ComplexMatrix to_column(const std::vector<Complex>& v);
+
+/// Reads an n x 1 ComplexMatrix back out as a plain vector.
+std::vector<Complex> from_column(const ComplexMatrix& m);
 
 /// Solves A X = B for X via dense Gaussian elimination with partial pivoting.
 /// A must be square and non-singular (throws std::runtime_error if a pivot is

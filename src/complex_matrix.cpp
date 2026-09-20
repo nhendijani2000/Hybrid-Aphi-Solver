@@ -96,6 +96,38 @@ double ComplexMatrix::frobenius_norm() const {
     return std::sqrt(sum);
 }
 
+ComplexMatrix to_dense_matrix(const SparseMatrixZ& m) {
+    ComplexMatrix out(m.rows(), m.cols());
+    const auto& row_ptr = m.row_ptr();
+    const auto& col_index = m.col_index();
+    const auto& values = m.values();
+    for (int r = 0; r < m.rows(); ++r) {
+        for (int k = row_ptr[static_cast<std::size_t>(r)]; k < row_ptr[static_cast<std::size_t>(r) + 1]; ++k) {
+            out(r, col_index[static_cast<std::size_t>(k)]) = values[static_cast<std::size_t>(k)];
+        }
+    }
+    return out;
+}
+
+ComplexMatrix to_column(const std::vector<Complex>& v) {
+    ComplexMatrix out(static_cast<int>(v.size()), 1);
+    for (std::size_t i = 0; i < v.size(); ++i) {
+        out(static_cast<int>(i), 0) = v[i];
+    }
+    return out;
+}
+
+std::vector<Complex> from_column(const ComplexMatrix& m) {
+    if (m.cols() != 1) {
+        throw std::invalid_argument("from_column: matrix must have exactly one column");
+    }
+    std::vector<Complex> out(static_cast<std::size_t>(m.rows()));
+    for (int i = 0; i < m.rows(); ++i) {
+        out[static_cast<std::size_t>(i)] = m(i, 0);
+    }
+    return out;
+}
+
 ComplexMatrix solve_dense(const ComplexMatrix& A, const ComplexMatrix& B) {
     const int n = A.rows();
     if (A.cols() != n) throw std::invalid_argument("solve_dense: A must be square");

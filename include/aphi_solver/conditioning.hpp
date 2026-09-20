@@ -15,13 +15,18 @@ namespace aphi_solver {
 /// the scalar block. This is the standard frequency-domain A-Phi system used
 /// throughout the public literature (e.g. Dular et al. 2000; Zhao & Fu 2017) --
 /// nothing about this block structure is specific to any one implementation.
+/// The blocks are sparse as of Phase 03.5 (`docs/ROADMAP.md`): they were
+/// dense `ComplexMatrix` while this module only ever saw hand-built test
+/// systems, which does not survive contact with a real mesh -- K_AA alone
+/// is ~55 MB dense at `meshes/cube_6.msh` and impossible beyond that. The
+/// right-hand sides stay dense vectors, because they are dense.
 struct APhiBlockSystem {
-    ComplexMatrix K_AA;
-    ComplexMatrix K_APhi;
-    ComplexMatrix K_PhiA;
-    ComplexMatrix K_PhiPhi;
-    ComplexMatrix rhs_A;    // n_A x 1
-    ComplexMatrix rhs_Phi;  // n_Phi x 1
+    SparseMatrixZ K_AA;
+    SparseMatrixZ K_APhi;
+    SparseMatrixZ K_PhiA;
+    SparseMatrixZ K_PhiPhi;
+    std::vector<Complex> rhs_A;    // length n_A
+    std::vector<Complex> rhs_Phi;  // length n_Phi
 
     int num_A() const { return K_AA.rows(); }
     int num_Phi() const { return K_PhiPhi.rows(); }
@@ -61,7 +66,7 @@ APhiBlockSystem apply_scaled_scalar_potential(const APhiBlockSystem& system, dou
 
 /// Recovers the physical scalar potential Phi = j*omega*Phi' after solving a
 /// system produced by `apply_scaled_scalar_potential`.
-ComplexMatrix recover_scaled_scalar_potential(const ComplexMatrix& phi_prime, double omega);
+std::vector<Complex> recover_scaled_scalar_potential(const std::vector<Complex>& phi_prime, double omega);
 
 /// Dispatches to the requested strategy. `Natural` returns `system` unchanged.
 APhiBlockSystem apply_conditioning(const APhiBlockSystem& system, ConditioningStrategy strategy, double omega);
@@ -78,5 +83,17 @@ ConditioningStrategy recommend_strategy(double frequency_hz, double crossover_hz
 /// [a; Phi]. Useful for condition-number analysis and for the direct-solver
 /// baseline in Phase 05; not intended for production-size meshes.
 ComplexMatrix assemble_dense(const APhiBlockSystem& system);
+
+/// The matching stacked right-hand side [rhs_A; rhs_Phi] as an
+/// (n_A + n_Phi) x 1 column, so `solve_dense(assemble_dense(sys),
+/// assemble_dense_rhs(sys))` is the complete small-system baseline solve.
+ComplexMatrix assemble_dense_rhs(const APhiBlockSystem& system);
+
+/// Assembles the whole system as ONE sparse matrix in the same [a; Phi]
+/// block order -- the form a sparse direct solver is handed (Phase 05).
+/// Unlike `assemble_dense` this is a production path, so it is built
+/// block-by-block through the triplet phase rather than through any dense
+/// intermediate.
+SparseMatrixZ assemble_sparse(const APhiBlockSystem& system);
 
 }  // namespace aphi_solver
