@@ -14,3 +14,23 @@ add_test(NAME aphi_tests COMMAND aphi_tests)
 add_executable(aphi_tests_equilibration test_equilibration.cpp)
 target_link_libraries(aphi_tests_equilibration PRIVATE aphi_core)
 add_test(NAME aphi_tests_equilibration COMMAND aphi_tests_equilibration)
+
+add_executable(aphi_tests_incidence test_incidence.cpp)
+target_link_libraries(aphi_tests_incidence PRIVATE aphi_core)
+add_test(NAME aphi_tests_incidence COMMAND aphi_tests_incidence)
+
+add_executable(aphi_tests_gmsh_reader test_gmsh_reader.cpp)
+target_link_libraries(aphi_tests_gmsh_reader PRIVATE aphi_core)
+add_test(NAME aphi_tests_gmsh_reader COMMAND aphi_tests_gmsh_reader)
+
+add_executable(aphi_tests_basis_functions test_basis_functions.cpp)
+target_link_libraries(aphi_tests_basis_functions PRIVATE aphi_core)
+add_test(NAME aphi_tests_basis_functions COMMAND aphi_tests_basis_functions)
+
+add_executable(aphi_tests_tree_cotree test_tree_cotree.cpp)
+target_link_libraries(aphi_tests_tree_cotree PRIVATE aphi_core)
+add_test(NAME aphi_tests_tree_cotree COMMAND aphi_tests_tree_cotree)
+
+add_executable(aphi_tests_gauge_variants test_gauge_variants.cpp)
+target_link_libraries(aphi_tests_gauge_variants PRIVATE aphi_core)
+add_test(NAME aphi_tests_gauge_variants COMMAND aphi_tests_gauge_variants)
