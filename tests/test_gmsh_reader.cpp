@@ -635,6 +635,95 @@ int main() {
     }
 #endif
 
+    // --- The coaxial via: the Phase 01 Sec. 7.1 target problem --------------
+    // meshes/coax_via.msh, from tools/coax_via.geo via Gmsh 4.13.1. The
+    // richest fixture here: two material regions, four boundary groups, and
+    // -- unlike every other mesh in this suite -- regions whose volumes are
+    // known in closed form. That is what makes the tagging checkable rather
+    // than merely self-consistent: via and dielectric differ by a factor of
+    // 24, so a tag assigned to the wrong Gmsh entity cannot survive the
+    // volume comparison below. Counts and names alone would not catch it.
+#ifdef APHI_MESH_DIR
+    {
+        const double a = 0.1e-3, b = 0.5e-3, Lz = 2.0e-3;
+        const double pi = 3.14159265358979323846;
+        const std::string dir = APHI_MESH_DIR;
+
+        Mesh cx;
+        bool cx_ok = true;
+        try {
+            cx = aphi_solver::read_gmsh_msh(dir + "/coax_via.msh");
+        } catch (const GmshReadError& e) {
+            cx_ok = false;
+            std::cerr << "  (coax_via.msh unreadable: " << e.what() << ")\n";
+        }
+        check(cx_ok, "coax_via.msh parses");
+
+        if (cx_ok) {
+            const long long euler = static_cast<long long>(cx.num_nodes()) - cx.num_edges() +
+                                     cx.num_faces() - cx.num_tets();
+            check(euler == 1, "coax: Euler characteristic == 1 (solid, conforming)");
+
+            double vol_via = 0.0, vol_diel = 0.0, vol_other = 0.0;
+            for (int t = 0; t < cx.num_tets(); ++t) {
+                const double v = std::abs(cx.signed_tet_volume(t));
+                switch (cx.tet_tags[static_cast<std::size_t>(t)]) {
+                    case 1: vol_via += v; break;
+                    case 2: vol_diel += v; break;
+                    default: vol_other += v; break;
+                }
+            }
+            // The curved walls are faceted by flat triangles, so a meshed
+            // volume always falls slightly short of the analytic one -- that
+            // deficit is a resolution measure, not an error, hence a ratio
+            // test rather than a tight absolute one.
+            check(std::abs(vol_via / (pi * a * a * Lz) - 1.0) < 0.05,
+                  "coax: tag 1 volume == pi*a^2*L (the via conductor)");
+            check(std::abs(vol_diel / (pi * (b * b - a * a) * Lz) - 1.0) < 0.05,
+                  "coax: tag 2 volume == pi*(b^2-a^2)*L (the dielectric annulus)");
+            check(vol_other == 0.0, "coax: every tet belongs to one of the two tagged regions");
+            check(std::abs((vol_via + vol_diel) / (pi * b * b * Lz) - 1.0) < 0.05,
+                  "coax: the two regions sum to pi*b^2*L (no gap, no overlap)");
+
+            check(cx.physical_name(3, 1) == "via_conductor" && cx.physical_name(3, 2) == "dielectric",
+                  "coax: volume region names");
+            check(cx.physical_name(2, 10) == "shield_pec" && cx.physical_name(2, 11) == "short_end" &&
+                      cx.physical_name(2, 20) == "port_conductor" &&
+                      cx.physical_name(2, 21) == "port_return",
+                  "coax: boundary group names");
+
+            int boundary = 0, nonmanifold = 0;
+            for (int f = 0; f < cx.num_faces(); ++f) {
+                const int c = cx.face_tets[static_cast<std::size_t>(f)].count;
+                if (c == 1) ++boundary;
+                if (c > 2) ++nonmanifold;
+            }
+            check(nonmanifold == 0, "coax: no face shared by more than two tets");
+
+            int unresolved = 0, off_boundary = 0;
+            bool tags_known = true;
+            for (const auto& tf : cx.tagged_boundary_faces) {
+                if (tf.tag != 10 && tf.tag != 11 && tf.tag != 20 && tf.tag != 21) tags_known = false;
+                const int idx = cx.find_face(tf.nodes[0], tf.nodes[1], tf.nodes[2]);
+                if (idx < 0) {
+                    ++unresolved;
+                } else if (!cx.is_boundary_face(idx)) {
+                    ++off_boundary;
+                }
+            }
+            check(tags_known, "coax: tagged faces carry only the four declared boundary tags");
+            check(unresolved == 0, "coax: every tagged triangle is a face of the tet mesh");
+            check(off_boundary == 0, "coax: every tagged triangle lies on the domain boundary");
+            // Unlike validation_box (where only 2 of 6 surfaces are grouped),
+            // every boundary surface here is in a physical group, so the
+            // tagging must be exhaustive -- Phase 04 has no untagged boundary
+            // to guess about.
+            check(static_cast<int>(cx.tagged_boundary_faces.size()) == boundary,
+                  "coax: the four boundary groups cover the entire domain boundary");
+        }
+    }
+#endif
+
     // A missing file must raise GmshReadError, not crash or return silently.
     bool missing_file_threw = false;
     try {
