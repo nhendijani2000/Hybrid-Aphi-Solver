@@ -54,25 +54,26 @@ public:
 /// `$MeshFormat`, a malformed or unterminated section, a duplicate node id,
 /// an element referencing an unknown node, or any validation failure above.
 ///
-/// **Known gap (Sept 2026): this has never been run against a file produced
-/// by Gmsh itself.** Every mesh the solver has read so far was synthesised
-/// by this project's own tooling -- `tools/generate_cube_mesh.py`, the
-/// fixtures in `tests/test_gmsh_reader.cpp`, or a hand conversion. Gmsh is
-/// not installed on the development machine, so the format is implemented
-/// from the specification.
+/// **Validated against real Gmsh output (Sept 2026).** Both parsers were
+/// written from the specification, which cannot by itself catch a
+/// *misreading* of that specification -- so `tools/gmsh_validation_box.geo`
+/// was meshed with Gmsh 4.13.1 and exported twice, as
+/// `meshes/validation_box_v22.msh` and `meshes/validation_box_v41.msh`.
+/// Both parse, and `tests/test_gmsh_reader.cpp` keeps them as permanent
+/// fixtures: 338 nodes, 1110 tets, Euler characteristic 1, total volume
+/// exactly the 1 mm box's 1e-9, no non-manifold face, CG = 0, every tet
+/// tagged 7, all 180 tagged triangles resolving to real boundary faces, and
+/// the two formats agreeing on every invariant.
 ///
-/// The fixtures deliberately cover the structures real Gmsh output has that
-/// a minimal spec-conforming file does not -- multi-block `$Nodes` (one
-/// block per geometric entity), `parametric` coordinate lines carrying
-/// extra u/u,v values, `$Entities` with trailing bounding-entity lists and
-/// negative orientation tags, entities with zero and with multiple physical
-/// tags, scientific-notation coordinates, and CRLF line endings. That
-/// closes "does the implementation match its design". It cannot close "is
-/// the design a correct reading of the format": only one real export can.
-/// Exporting any mesh from Gmsh as `Version 2 ASCII` or `Version 4.1 ASCII`
-/// and reading it is a worthwhile five-minute check before trusting this on
-/// a real geometry -- it will either pass or fail loudly, since the
-/// validation added here rejects a malformed result rather than proceeding.
+/// That last point is the strongest part: a misreading would have to corrupt
+/// 2.2 and 4.1 *identically* to escape the cross-check, despite the two
+/// carrying physical tags by completely different mechanisms (on the element
+/// line vs. through `$Entities`) and listing nodes in different order.
+///
+/// The hand-written fixtures alongside them remain useful for the structures
+/// this particular geometry happens not to exercise -- `parametric`
+/// coordinate lines, entities with zero or multiple physical tags, CRLF
+/// endings, and the malformed inputs that must be rejected.
 Mesh read_gmsh_msh(const std::string& path);
 
 }  // namespace aphi_solver

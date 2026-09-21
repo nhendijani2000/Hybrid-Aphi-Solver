@@ -551,6 +551,90 @@ int main() {
               "MSH 4.0 is rejected with an explanatory message rather than misread");
     }
 
+    // --- Real Gmsh output ---------------------------------------------------
+    // meshes/validation_box_v22.msh and _v41.msh were written by Gmsh 4.13.1
+    // from tools/gmsh_validation_box.geo -- the same geometry exported twice.
+    // Every other fixture in this file was written by this project from the
+    // format specification, which cannot catch a MISREADING of that
+    // specification. These two can, and are the only fixtures here this
+    // project did not author.
+    //
+    // The two formats list nodes in different order (4.1 blocks them per
+    // geometric entity), so local indices do not correspond between them.
+    // The comparison below is therefore over invariants, not indices.
+#ifdef APHI_MESH_DIR
+    {
+        const std::string dir = APHI_MESH_DIR;
+        Mesh g22, g41;
+        bool read_ok = true;
+        try {
+            g22 = aphi_solver::read_gmsh_msh(dir + "/validation_box_v22.msh");
+            g41 = aphi_solver::read_gmsh_msh(dir + "/validation_box_v41.msh");
+        } catch (const GmshReadError& e) {
+            read_ok = false;
+            std::cerr << "  (real-Gmsh fixture unreadable: " << e.what() << ")\n";
+        }
+        check(read_ok, "both real Gmsh files parse (2.2 and 4.1)");
+
+        if (read_ok) {
+            check(g22.num_nodes() == g41.num_nodes() && g22.num_tets() == g41.num_tets() &&
+                      g22.num_edges() == g41.num_edges() && g22.num_faces() == g41.num_faces(),
+                  "real Gmsh: 2.2 and 4.1 agree on V, E, F, T");
+
+            for (const Mesh* m : {&g22, &g41}) {
+                const long long euler = static_cast<long long>(m->num_nodes()) - m->num_edges() +
+                                         m->num_faces() - m->num_tets();
+                check(euler == 1, "real Gmsh: Euler characteristic == 1 (conforming mesh)");
+
+                double volume = 0.0;
+                for (int t = 0; t < m->num_tets(); ++t) volume += std::abs(m->signed_tet_volume(t));
+                check(std::abs(volume - 1e-9) < 1e-15, "real Gmsh: volume == 1e-9 (the 1 mm box)");
+
+                bool all_conductor = !m->tet_tags.empty();
+                for (int tag : m->tet_tags) {
+                    if (tag != 7) all_conductor = false;
+                }
+                check(all_conductor, "real Gmsh: every tet carries physical tag 7");
+
+                // In 2.2 this tag is on the element line; in 4.1 it is
+                // resolved through $Entities. Both must land on 7.
+                check(m->physical_name(3, 7) == "conductor" && m->physical_name(2, 20) == "pec_wall" &&
+                          m->physical_name(2, 21) == "port",
+                      "real Gmsh: $PhysicalNames resolved by (dimension, tag)");
+
+                // Gmsh writes surface elements only for the two surfaces
+                // that have physical groups, so tagged faces are a strict
+                // subset of the boundary -- each must still be a real face
+                // of the tet mesh and lie on the boundary.
+                int unresolved = 0, off_boundary = 0, wrong_tag = 0;
+                for (const auto& tf : m->tagged_boundary_faces) {
+                    if (tf.tag != 20 && tf.tag != 21) ++wrong_tag;
+                    const int idx = m->find_face(tf.nodes[0], tf.nodes[1], tf.nodes[2]);
+                    if (idx < 0) {
+                        ++unresolved;
+                    } else if (!m->is_boundary_face(idx)) {
+                        ++off_boundary;
+                    }
+                }
+                check(wrong_tag == 0, "real Gmsh: tagged faces carry only tags 20 and 21");
+                check(unresolved == 0, "real Gmsh: every tagged triangle is a face of the tet mesh");
+                check(off_boundary == 0, "real Gmsh: every tagged triangle lies on the domain boundary");
+
+                int nonmanifold = 0;
+                for (int f = 0; f < m->num_faces(); ++f) {
+                    if (m->face_tets[static_cast<std::size_t>(f)].count > 2) ++nonmanifold;
+                }
+                check(nonmanifold == 0, "real Gmsh: no face shared by more than two tets");
+
+                check(aphi_solver::build_curl_matrix(*m)
+                          .multiply(aphi_solver::build_gradient_matrix(*m))
+                          .is_zero(),
+                      "real Gmsh: CG = 0");
+            }
+        }
+    }
+#endif
+
     // A missing file must raise GmshReadError, not crash or return silently.
     bool missing_file_threw = false;
     try {

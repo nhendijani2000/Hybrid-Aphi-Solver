@@ -21,6 +21,13 @@ add_test(NAME aphi_tests_incidence COMMAND aphi_tests_incidence)
 
 add_executable(aphi_tests_gmsh_reader test_gmsh_reader.cpp)
 target_link_libraries(aphi_tests_gmsh_reader PRIVATE aphi_core)
+# The reader test also reads the two meshes written by Gmsh itself
+# (meshes/validation_box_v*.msh), so it needs their location regardless of
+# the working directory it is run from. Every other fixture is a string
+# literal written to a temp file; these two cannot be, because the whole
+# point of them is that this project did not author them.
+target_compile_definitions(aphi_tests_gmsh_reader PRIVATE
+    APHI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../meshes")
 add_test(NAME aphi_tests_gmsh_reader COMMAND aphi_tests_gmsh_reader)
 
 add_executable(aphi_tests_basis_functions test_basis_functions.cpp)
