@@ -206,6 +206,55 @@ Whitney basis functions.
 1. **Mesh ingestion:** read an unstructured tetrahedral mesh (start with a
    simple format — Gmsh `.msh` is a reasonable first target) into nodes,
    edges, facets, tets.
+   **Completed (Sept 2026), beyond the original scope, before starting
+   Phase 04:** the owner's call was that mesh reading should be *finished*
+   rather than revisited mid-assembly. Three things were added.
+   **(a) Gmsh 4.1 alongside 2.2.** Current Gmsh writes 4.1 by default, so a
+   2.2-only reader would have refused the first mesh built in the GUI. The
+   two formats differ structurally, not cosmetically: in 4.x an element line
+   carries no physical tag at all, only its geometric *entity*, and the
+   entity→physical-group mapping lives in `$Entities` — a reader that
+   skipped that section would return every element untagged. `$Nodes` is
+   also blocked per entity with tags and coordinates in separate runs. MSH
+   **4.0** is rejected with an explanatory message rather than guessed at,
+   since it interleaves those runs and misreading it would yield a
+   plausible-but-wrong mesh. Verified by converting `cube_4.msh` to 4.1 and
+   confirming `compare_gauges` reports bit-identical results (384 tets).
+   **(b) `$PhysicalNames`.** Parsed into `Mesh::physical_names`, keyed by
+   *(dimension, tag)* because Gmsh tags are unique only within a dimension —
+   volume 1 and surface 1 routinely coexist, which is exactly the EDA case.
+   This is what lets Phase 04's input file cross-check its declared region
+   names against the mesh's own instead of trusting them; a JSON calling tag
+   1 "via_conductor" while the mesh calls it "fr4_dielectric" is a materials
+   mix-up that would otherwise solve quietly and wrongly.
+   **(c) Read-time validation.** Every tet must use four distinct nodes and
+   be non-degenerate, tested as `|V| / h³` against that tet's own longest
+   edge so the threshold is scale-free (a mesh in metres with micron
+   features has legitimately tiny tets; any absolute cutoff would reject
+   them or miss a flat tet in a coarse mesh). No face may be shared by more
+   than two tets. Duplicate node ids are rejected rather than silently
+   overwriting. These all failed previously only deep inside
+   `compute_tet_geometry`, or not at all.
+   **(d) Face → tet adjacency.** `Mesh::face_tets` inverts `tet_faces`
+   during `build_topology`, and `Mesh::is_boundary_face` follows from it: a
+   face of the domain boundary is one that exactly one tet touches. This was
+   the real gap in "is the mesh complete" — without it the code could not
+   identify its own boundary at all, only whatever surfaces the file
+   happened to tag, and an untagged outer surface is perfectly legal. Phase
+   07's ABC needs the boundary regardless of tagging, and the `count` field
+   records the true neighbour count even past 2, so a non-manifold mesh is
+   detected rather than silently truncated.
+   **Considered and deliberately not done: per-entity `Edge`/`Face`/`Tet`
+   classes.** The *lists* already exist (nodes, edges, faces, tets, plus
+   tet→edge/face connectivity). What would hang off such classes — DOF
+   index, PEC flag, tree/cotree status — are properties of the current
+   *solve configuration*, not of the mesh: they change with regime, gauge
+   and frequency, so putting them on `Mesh` would make one mesh serve only
+   one configuration. They belong in the DOF map instead. Parallel arrays
+   indexed by entity id also match `docs/ENGINEERING_STANDARDS.md`'s
+   speed-first flat-container standard for anything touched once per mesh
+   entity — the assembly loop is exactly that — and follow the pattern
+   `TreeCotreeResult` and `GaugeIndexMap` already use.
 2. **Build the incidence matrices** the whole gauge story depends on: the
    discrete curl operator **C** (edge–facet) and the discrete
    gradient/divergence operator **G** (node–edge), exactly as defined in the

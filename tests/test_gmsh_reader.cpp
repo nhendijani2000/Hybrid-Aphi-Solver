@@ -84,6 +84,129 @@ const char* kUntaggedMsh =
     "1 4 0 1 2 3 4\n"
     "$EndElements\n";
 
+// The SAME two-tet mesh as kSampleMsh, in Gmsh 4.1 format. Same geometry,
+// same physical groups (volumes 7 and 8, surfaces 20 and 21), so the two
+// readers can be checked to agree rather than each merely "not throwing".
+//
+// The structural differences 4.1 forces, and the reason this is a real
+// parser rather than a reformat:
+//  - element lines carry NO physical tag; they carry a geometric entity,
+//    and $Entities maps entity -> physical group;
+//  - $Nodes is blocked per entity, with node tags listed first and
+//    coordinates after (this is what 4.0 does differently, hence 4.0 being
+//    rejected rather than guessed at);
+//  - $Elements is blocked per entity too, with the element type on the
+//    block header rather than on each line.
+const char* kSampleMsh41 =
+    "$MeshFormat\n"
+    "4.1 0 8\n"
+    "$EndMeshFormat\n"
+    "$PhysicalNames\n"
+    "4\n"
+    "3 7 \"via_conductor\"\n"
+    "3 8 \"fr4 dielectric\"\n"
+    "2 20 \"pec_wall\"\n"
+    "2 21 \"port 1\"\n"
+    "$EndPhysicalNames\n"
+    "$Entities\n"
+    "0 0 2 2\n"
+    "1 0 0 0 1 1 1 1 20 0\n"
+    "2 0 0 0 1 1 1 1 21 0\n"
+    "1 0 0 0 1 1 1 1 7 0\n"
+    "2 0 0 0 1 1 1 1 8 0\n"
+    "$EndEntities\n"
+    "$Nodes\n"
+    "1 5 11 15\n"
+    "3 1 0 5\n"
+    "11\n"
+    "12\n"
+    "13\n"
+    "14\n"
+    "15\n"
+    "0 0 0\n"
+    "1 0 0\n"
+    "0 1 0\n"
+    "0 0 1\n"
+    "1 1 1\n"
+    "$EndNodes\n"
+    "$Elements\n"
+    "4 4 1 4\n"
+    "2 1 2 1\n"
+    "1 12 13 14\n"
+    "2 2 2 1\n"
+    "2 11 12 13\n"
+    "3 1 4 1\n"
+    "3 11 12 13 14\n"
+    "3 2 4 1\n"
+    "4 12 13 14 15\n"
+    "$EndElements\n";
+
+// Two tets sharing a face where one is flat: nodes 0,1,2,4 are coplanar
+// (all at z = 0), so that tet has zero volume. A mesher can emit this from
+// a sliver, and it parses perfectly well -- it only fails later, deep in
+// compute_tet_geometry, unless the reader checks.
+const char* kDegenerateMsh =
+    "$MeshFormat\n"
+    "2.2 0 8\n"
+    "$EndMeshFormat\n"
+    "$Nodes\n"
+    "5\n"
+    "1 0 0 0\n"
+    "2 1 0 0\n"
+    "3 0 1 0\n"
+    "4 0 0 1\n"
+    "5 1 1 0\n"
+    "$EndNodes\n"
+    "$Elements\n"
+    "2\n"
+    "1 4 2 7 1 1 2 3 4\n"
+    "2 4 2 7 1 1 2 3 5\n"
+    "$EndElements\n";
+
+// A tet whose node list repeats a node -- also parseable, also nonsense.
+const char* kRepeatedNodeMsh =
+    "$MeshFormat\n"
+    "2.2 0 8\n"
+    "$EndMeshFormat\n"
+    "$Nodes\n"
+    "4\n"
+    "1 0 0 0\n"
+    "2 1 0 0\n"
+    "3 0 1 0\n"
+    "4 0 0 1\n"
+    "$EndNodes\n"
+    "$Elements\n"
+    "1\n"
+    "1 4 2 7 1 1 2 3 3\n"
+    "$EndElements\n";
+
+const char* kDuplicateNodeIdMsh =
+    "$MeshFormat\n"
+    "2.2 0 8\n"
+    "$EndMeshFormat\n"
+    "$Nodes\n"
+    "4\n"
+    "1 0 0 0\n"
+    "2 1 0 0\n"
+    "2 0 1 0\n"
+    "4 0 0 1\n"
+    "$EndNodes\n"
+    "$Elements\n"
+    "1\n"
+    "1 4 2 7 1 1 2 2 4\n"
+    "$EndElements\n";
+
+const char* kMsh40 =
+    "$MeshFormat\n"
+    "4.0 0 8\n"
+    "$EndMeshFormat\n"
+    "$Nodes\n"
+    "0 0\n"
+    "$EndNodes\n"
+    "$Elements\n"
+    "0 0\n"
+    "$EndElements\n";
+
 Mesh read_from_string(const std::string& contents, const std::string& path) {
     {
         std::ofstream out(path);
@@ -92,6 +215,23 @@ Mesh read_from_string(const std::string& contents, const std::string& path) {
     Mesh m = aphi_solver::read_gmsh_msh(path);
     std::remove(path.c_str());
     return m;
+}
+
+// Returns the GmshReadError message, or "" if the parse unexpectedly
+// succeeded -- for the cases that are supposed to be rejected.
+std::string expect_read_error(const std::string& contents, const std::string& path) {
+    {
+        std::ofstream out(path);
+        out << contents;
+    }
+    std::string message;
+    try {
+        aphi_solver::read_gmsh_msh(path);
+    } catch (const GmshReadError& e) {
+        message = e.what();
+    }
+    std::remove(path.c_str());
+    return message;
 }
 
 }  // namespace
@@ -187,6 +327,90 @@ int main() {
     const auto c = aphi_solver::build_curl_matrix(m);
     const auto cg = c.multiply(g);
     check(cg.is_zero(), "read_gmsh_msh: CG = 0 holds on a mesh read from a file");
+
+    // --- face -> tet adjacency ----------------------------------------------
+    // Derived from the tets, so it is independent of what the file tagged.
+    // Two tets sharing one face: that face has 2 neighbours, the other 6
+    // have 1 each and are therefore the domain boundary.
+    check(static_cast<int>(m.face_tets.size()) == m.num_faces(), "face_tets is parallel to faces");
+    {
+        int interior = 0, boundary = 0, bad = 0;
+        for (int f = 0; f < m.num_faces(); ++f) {
+            const int count = m.face_tets[static_cast<std::size_t>(f)].count;
+            if (count == 2) ++interior;
+            else if (count == 1) ++boundary;
+            else ++bad;
+        }
+        check(interior == 1, "exactly one interior face (the shared one)");
+        check(boundary == 6, "the other six faces are boundary faces");
+        check(bad == 0, "no face has 0 or >2 adjacent tets");
+
+        // The shared face must name both tets; a boundary face only one.
+        const int shared = m.find_face(1, 2, 3);
+        check(shared >= 0 && !m.is_boundary_face(shared), "the shared face is not a boundary face");
+        if (shared >= 0) {
+            const auto& ft = m.face_tets[static_cast<std::size_t>(shared)];
+            check((ft.tets[0] == 0 && ft.tets[1] == 1) || (ft.tets[0] == 1 && ft.tets[1] == 0),
+                  "the shared face names both tets");
+        }
+        const int outer = m.find_face(0, 1, 2);
+        check(outer >= 0 && m.is_boundary_face(outer), "an outer face is reported as boundary");
+    }
+
+    // --- Gmsh 4.1 -----------------------------------------------------------
+    // The same mesh in the format current Gmsh actually writes. Checked
+    // against the 2.2 result rather than only for self-consistency.
+    {
+        const Mesh m41 = read_from_string(kSampleMsh41, "aphi_test_gmsh_v41_tmp.msh");
+        check(m41.num_nodes() == 5 && m41.num_tets() == 2, "4.1: same node and tet counts as 2.2");
+        check(m41.num_edges() == m.num_edges() && m41.num_faces() == m.num_faces(),
+              "4.1: same derived topology as the 2.2 file");
+        check(m41.tet_tags.size() == 2 && m41.tet_tags[0] == 7 && m41.tet_tags[1] == 8,
+              "4.1: tet physical tags resolved through $Entities");
+        check(m41.tagged_boundary_faces.size() == 2, "4.1: both tagged surface triangles captured");
+        if (m41.tagged_boundary_faces.size() == 2) {
+            check(m41.tagged_boundary_faces[0].tag == 20 && m41.tagged_boundary_faces[1].tag == 21,
+                  "4.1: surface physical tags resolved through $Entities");
+        }
+        check(m41.nodes[0].x == 0.0 && m41.nodes[4].x == 1.0,
+              "4.1: blocked $Nodes (tags then coordinates) read in the right order");
+
+        // $PhysicalNames, including one with a space in it.
+        check(m41.physical_names.size() == 4, "4.1: all four $PhysicalNames entries read");
+        check(m41.physical_name(3, 7) == "via_conductor", "physical_name resolves a volume group");
+        check(m41.physical_name(3, 8) == "fr4 dielectric", "physical_name keeps spaces inside the quotes");
+        check(m41.physical_name(2, 20) == "pec_wall", "physical_name resolves a surface group");
+        check(m41.physical_name(2, 21) == "port 1", "physical_name distinguishes surface tag 21");
+        check(m41.physical_name(3, 20).empty(),
+              "physical_name is keyed by (dimension, tag) -- surface tag 20 is not volume tag 20");
+        check(m41.physical_name(3, 999).empty(), "physical_name returns empty for an unknown group");
+
+        const auto g41 = aphi_solver::build_gradient_matrix(m41);
+        const auto c41 = aphi_solver::build_curl_matrix(m41);
+        check(c41.multiply(g41).is_zero(), "4.1: CG = 0 holds on the 4.1-parsed mesh");
+    }
+
+    // A 2.2 file with no $PhysicalNames has none -- and that is not an error.
+    check(m.physical_names.empty(), "2.2 sample without $PhysicalNames yields no names");
+
+    // --- Validation ---------------------------------------------------------
+    {
+        const std::string degenerate = expect_read_error(kDegenerateMsh, "aphi_test_gmsh_degen_tmp.msh");
+        check(degenerate.find("degenerate") != std::string::npos,
+              "a flat (zero-volume) tet is rejected at read time, not at first use");
+
+        const std::string repeated = expect_read_error(kRepeatedNodeMsh, "aphi_test_gmsh_repeat_tmp.msh");
+        check(repeated.find("same node twice") != std::string::npos,
+              "a tet that repeats a node is rejected");
+
+        const std::string duplicate = expect_read_error(kDuplicateNodeIdMsh, "aphi_test_gmsh_dupid_tmp.msh");
+        check(duplicate.find("duplicate node id") != std::string::npos,
+              "a repeated node id is rejected rather than silently overwriting");
+
+        const std::string v40 = expect_read_error(kMsh40, "aphi_test_gmsh_v40_tmp.msh");
+        check(v40.find("4.0") != std::string::npos || v40.find("unsupported") != std::string::npos,
+              "MSH 4.0 is rejected with an explanatory message rather than misread");
+    }
 
     // A missing file must raise GmshReadError, not crash or return silently.
     bool missing_file_threw = false;

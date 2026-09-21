@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -87,6 +88,32 @@ struct TaggedFace {
     int tag = -1;
 };
 
+/// One entry of the mesh file's `$PhysicalNames` section: the human-readable
+/// name a physical group was given in the .geo. Keyed by (dimension, tag)
+/// rather than tag alone, because Gmsh's physical tags are only unique
+/// *within* a dimension -- a volume group and a surface group can both be
+/// tag 1, which is exactly the EDA case (region 1 = a conductor, boundary
+/// 1 = a PEC wall).
+///
+/// This exists so the input file's declared region names can be checked
+/// against the mesh's own instead of taken on trust: a JSON that says tag 1
+/// is "via_conductor" while the mesh calls it "fr4_dielectric" is a
+/// materials mix-up that would otherwise solve quietly and wrongly.
+struct PhysicalName {
+    int dimension = 0;  // 0 point, 1 curve, 2 surface, 3 volume
+    int tag = -1;
+    std::string name;
+};
+
+/// The tets sharing one global face. A conforming tetrahedral mesh gives
+/// every face exactly 1 (boundary) or 2 (interior) -- `count` records the
+/// true number even if it exceeds 2, so a non-manifold mesh can be detected
+/// rather than silently truncated.
+struct FaceTets {
+    std::array<int, 2> tets{-1, -1};
+    int count = 0;
+};
+
 class Mesh {
 public:
     std::vector<Vec3> nodes;
@@ -104,6 +131,22 @@ public:
     /// file actually contained, so this is empty for a mesh built in code or
     /// read from a file with no surface elements.
     std::vector<TaggedFace> tagged_boundary_faces;
+
+    /// `$PhysicalNames` entries from the mesh file, if it had that section.
+    /// Empty otherwise -- a mesh is perfectly usable without names.
+    std::vector<PhysicalName> physical_names;
+
+    /// For each global face, which tets contain it. Built by
+    /// `build_topology` by inverting `tet_faces`, so it is always consistent
+    /// with the derived topology rather than with whatever surface elements
+    /// the file happened to carry.
+    ///
+    /// This is what makes "is this face on the boundary?" answerable at all
+    /// (`is_boundary_face` below): a face of the *domain* boundary is one
+    /// that exactly one tet touches. That is a geometric fact about the
+    /// mesh, independent of tagging -- a mesh can have an untagged outer
+    /// surface, and Phase 07's ABC needs the boundary regardless.
+    std::vector<FaceTets> face_tets;
 
     /// Globally unique edges, each (i, j) with i < j. Index into this vector
     /// is the edge's global DOF/row index used by incidence.hpp and
@@ -171,6 +214,19 @@ public:
     /// entry against the topology derived from the tets -- a tagged triangle
     /// that resolves to -1 is not a face of any tet in the volume mesh.
     int find_face(int a, int b, int c) const;
+
+    /// True iff global face `f` lies on the domain boundary, i.e. exactly
+    /// one tet contains it.
+    bool is_boundary_face(int f) const {
+        return face_tets[static_cast<std::size_t>(f)].count == 1;
+    }
+
+    /// The name given to physical group `tag` of dimension `dimension`, or
+    /// an empty string if the mesh carried no `$PhysicalNames` entry for it.
+    /// A linear scan: there are a handful of physical groups even in a large
+    /// model, and this is called once per region at load time, never per
+    /// mesh entity.
+    std::string physical_name(int dimension, int tag) const;
 
 private:
     std::map<std::pair<int, int>, int> edge_lookup_;

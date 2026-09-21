@@ -85,6 +85,24 @@ void Mesh::build_topology() {
             tet_faces[t][lf] = gidx;
         }
     }
+
+    // Invert tet_faces into face -> tets. One pass over the same 4-per-tet
+    // data, no extra lookups: tet_faces already holds the global face index.
+    face_tets.assign(faces.size(), FaceTets{});
+    for (std::size_t t = 0; t < tets.size(); ++t) {
+        for (int lf = 0; lf < 4; ++lf) {
+            FaceTets& ft = face_tets[static_cast<std::size_t>(tet_faces[t][static_cast<std::size_t>(lf)])];
+            if (ft.count < 2) ft.tets[static_cast<std::size_t>(ft.count)] = static_cast<int>(t);
+            ++ft.count;  // counted even past 2, so a non-manifold mesh is detectable
+        }
+    }
+}
+
+std::string Mesh::physical_name(int dimension, int tag) const {
+    for (const PhysicalName& p : physical_names) {
+        if (p.dimension == dimension && p.tag == tag) return p.name;
+    }
+    return std::string();
 }
 
 double Mesh::signed_tet_volume(int t) const {
