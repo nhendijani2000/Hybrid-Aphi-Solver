@@ -53,6 +53,26 @@ public:
 /// Throws GmshReadError on a missing file, an unsupported or missing
 /// `$MeshFormat`, a malformed or unterminated section, a duplicate node id,
 /// an element referencing an unknown node, or any validation failure above.
+///
+/// **Known gap (Sept 2026): this has never been run against a file produced
+/// by Gmsh itself.** Every mesh the solver has read so far was synthesised
+/// by this project's own tooling -- `tools/generate_cube_mesh.py`, the
+/// fixtures in `tests/test_gmsh_reader.cpp`, or a hand conversion. Gmsh is
+/// not installed on the development machine, so the format is implemented
+/// from the specification.
+///
+/// The fixtures deliberately cover the structures real Gmsh output has that
+/// a minimal spec-conforming file does not -- multi-block `$Nodes` (one
+/// block per geometric entity), `parametric` coordinate lines carrying
+/// extra u/u,v values, `$Entities` with trailing bounding-entity lists and
+/// negative orientation tags, entities with zero and with multiple physical
+/// tags, scientific-notation coordinates, and CRLF line endings. That
+/// closes "does the implementation match its design". It cannot close "is
+/// the design a correct reading of the format": only one real export can.
+/// Exporting any mesh from Gmsh as `Version 2 ASCII` or `Version 4.1 ASCII`
+/// and reading it is a worthwhile five-minute check before trusting this on
+/// a real geometry -- it will either pass or fail loudly, since the
+/// validation added here rejects a malformed result rather than proceeding.
 Mesh read_gmsh_msh(const std::string& path);
 
 }  // namespace aphi_solver

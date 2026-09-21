@@ -5,6 +5,7 @@
 // on a mesh that came through the file-parsing path, not just the
 // programmatically-built meshes in test_incidence.cpp.
 
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -196,6 +197,85 @@ const char* kDuplicateNodeIdMsh =
     "1 4 2 7 1 1 2 2 4\n"
     "$EndElements\n";
 
+// The same 5-node, 2-tet geometry again, but written the way Gmsh actually
+// emits 4.1 rather than in the simplest form that satisfies the spec. This
+// exercises the paths kSampleMsh41 does not:
+//
+//  - $Nodes split across FOUR entity blocks (a point, a curve, a surface, a
+//    volume) instead of one. Real Gmsh always blocks per geometric entity;
+//    a single-block fixture never tests the block loop at all.
+//  - parametric == 1 on the curve and surface blocks, so those coordinate
+//    lines carry extra u / u,v values after x y z that must be ignored.
+//  - $Entities with real bounding-entity lists trailing the physical tags,
+//    including negative tags (Gmsh's orientation convention), all of which
+//    must be read past.
+//  - An entity with ZERO physical tags (the common case when no physical
+//    group was defined) -> tag -1.
+//  - An entity with TWO physical tags (surface 2: 21 and 22) -> the first
+//    is taken.
+//  - Coordinates in scientific notation.
+//
+// Geometry and expected tags are identical to kSampleMsh41, so the two can
+// be compared rather than each just "not throwing".
+const char* kRealisticMsh41 =
+    "$MeshFormat\n"
+    "4.1 0 8\n"
+    "$EndMeshFormat\n"
+    "$PhysicalNames\n"
+    "4\n"
+    "3 7 \"via_conductor\"\n"
+    "3 8 \"fr4 dielectric\"\n"
+    "2 20 \"pec_wall\"\n"
+    "2 21 \"port 1\"\n"
+    "$EndPhysicalNames\n"
+    "$Entities\n"
+    "1 1 2 2\n"
+    // point 1: tag, x y z, numPhysicalTags = 0  (no physical group)
+    "1 0 0 0 0\n"
+    // curve 5: tag, bbox(6), numPhys = 0, numBoundingPoints = 2, tags (one negative)
+    "5 0 0 0 1 1 1 0 2 1 -1\n"
+    // surface 1: bbox, numPhys = 1 (20), numBoundingCurves = 3
+    "1 0 0 0 1 1 1 1 20 3 5 -5 5\n"
+    // surface 2: bbox, numPhys = 2 (21, 22 -> first wins), numBoundingCurves = 1
+    "2 0 0 0 1 1 1 2 21 22 1 5\n"
+    // volume 1: bbox, numPhys = 1 (7), numBoundingSurfaces = 2
+    "1 0 0 0 1 1 1 1 7 2 1 2\n"
+    // volume 2: bbox, numPhys = 1 (8), numBoundingSurfaces = 1
+    "2 0 0 0 1 1 1 1 8 1 1\n"
+    "$EndEntities\n"
+    "$Nodes\n"
+    "4 5 11 15\n"
+    // block 1: dim 0, entity 1, parametric 0, 1 node
+    "0 1 0 1\n"
+    "11\n"
+    "0 0 0\n"
+    // block 2: dim 1, entity 5, PARAMETRIC, 2 nodes -> x y z u
+    "1 5 1 2\n"
+    "12\n"
+    "13\n"
+    "1e+00 0 0 0.5\n"
+    "0 1.0e+00 0 0.75\n"
+    // block 3: dim 2, entity 1, PARAMETRIC, 1 node -> x y z u v
+    "2 1 1 1\n"
+    "14\n"
+    "0 0 1 0.25 0.5\n"
+    // block 4: dim 3, entity 1, parametric 0, 1 node
+    "3 1 0 1\n"
+    "15\n"
+    "1 1 1\n"
+    "$EndNodes\n"
+    "$Elements\n"
+    "4 4 1 4\n"
+    "2 1 2 1\n"
+    "1 12 13 14\n"
+    "2 2 2 1\n"
+    "2 11 12 13\n"
+    "3 1 4 1\n"
+    "3 11 12 13 14\n"
+    "3 2 4 1\n"
+    "4 12 13 14 15\n"
+    "$EndElements\n";
+
 const char* kMsh40 =
     "$MeshFormat\n"
     "4.0 0 8\n"
@@ -211,6 +291,21 @@ Mesh read_from_string(const std::string& contents, const std::string& path) {
     {
         std::ofstream out(path);
         out << contents;
+    }
+    Mesh m = aphi_solver::read_gmsh_msh(path);
+    std::remove(path.c_str());
+    return m;
+}
+
+// Writes the same content with CRLF line endings, as a .msh exported from
+// Gmsh on Windows would have.
+Mesh read_from_string_crlf(const std::string& contents, const std::string& path) {
+    {
+        std::ofstream out(path, std::ios::binary);
+        for (char ch : contents) {
+            if (ch == '\n') out << '\r';
+            out << ch;
+        }
     }
     Mesh m = aphi_solver::read_gmsh_msh(path);
     std::remove(path.c_str());
@@ -388,6 +483,50 @@ int main() {
         const auto g41 = aphi_solver::build_gradient_matrix(m41);
         const auto c41 = aphi_solver::build_curl_matrix(m41);
         check(c41.multiply(g41).is_zero(), "4.1: CG = 0 holds on the 4.1-parsed mesh");
+
+        // --- 4.1 as Gmsh actually writes it ---------------------------------
+        // Same geometry and tags, but multi-block $Nodes, parametric
+        // coordinates, real bounding-entity lists, an entity with no
+        // physical tags and one with two. Compared against the simple 4.1
+        // fixture rather than only checked for self-consistency.
+        const Mesh mr = read_from_string(kRealisticMsh41, "aphi_test_gmsh_v41r_tmp.msh");
+        check(mr.num_nodes() == 5 && mr.num_tets() == 2,
+              "4.1 realistic: multi-block $Nodes yields the same node and tet counts");
+        check(mr.num_edges() == m41.num_edges() && mr.num_faces() == m41.num_faces(),
+              "4.1 realistic: same derived topology as the single-block fixture");
+        check(mr.tet_tags.size() == 2 && mr.tet_tags[0] == 7 && mr.tet_tags[1] == 8,
+              "4.1 realistic: volume physical tags resolved past bounding-entity lists");
+        check(mr.tagged_boundary_faces.size() == 2 && mr.tagged_boundary_faces[0].tag == 20 &&
+                  mr.tagged_boundary_faces[1].tag == 21,
+              "4.1 realistic: surface with TWO physical tags resolves to the first (21, not 22)");
+
+        // The parametric blocks are the real trap: those coordinate lines
+        // carry u / u,v after x y z, so a reader that consumed the whole
+        // line would misplace every node on a curve or surface.
+        bool coords_match = true;
+        for (int i = 0; i < mr.num_nodes(); ++i) {
+            const aphi_solver::Vec3 a = mr.nodes[static_cast<std::size_t>(i)];
+            const aphi_solver::Vec3 b = m41.nodes[static_cast<std::size_t>(i)];
+            if (std::abs(a.x - b.x) > 1e-12 || std::abs(a.y - b.y) > 1e-12 ||
+                std::abs(a.z - b.z) > 1e-12) {
+                coords_match = false;
+            }
+        }
+        check(coords_match,
+              "4.1 realistic: parametric blocks and scientific notation give the same coordinates");
+
+        const auto gr = aphi_solver::build_gradient_matrix(mr);
+        const auto cr = aphi_solver::build_curl_matrix(mr);
+        check(cr.multiply(gr).is_zero(), "4.1 realistic: CG = 0");
+
+        // --- CRLF -----------------------------------------------------------
+        // A .msh exported from Gmsh on Windows has CRLF endings.
+        const Mesh mc = read_from_string_crlf(kRealisticMsh41, "aphi_test_gmsh_crlf_tmp.msh");
+        check(mc.num_nodes() == 5 && mc.num_tets() == 2 && mc.num_faces() == m41.num_faces(),
+              "CRLF line endings parse identically");
+        check(mc.tet_tags == mr.tet_tags, "CRLF: tags unaffected by line endings");
+        check(mc.physical_name(2, 21) == "port 1",
+              "CRLF: a quoted $PhysicalNames value keeps no trailing carriage return");
     }
 
     // A 2.2 file with no $PhysicalNames has none -- and that is not an error.
