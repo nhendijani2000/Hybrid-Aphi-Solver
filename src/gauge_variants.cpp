@@ -56,11 +56,17 @@ EssentialIncidenceMatrix compute_essential_incidence_matrix(const Mesh& mesh, co
     }
     result.num_free_groups = num_free;
 
+    // The unknowns are the cotree edges that are not on a Dirichlet
+    // (n x A = 0) surface: tree edges are the gauge, Dirichlet edges are
+    // fixed at zero by the boundary condition. Every Dirichlet edge joins two
+    // nodes of the same surface -- the same group -- so it has no row in the
+    // group-level incidence matrix, and dropping it changes nothing in F
+    // beyond removing its (empty) row.
     const int num_edges = mesh.num_edges();
     result.cotree_local_index.assign(static_cast<std::size_t>(num_edges), -1);
     int num_cotree = 0;
     for (int e = 0; e < num_edges; ++e) {
-        if (!tc.is_tree_edge[static_cast<std::size_t>(e)]) {
+        if (!tc.is_tree_edge[static_cast<std::size_t>(e)] && !tc.is_dirichlet_edge[static_cast<std::size_t>(e)]) {
             result.cotree_local_index[static_cast<std::size_t>(e)] = num_cotree++;
         }
     }
@@ -79,7 +85,7 @@ EssentialIncidenceMatrix compute_essential_incidence_matrix(const Mesh& mesh, co
     std::vector<int> sign(static_cast<std::size_t>(num_groups), 0);
     for (int g = 0; g < num_groups; ++g) {
         const int p = tc.parent_group[static_cast<std::size_t>(g)];
-        if (p == -1) continue;  // reference group: depth 0, never contributes a column
+        if (p == -1) continue;  // root group: depth 0, never contributes a column
         depth[static_cast<std::size_t>(g)] = depth[static_cast<std::size_t>(p)] + 1;
         const auto& e = mesh.edges[static_cast<std::size_t>(tc.discovering_edge[static_cast<std::size_t>(g)])];
         const int v = (tc.node_group[static_cast<std::size_t>(e.first)] == g) ? e.first : e.second;
@@ -94,8 +100,8 @@ EssentialIncidenceMatrix compute_essential_incidence_matrix(const Mesh& mesh, co
     // group. See EssentialIncidenceMatrix::F for the derivation.
     result.F = SparseMatrix(num_cotree, num_free);
     for (int e = 0; e < num_edges; ++e) {
-        if (tc.is_tree_edge[static_cast<std::size_t>(e)]) continue;
         const int row = result.cotree_local_index[static_cast<std::size_t>(e)];
+        if (row < 0) continue;  // tree or Dirichlet edge: not an unknown
         const auto& edge = mesh.edges[static_cast<std::size_t>(e)];
         int gi = tc.node_group[static_cast<std::size_t>(edge.first)];
         int gj = tc.node_group[static_cast<std::size_t>(edge.second)];
@@ -116,10 +122,11 @@ EssentialIncidenceMatrix compute_essential_incidence_matrix(const Mesh& mesh, co
                 gj = tc.parent_group[static_cast<std::size_t>(gj)];
             } else {
                 // Equal depth and still distinct. If both are roots, the two
-                // endpoints sit in different trees of the spanning FOREST
-                // (separately grounded PEC bodies) -- there is no common
-                // ancestor, nothing cancels, and both paths are already
-                // fully emitted.
+                // endpoints lie in different connected pieces of the mesh --
+                // each piece has its own root -- so there is no common
+                // ancestor, nothing cancels, and both paths are already fully
+                // emitted. (An edge cannot actually join two pieces, so this
+                // is a guard rather than a live case.)
                 if (tc.parent_group[static_cast<std::size_t>(gi)] == -1 ||
                     tc.parent_group[static_cast<std::size_t>(gj)] == -1) {
                     break;
@@ -158,7 +165,11 @@ GaugeIndexMap build_albanese_rubinacci_index_map(const std::vector<int>& a_dof_e
 
     for (int k = 0; k < num_a; ++k) {
         const int edge = a_dof_edge[static_cast<std::size_t>(k)];
-        if (tc.is_tree_edge[static_cast<std::size_t>(edge)]) continue;  // eliminated: a_t = 0
+        // Eliminated: a tree edge (the gauge, a_t = 0) or an edge on an
+        // n x A = 0 surface (the boundary condition). Both are fixed at zero.
+        if (tc.is_tree_edge[static_cast<std::size_t>(edge)] || tc.is_dirichlet_edge[static_cast<std::size_t>(edge)]) {
+            continue;
+        }
         map.full_to_reduced[static_cast<std::size_t>(k)] = static_cast<int>(map.reduced_to_full.size());
         map.reduced_to_full.push_back(k);
     }
@@ -215,11 +226,13 @@ GaugeVariant build_munteanu_unsymmetric_gauge(const SparseMatrix& M, const TreeC
     // tree row belonging to group g is minus F's column for that group,
     // which is one row of F^T -- so the whole tree part is just F
     // transposed, scattered to the discovering edges.
+    // Dirichlet edges -- surface tree edges included -- get no row at all:
+    // they are zero by the boundary condition, so they contribute nothing to
+    // the reconstructed field.
     SparseMatrix Lt(num_edges, num_cotree);
     for (int e = 0; e < num_edges; ++e) {
-        if (!tc.is_tree_edge[static_cast<std::size_t>(e)]) {
-            Lt.add(e, F.cotree_local_index[static_cast<std::size_t>(e)], 1.0);
-        }
+        const int c = F.cotree_local_index[static_cast<std::size_t>(e)];
+        if (c >= 0) Lt.add(e, c, 1.0);
     }
     const SparseMatrix Ft = F.F.transposed();  // num_free_groups x num_cotree
     const auto& ft_row_ptr = Ft.row_ptr();

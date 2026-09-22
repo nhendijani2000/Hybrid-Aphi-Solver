@@ -442,6 +442,14 @@ interest only if a future matched-second-order **A** is revisited (Phase
    connected components automatically (via UnionFind) and gives each
    distinct body its own reference group rather than merging them, per
    `tests/test_tree_cotree.cpp`'s disconnected-PEC-bodies test case.
+   **Superseded (Sept 2026) — this design was singular.** Giving each body
+   its own root leaves one null direction per extra body once `n×A = 0` is
+   imposed on them (measured: nullity 1 with two bodies on `cube_4`), and
+   its node-based grouping could merge a trace and a ground plane through a
+   single interior edge in a thin layer. It conflated two separate questions:
+   which conductors sit at which potential (Φ data, handled per surface in
+   the DOF map) and where the A-tree is rooted (the gauge, which needs one
+   root). Replaced by the boundary-first construction — Phase 03.5, step 7.
 5. **Build a mixed conductor/dielectric port test case early, and benchmark
    two gauge alternatives against it.** The standard tree-cotree recipe
    grounds the spanning tree through whole PEC bodies; a port face that is
@@ -653,6 +661,39 @@ have a settled type signature, so that phase is only about the weak form.
    `estimate_condition_number` exists twice with different types in
    different headers. Both are survivable today and actively confusing once
    step 2 makes the scalar type a template parameter.
+7. **Done (Sept 2026) — boundary-first tree-cotree with `n×A = 0` surfaces.**
+   Designed in `Claude outputs/tree_cotree_boundary_first_proposal.md` from
+   two measured failures of simpler trees on `cube_4`:
+   - a plain spanning tree that ignores the Dirichlet surfaces reaches them
+     from inside at many points, closing loops of zero-A edges that pin the
+     magnetic flux through them — B wrong by **26–36 %**, with no error
+     raised, because the matrix stays non-singular;
+   - one root per surface (the step-4 design above) leaves a null
+     direction per extra surface — a **singular** matrix.
+
+   The construction: a spanning tree of each Dirichlet surface first, using
+   only edges lying on it; then one interior tree from a single root per
+   connected mesh piece, entering every other surface exactly once. Every
+   node stays individual — nothing is collapsed, and conductivity plays no
+   part, so a conductor's interior is ordinary nodes and edges. Surfaces are
+   found by union-find over edges *on* Dirichlet faces only, which keeps two
+   surfaces separated by a thin layer apart. `build_tree_cotree(mesh,
+   dirichlet_edge_mask)` replaces the node-based `is_pec` signature;
+   `boundary_edge_mask` and `tagged_face_edge_mask` build the mask. Both
+   gauge methods now eliminate Dirichlet edges alongside tree edges; Method D
+   needed only its cotree selection and identity rows adjusted, because each
+   surface is one group in the group-tree view its cycle walk uses.
+   Verified: nullity 0 and exact recovery of B (error < 1e-10) for both
+   methods with the whole boundary, two separate faces, and a one-cell-thick
+   layer; a negative control confirms the B check fails if even one extra
+   edge is eliminated; temporarily restoring one-root-per-surface fails 5
+   checks. On the coax the construction yields exactly **27,732** free A
+   unknowns (4,242 interior tree edges), the count the port plan predicted
+   beforehand; with no Dirichlet surface the tree is identical to before
+   (`compare_gauges` reproduces κ 629.818 / 152.811 on `cube_4`). One data
+   point for the Phase 05 gauge re-run: with `n×A = 0` on the boundary of
+   `cube_4`, κ_D/κ_A rises from 0.24 to 0.68 — Method D's edge shrinks
+   further once a real boundary condition is present.
 
 **Ready for 04 when:** a complex sparse matrix can be built, compressed,
 multiplied by a vector and exported as triplets; `APhiBlockSystem` holds

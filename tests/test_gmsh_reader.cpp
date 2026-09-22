@@ -377,8 +377,9 @@ int main() {
 
         // Every tagged triangle in this mesh is a real face of a tet, so it
         // must resolve against the topology derived from the tets. This is
-        // what makes the tags usable: Phase 04 derives is_pec from the nodes
-        // of faces tagged "pec", and Phase 07's ABC needs the face indices
+        // what makes the tags usable: the Dirichlet edge mask for the
+        // tree-cotree gauge is built from the edges of tagged faces
+        // (tagged_face_edge_mask), and Phase 07's ABC needs the face indices
         // themselves.
         const int i0 = m.find_face(f0.nodes[0], f0.nodes[1], f0.nodes[2]);
         const int i1 = m.find_face(f1.nodes[0], f1.nodes[1], f1.nodes[2]);

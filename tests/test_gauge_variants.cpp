@@ -6,6 +6,7 @@
 // condensation properties"), built on top of Phase 03 step 1's spanning-tree
 // decomposition, plus the crude power-iteration condition-number estimate.
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -151,8 +152,7 @@ void run_condition_number_analytic_checks() {
 //    all, which is what lets one reduction serve both.
 void test_coupled_system_reduction() {
     const Mesh mesh = make_two_tets_sharing_a_face();
-    const std::vector<bool> is_pec(static_cast<std::size_t>(mesh.num_nodes()), false);
-    const TreeCotreeResult tc = build_tree_cotree(mesh, is_pec);
+    const TreeCotreeResult tc = build_tree_cotree(mesh, std::vector<bool>(static_cast<std::size_t>(mesh.num_edges()), false));
 
     // Drop edge 0 from the unknown set, standing in for a PEC tangential
     // edge: A-DOFs are now a strict subset of the mesh's edges.
@@ -250,6 +250,208 @@ void test_coupled_system_reduction() {
     check(eliminated_are_zero, "coupled: eliminated tree-edge entries expand to exactly zero (a_t = 0)");
 }
 
+// --- Gauge correctness with n x A = 0 surfaces ------------------------------
+//
+// The boundary-first construction (`Claude outputs/
+// tree_cotree_boundary_first_proposal.md`) exists because two simpler trees
+// fail here, in opposite ways: a plain spanning tree ignoring the surfaces
+// over-constrains (B wrong by 26-36 % on cube_4, with no error raised), and
+// one root per surface under-constrains (a singular matrix). The two checks
+// below catch both: nullity 0 rules out the second, and exact recovery of B
+// for an arbitrary admissible field rules out the first.
+
+Mesh make_kuhn_cube(int n) {
+    Mesh m;
+    const int s = n + 1;
+    auto id = [s](int i, int j, int k) { return i + s * j + s * s * k; };
+    for (int k = 0; k <= n; ++k)
+        for (int j = 0; j <= n; ++j)
+            for (int i = 0; i <= n; ++i) m.nodes.emplace_back(i, j, k);
+    const int kuhn[6][4][3] = {{{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}, {{0, 0, 0}, {1, 1, 0}, {0, 1, 0}, {1, 1, 1}},
+                               {{0, 0, 0}, {0, 1, 0}, {0, 1, 1}, {1, 1, 1}}, {{0, 0, 0}, {0, 1, 1}, {0, 0, 1}, {1, 1, 1}},
+                               {{0, 0, 0}, {0, 0, 1}, {1, 0, 1}, {1, 1, 1}}, {{0, 0, 0}, {1, 0, 1}, {1, 0, 0}, {1, 1, 1}}};
+    for (int k = 0; k < n; ++k)
+        for (int j = 0; j < n; ++j)
+            for (int i = 0; i < n; ++i)
+                for (const auto& t : kuhn) {
+                    m.tets.push_back({id(i + t[0][0], j + t[0][1], k + t[0][2]), id(i + t[1][0], j + t[1][1], k + t[1][2]),
+                                      id(i + t[2][0], j + t[2][1], k + t[2][2]), id(i + t[3][0], j + t[3][1], k + t[3][2])});
+                }
+    m.build_topology();
+    return m;
+}
+
+std::vector<bool> plane_face_mask(const Mesh& m, int axis, double value) {
+    std::vector<bool> mask(static_cast<std::size_t>(m.num_edges()), false);
+    for (int f = 0; f < m.num_faces(); ++f) {
+        if (!m.is_boundary_face(f)) continue;
+        const auto& v = m.faces[static_cast<std::size_t>(f)];
+        bool in_plane = true;
+        for (int a = 0; a < 3; ++a) {
+            const Vec3& p = m.nodes[static_cast<std::size_t>(v[a])];
+            in_plane = in_plane && (axis == 0 ? p.x : (axis == 1 ? p.y : p.z)) == value;
+        }
+        if (!in_plane) continue;
+        mask[static_cast<std::size_t>(m.find_edge(v[0], v[1]))] = true;
+        mask[static_cast<std::size_t>(m.find_edge(v[1], v[2]))] = true;
+        mask[static_cast<std::size_t>(m.find_edge(v[0], v[2]))] = true;
+    }
+    return mask;
+}
+
+// Rank deficiency by dense Gaussian elimination with complete pivoting. On
+// these matrices the dropped pivots sit near 1e-14 and the kept ones above
+// 0.05, so a relative threshold of 1e-10 separates them unambiguously.
+int dense_nullity(std::vector<std::vector<double>> A) {
+    const int n = static_cast<int>(A.size());
+    if (n == 0) return 0;
+    std::vector<double> pivots;
+    for (int k = 0; k < n; ++k) {
+        int pr = k, pc = k;
+        double best = 0.0;
+        for (int i = k; i < n; ++i)
+            for (int j = k; j < n; ++j)
+                if (std::abs(A[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]) > best) {
+                    best = std::abs(A[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]);
+                    pr = i;
+                    pc = j;
+                }
+        pivots.push_back(best);
+        if (best == 0.0) break;
+        std::swap(A[static_cast<std::size_t>(k)], A[static_cast<std::size_t>(pr)]);
+        for (auto& row : A) std::swap(row[static_cast<std::size_t>(k)], row[static_cast<std::size_t>(pc)]);
+        for (int i = k + 1; i < n; ++i) {
+            const double f = A[static_cast<std::size_t>(i)][static_cast<std::size_t>(k)] /
+                             A[static_cast<std::size_t>(k)][static_cast<std::size_t>(k)];
+            if (f == 0.0) continue;
+            for (int j = k; j < n; ++j) {
+                A[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] -=
+                    f * A[static_cast<std::size_t>(k)][static_cast<std::size_t>(j)];
+            }
+        }
+    }
+    int nullity = n - static_cast<int>(pivots.size());
+    for (double p : pivots) {
+        if (p <= 1e-10 * pivots.front()) ++nullity;
+    }
+    return nullity;
+}
+
+void check_gauge_with_dirichlet(const Mesh& mesh, const std::vector<bool>& dirichlet, const std::string& label) {
+    const int num_edges = mesh.num_edges();
+    const TreeCotreeResult tc = build_tree_cotree(mesh, dirichlet);
+    const SparseMatrix C = build_curl_matrix(mesh);
+    const SparseMatrix M = C.transposed().multiply(C);
+
+    int num_dirichlet = 0;
+    for (bool d : dirichlet) num_dirichlet += d ? 1 : 0;
+    const int expected_free = num_edges - num_dirichlet - tc.interior_tree_edge_count;
+
+    // An arbitrary field that satisfies the boundary condition: zero on every
+    // Dirichlet edge, anything elsewhere. j = M z is then a consistent
+    // right-hand side, and any correct gauge must return a field with z's
+    // curl -- the same B -- whatever A it picks.
+    std::vector<double> z(static_cast<std::size_t>(num_edges), 0.0);
+    for (int e = 0; e < num_edges; ++e) {
+        if (!dirichlet[static_cast<std::size_t>(e)]) z[static_cast<std::size_t>(e)] = std::sin(1.7 * e + 0.3);
+    }
+    const std::vector<double> j = M.matvec(z);
+    const std::vector<double> curl_z = C.matvec(z);
+    auto relative_curl_error = [&](const std::vector<double>& a) {
+        const std::vector<double> curl_a = C.matvec(a);
+        double num = 0.0, den = 0.0;
+        for (std::size_t f = 0; f < curl_z.size(); ++f) {
+            num += (curl_a[f] - curl_z[f]) * (curl_a[f] - curl_z[f]);
+            den += curl_z[f] * curl_z[f];
+        }
+        return std::sqrt(num / den);
+    };
+
+    // Method A.
+    const GaugeVariant gauge_a = build_albanese_rubinacci_gauge(M, tc);
+    check(gauge_a.reduced_matrix.rows() == expected_free,
+          label + ": Method A keeps exactly edges - Dirichlet - interior tree unknowns");
+    const auto a_dense = gauge_a.reduced_matrix.to_dense();
+    const int nullity_a = dense_nullity(a_dense);
+    check(nullity_a == 0, label + ": Method A reduced matrix has nullity 0 (gauge complete)");
+    if (nullity_a != 0) return;  // singular: nothing further can be solved
+    const std::vector<double> a_c = dense_solve(a_dense, select_cotree_entries(j, gauge_a.cotree_local_index));
+    const std::vector<double> a_full = recover_albanese_rubinacci_solution(a_c, gauge_a, num_edges);
+    check(relative_curl_error(a_full) < 1e-10,
+          label + ": Method A recovers B exactly (gauge not over-constrained)");
+    bool dirichlet_zero = true;
+    for (int e = 0; e < num_edges; ++e) {
+        if (dirichlet[static_cast<std::size_t>(e)] && a_full[static_cast<std::size_t>(e)] != 0.0) dirichlet_zero = false;
+    }
+    check(dirichlet_zero, label + ": Method A leaves every Dirichlet edge at exactly zero");
+
+    // The B-recovery check must be able to FAIL: eliminate just one more free
+    // edge -- a constraint that is not a gauge -- and B must come out wrong.
+    // Without this, "error < 1e-10" could pass merely because the check is
+    // blind. (The plain spanning tree this construction replaces
+    // over-constrains the same way, with 37-43 extra edges on cube_4.)
+    {
+        GaugeIndexMap over;
+        std::vector<int> identity(static_cast<std::size_t>(num_edges));
+        for (int e = 0; e < num_edges; ++e) identity[static_cast<std::size_t>(e)] = e;
+        over = build_albanese_rubinacci_index_map(identity, 0, tc);
+        int extra = -1;
+        for (int e = 0; e < num_edges && extra < 0; ++e) {
+            if (over.full_to_reduced[static_cast<std::size_t>(e)] >= 0) extra = e;
+        }
+        std::vector<int> kept;
+        for (int e = 0; e < num_edges; ++e) {
+            if (over.full_to_reduced[static_cast<std::size_t>(e)] >= 0 && e != extra) kept.push_back(e);
+        }
+        std::vector<int> f2r(static_cast<std::size_t>(num_edges), -1);
+        for (std::size_t k = 0; k < kept.size(); ++k) f2r[static_cast<std::size_t>(kept[k])] = static_cast<int>(k);
+        const auto R = M.principal_submatrix(f2r, static_cast<int>(kept.size())).to_dense();
+        std::vector<double> rhs(kept.size());
+        for (std::size_t k = 0; k < kept.size(); ++k) rhs[k] = j[static_cast<std::size_t>(kept[k])];
+        const std::vector<double> sol = dense_solve(R, rhs);
+        std::vector<double> a_over(static_cast<std::size_t>(num_edges), 0.0);
+        for (std::size_t k = 0; k < kept.size(); ++k) a_over[static_cast<std::size_t>(kept[k])] = sol[k];
+        check(relative_curl_error(a_over) > 1e-3,
+              label + ": negative control -- one extra eliminated edge visibly corrupts B");
+    }
+
+    // Method D.
+    const EssentialIncidenceMatrix F = compute_essential_incidence_matrix(mesh, tc);
+    check(F.num_cotree_edges == expected_free, label + ": Method D has the same unknowns as Method A");
+    const GaugeVariant gauge_d = build_munteanu_unsymmetric_gauge(M, tc, F);
+    const auto d_dense = gauge_d.reduced_matrix.to_dense();
+    const int nullity_d = dense_nullity(d_dense);
+    check(nullity_d == 0, label + ": Method D reduced matrix has nullity 0");
+    if (nullity_d != 0) return;
+    const std::vector<double> d_c = dense_solve(d_dense, select_cotree_entries(j, gauge_d.cotree_local_index));
+    const std::vector<double> d_full = recover_munteanu_unsymmetric_solution(d_c, gauge_d, F, tc, num_edges);
+    check(relative_curl_error(d_full) < 1e-10, label + ": Method D recovers B exactly");
+}
+
+void test_gauges_with_dirichlet_surfaces() {
+    {
+        const Mesh m = make_kuhn_cube(3);
+        check_gauge_with_dirichlet(m, boundary_edge_mask(m), "cube n=3, n x A = 0 on the whole boundary");
+    }
+    {
+        // Two separate surfaces: the case the previous one-root-per-body tree
+        // left singular.
+        const Mesh m = make_kuhn_cube(3);
+        std::vector<bool> mask = plane_face_mask(m, 0, 0.0);
+        const std::vector<bool> other = plane_face_mask(m, 0, 3.0);
+        for (std::size_t e = 0; e < mask.size(); ++e) mask[e] = mask[e] || other[e];
+        check_gauge_with_dirichlet(m, mask, "cube n=3, two separate Dirichlet faces");
+    }
+    {
+        // One cell thick, both faces Dirichlet, interior edges joining them.
+        const Mesh m = make_kuhn_cube(1);
+        std::vector<bool> mask = plane_face_mask(m, 2, 0.0);
+        const std::vector<bool> other = plane_face_mask(m, 2, 1.0);
+        for (std::size_t e = 0; e < mask.size(); ++e) mask[e] = mask[e] || other[e];
+        check_gauge_with_dirichlet(m, mask, "thin layer, both faces Dirichlet");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -261,11 +463,12 @@ int main() {
         const Mesh& mesh = mesh_case.second;
         const int num_edges = mesh.num_edges();
 
-        std::vector<bool> is_pec(static_cast<std::size_t>(mesh.num_nodes()), false);
-        const TreeCotreeResult tc = build_tree_cotree(mesh, is_pec);
+        const TreeCotreeResult tc =
+            build_tree_cotree(mesh, std::vector<bool>(static_cast<std::size_t>(num_edges), false));
         const EssentialIncidenceMatrix F = compute_essential_incidence_matrix(mesh, tc);
 
-        check(F.num_free_groups == tc.tree_edge_count, label + ": F's free-group count matches the tree edge count");
+        check(F.num_free_groups == tc.interior_tree_edge_count,
+              label + ": F's free-group count matches the interior tree edge count");
         check(F.num_cotree_edges == num_edges - tc.tree_edge_count, label + ": F's cotree count matches num_edges - tree_edge_count");
 
         const SparseMatrix M = build_test_M(mesh);
@@ -348,6 +551,7 @@ int main() {
     }
 
     test_coupled_system_reduction();
+    test_gauges_with_dirichlet_surfaces();
 
     std::cout << g_checks - g_failures << "/" << g_checks << " checks passed.\n";
     return g_failures == 0 ? 0 : 1;

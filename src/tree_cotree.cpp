@@ -1,7 +1,8 @@
 #include "aphi_solver/tree_cotree.hpp"
 
+#include <algorithm>
 #include <stdexcept>
-#include <unordered_map>
+#include <string>
 #include <utility>
 
 namespace aphi_solver {
@@ -84,143 +85,197 @@ void UnionFind::unite(int a, int b) {
     }
 }
 
-TreeCotreeResult build_tree_cotree(const Mesh& mesh, const std::vector<bool>& is_pec) {
+
+TreeCotreeResult build_tree_cotree(const Mesh& mesh, const std::vector<bool>& dirichlet_edge) {
     const int n = mesh.num_nodes();
-    if (static_cast<int>(is_pec.size()) != n) {
-        throw std::invalid_argument("build_tree_cotree: is_pec must have one entry per mesh node");
+    const int m = mesh.num_edges();
+    if (static_cast<int>(dirichlet_edge.size()) != m) {
+        throw std::invalid_argument("build_tree_cotree: dirichlet_edge must have one entry per mesh edge");
     }
 
     TreeCotreeResult result;
     result.node_group.assign(static_cast<std::size_t>(n), -1);
-    result.is_tree_edge.assign(static_cast<std::size_t>(mesh.num_edges()), false);
-    // parent_group / discovering_edge are indexed by GROUP id, so they grow
-    // as groups are discovered below rather than being pre-sized to `n`
-    // (the final size is result.num_groups, not the mesh node count).
-    result.parent_group.clear();
-    result.discovering_edge.clear();
+    result.is_tree_edge.assign(static_cast<std::size_t>(m), false);
+    result.is_dirichlet_edge = dirichlet_edge;
+    result.dirichlet_component.assign(static_cast<std::size_t>(n), -1);
     if (n == 0) {
         return result;
     }
 
     const NodeAdjacency adj = NodeAdjacency::build(mesh);
+
+    // Step 1: Dirichlet surfaces are the connected components of the graph
+    // made of Dirichlet edges only. Unioning along edges that lie ON a
+    // surface -- never along an edge merely because both endpoints touch
+    // one -- is what keeps two surfaces separated by a thin layer separate.
+    UnionFind uf(n);
+    std::vector<bool> on_surface(static_cast<std::size_t>(n), false);
+    for (int e = 0; e < m; ++e) {
+        if (!dirichlet_edge[static_cast<std::size_t>(e)]) continue;
+        const auto& [i, j] = mesh.edges[static_cast<std::size_t>(e)];
+        uf.unite(i, j);
+        on_surface[static_cast<std::size_t>(i)] = true;
+        on_surface[static_cast<std::size_t>(j)] = true;
+    }
+    // Component ids in order of each surface's lowest-numbered node, so
+    // component 0 always holds the lowest Dirichlet node -- a deterministic
+    // root choice.
+    std::vector<int> component_of_root(static_cast<std::size_t>(n), -1);
+    int num_components = 0;
+    int surface_nodes = 0;
+    for (int i = 0; i < n; ++i) {
+        if (!on_surface[static_cast<std::size_t>(i)]) continue;
+        ++surface_nodes;
+        int& c = component_of_root[static_cast<std::size_t>(uf.find(i))];
+        if (c == -1) c = num_components++;
+        result.dirichlet_component[static_cast<std::size_t>(i)] = c;
+    }
+    result.num_dirichlet_components = num_components;
+    std::vector<std::vector<int>> members(static_cast<std::size_t>(num_components));
+    for (int i = 0; i < n; ++i) {
+        const int c = result.dirichlet_component[static_cast<std::size_t>(i)];
+        if (c >= 0) members[static_cast<std::size_t>(c)].push_back(i);
+    }
+
+    // Step 2: a spanning tree of each surface, from Dirichlet edges only.
+    // These edges are zero anyway by n x A = 0; building the surface tree
+    // FIRST is what guarantees the interior tree can never close a loop of
+    // zero-A edges through the surface (which would pin the magnetic flux
+    // through that loop to zero -- a physical constraint, not a gauge).
+    int surface_tree_edges = 0;
+    {
+        std::vector<bool> seen(static_cast<std::size_t>(n), false);
+        std::vector<int> queue;
+        for (int c = 0; c < num_components; ++c) {
+            const int start = members[static_cast<std::size_t>(c)].front();
+            seen[static_cast<std::size_t>(start)] = true;
+            queue.assign(1, start);
+            for (std::size_t head = 0; head < queue.size(); ++head) {
+                const int u = queue[head];
+                for (int k = adj.offset[static_cast<std::size_t>(u)]; k < adj.offset[static_cast<std::size_t>(u) + 1]; ++k) {
+                    const int e = adj.edge_index[static_cast<std::size_t>(k)];
+                    const int v = adj.neighbor[static_cast<std::size_t>(k)];
+                    if (!dirichlet_edge[static_cast<std::size_t>(e)] || seen[static_cast<std::size_t>(v)]) continue;
+                    seen[static_cast<std::size_t>(v)] = true;
+                    result.is_tree_edge[static_cast<std::size_t>(e)] = true;
+                    ++surface_tree_edges;
+                    queue.push_back(v);
+                }
+            }
+        }
+    }
+
+    // Step 3: the interior tree, grown breadth-first from ONE root per
+    // connected mesh piece. Reaching a node on a not-yet-entered surface
+    // takes that whole surface as one group, through that one edge -- so no
+    // surface is entered twice, and no surface is a second root (which would
+    // leave a null direction). With no Dirichlet surface at all this is the
+    // classical construction, rooted at node 0, visiting nodes in the same
+    // order as before.
     std::vector<bool> visited(static_cast<std::size_t>(n), false);
     std::vector<int> queue;
     queue.reserve(static_cast<std::size_t>(n));
+    int next_group = 0;
+    int num_roots = 0;
+    int interior_tree_edges = 0;
 
-    int next_group_id = 0;
-    int num_reference_groups = 0;
-
-    // Step 1 (Lee, Lee & Lee 2003 Sec. V, Algorithm 1's PEC handling):
-    // union any two PEC-tagged nodes joined by an edge whose both endpoints
-    // are PEC-tagged, so electrically-connected PEC surfaces are discovered
-    // as a single body automatically rather than assumed by the caller.
-    UnionFind uf(n);
-    for (const auto& e : mesh.edges) {
-        if (is_pec[static_cast<std::size_t>(e.first)] && is_pec[static_cast<std::size_t>(e.second)]) {
-            uf.unite(e.first, e.second);
-        }
-    }
-
-    // Step 2: one DOF group per distinct PEC body (per docs/ROADMAP.md Phase
-    // 03 step 4 -- separate bodies stay separate, never merged into one
-    // global ground), seeding the BFS frontier with every PEC-tagged node.
-    std::unordered_map<int, int> body_group;
-    bool any_pec = false;
-    for (int i = 0; i < n; ++i) {
-        if (!is_pec[static_cast<std::size_t>(i)]) continue;
-        any_pec = true;
-        const int root = uf.find(i);
-        auto it = body_group.find(root);
-        int gid;
-        if (it == body_group.end()) {
-            gid = next_group_id++;
-            body_group.emplace(root, gid);
-            ++num_reference_groups;
-            result.parent_group.push_back(-1);
-            result.discovering_edge.push_back(-1);
+    auto take_group = [&](int node, int parent, int edge) {
+        const int g = next_group++;
+        result.parent_group.push_back(parent);
+        result.discovering_edge.push_back(edge);
+        const int c = result.dirichlet_component[static_cast<std::size_t>(node)];
+        if (c >= 0) {
+            for (int w : members[static_cast<std::size_t>(c)]) {
+                result.node_group[static_cast<std::size_t>(w)] = g;
+                visited[static_cast<std::size_t>(w)] = true;
+                queue.push_back(w);
+            }
         } else {
-            gid = it->second;
+            result.node_group[static_cast<std::size_t>(node)] = g;
+            visited[static_cast<std::size_t>(node)] = true;
+            queue.push_back(node);
         }
-        result.node_group[static_cast<std::size_t>(i)] = gid;
-        visited[static_cast<std::size_t>(i)] = true;
-        queue.push_back(i);
-    }
+    };
 
-    // Step 3 (Algorithm 1's fallback, steps 11-12 in the paper): if the mesh
-    // has no PEC-tagged nodes at all, an arbitrary single node still needs
-    // to be fixed as a reference, or the whole system stays gauge-free (an
-    // all-cotree assignment with every node in its own ungrounded group,
-    // which leaves the eventual A-Phi system singular).
-    if (!any_pec) {
-        result.node_group[0] = next_group_id++;
-        visited[0] = true;
-        queue.push_back(0);
-        ++num_reference_groups;
-        result.parent_group.push_back(-1);
-        result.discovering_edge.push_back(-1);
-    }
-
-    // Step 4: Algorithm 1 (node numbering) and Algorithm 2 (tree/cotree edge
-    // marking) fused into one breadth-first traversal -- a node's group id
-    // is assigned in the same step that discovers the tree edge it was
-    // first reached through, rather than running the two as separate graph
-    // passes (see the header comment on build_tree_cotree). `queue` is
-    // grown in place and read by index rather than popped from the front,
-    // so this is a plain O(V+E) scan with no per-node deque overhead.
     std::size_t head = 0;
-    auto drain_queue = [&]() {
+    auto drain = [&]() {
         while (head < queue.size()) {
             const int u = queue[head++];
             for (int k = adj.offset[static_cast<std::size_t>(u)]; k < adj.offset[static_cast<std::size_t>(u) + 1]; ++k) {
                 const int v = adj.neighbor[static_cast<std::size_t>(k)];
                 if (visited[static_cast<std::size_t>(v)]) continue;
-                visited[static_cast<std::size_t>(v)] = true;
-                result.node_group[static_cast<std::size_t>(v)] = next_group_id++;
-                result.is_tree_edge[static_cast<std::size_t>(adj.edge_index[static_cast<std::size_t>(k)])] = true;
-                result.parent_group.push_back(result.node_group[static_cast<std::size_t>(u)]);
-                result.discovering_edge.push_back(adj.edge_index[static_cast<std::size_t>(k)]);
-                queue.push_back(v);
+                const int e = adj.edge_index[static_cast<std::size_t>(k)];
+                // An edge into an unvisited node cannot lie on a surface: a
+                // surface is always taken whole, so both ends of any of its
+                // edges are visited together.
+                if (dirichlet_edge[static_cast<std::size_t>(e)]) {
+                    throw std::logic_error("build_tree_cotree: interior tree tried to use a Dirichlet edge");
+                }
+                result.is_tree_edge[static_cast<std::size_t>(e)] = true;
+                ++interior_tree_edges;
+                take_group(v, result.node_group[static_cast<std::size_t>(u)], e);
             }
         }
     };
-    drain_queue();
 
-    // Step 5: any mesh nodes still unvisited belong to a connected component
-    // with no PEC-tagged node of its own -- not handled by the literal
-    // per-node catch-up in the paper's Algorithm 1 steps 11-13, but the
-    // correct generalization for an arbitrary (possibly disconnected) mesh
-    // graph: each such component needs its own fallback reference root and
-    // its own spanning tree, exactly like step 3 above.
+    take_group(num_components > 0 ? members.front().front() : 0, -1, -1);
+    ++num_roots;
+    drain();
     for (int start = 0; start < n; ++start) {
         if (visited[static_cast<std::size_t>(start)]) continue;
-        result.node_group[static_cast<std::size_t>(start)] = next_group_id++;
-        visited[static_cast<std::size_t>(start)] = true;
-        ++num_reference_groups;
-        result.parent_group.push_back(-1);
-        result.discovering_edge.push_back(-1);
-        queue.push_back(start);
-        drain_queue();
+        take_group(start, -1, -1);  // a further connected piece of the mesh
+        ++num_roots;
+        drain();
     }
 
-    result.num_reference_groups = num_reference_groups;
-    result.num_groups = next_group_id;
+    result.num_reference_groups = num_roots;
+    result.num_groups = next_group;
+    result.surface_tree_edge_count = surface_tree_edges;
+    result.interior_tree_edge_count = interior_tree_edges;
+    result.tree_edge_count = surface_tree_edges + interior_tree_edges;
 
-    int tree_edge_count = 0;
-    for (bool b : result.is_tree_edge) {
-        if (b) ++tree_edge_count;
+    // Self-checks. Together they say: this is a genuine spanning tree over
+    // every node (one per mesh piece), each surface is spanned by its own
+    // edges, and the interior part adds exactly one edge per group beyond
+    // the roots.
+    if (surface_tree_edges != surface_nodes - num_components) {
+        throw std::logic_error("build_tree_cotree: surface tree does not span each surface");
     }
-    result.tree_edge_count = tree_edge_count;
-
-    // Self-check: generalizes Lee, Lee & Lee (2003)'s stated invariant
-    // ("the number of tree edges is exactly the same as the number of
-    // unknowns... numbered in Algorithm 1") to this project's
-    // multiple-reference-group construction -- one new tree edge is created
-    // for every node discovered beyond the initial reference roots.
-    if (result.tree_edge_count != result.num_groups - result.num_reference_groups) {
-        throw std::logic_error("build_tree_cotree: tree edge count / group count invariant violated");
+    if (interior_tree_edges != result.num_groups - result.num_reference_groups) {
+        throw std::logic_error("build_tree_cotree: interior tree edge / group count invariant violated");
     }
-
+    if (result.tree_edge_count != n - result.num_reference_groups) {
+        throw std::logic_error("build_tree_cotree: tree is not a spanning tree over all nodes");
+    }
     return result;
+}
+
+std::vector<bool> boundary_edge_mask(const Mesh& mesh) {
+    std::vector<bool> mask(static_cast<std::size_t>(mesh.num_edges()), false);
+    for (int f = 0; f < mesh.num_faces(); ++f) {
+        if (!mesh.is_boundary_face(f)) continue;
+        const auto& v = mesh.faces[static_cast<std::size_t>(f)];
+        mask[static_cast<std::size_t>(mesh.find_edge(v[0], v[1]))] = true;
+        mask[static_cast<std::size_t>(mesh.find_edge(v[1], v[2]))] = true;
+        mask[static_cast<std::size_t>(mesh.find_edge(v[0], v[2]))] = true;
+    }
+    return mask;
+}
+
+std::vector<bool> tagged_face_edge_mask(const Mesh& mesh, const std::vector<int>& tags) {
+    std::vector<bool> mask(static_cast<std::size_t>(mesh.num_edges()), false);
+    for (const TaggedFace& tf : mesh.tagged_boundary_faces) {
+        if (std::find(tags.begin(), tags.end(), tf.tag) == tags.end()) continue;
+        const auto& v = tf.nodes;
+        if (mesh.find_face(v[0], v[1], v[2]) < 0) {
+            throw std::invalid_argument("tagged_face_edge_mask: a triangle tagged " + std::to_string(tf.tag) +
+                                        " is not a face of the tet mesh");
+        }
+        mask[static_cast<std::size_t>(mesh.find_edge(v[0], v[1]))] = true;
+        mask[static_cast<std::size_t>(mesh.find_edge(v[1], v[2]))] = true;
+        mask[static_cast<std::size_t>(mesh.find_edge(v[0], v[2]))] = true;
+    }
+    return mask;
 }
 
 }  // namespace aphi_solver

@@ -3,7 +3,8 @@
 // only the tiny hand-built meshes in tests/test_gauge_variants.cpp.
 //
 // Usage:
-//   compare_gauges <mesh.msh> [--gauge=A|D|both] [--pec-nodes=i,j,k,...] [--skip-kappa]
+//   compare_gauges <mesh.msh> [--gauge=A|D|both] [--dirichlet=none|boundary]
+//                  [--dirichlet-tags=10,11,...] [--skip-kappa] [--force-kappa]
 //
 // M = C^T * C (vacuum, nu = 1) is used as the test matrix, exactly as
 // tests/test_gauge_variants.cpp already does -- there is no real assembly
@@ -67,11 +68,15 @@ namespace {
 constexpr int kKappaGuardDofs = 2000;
 
 void print_usage(const char* argv0) {
-    std::cerr << "Usage: " << argv0 << " <mesh.msh> [--gauge=A|D|both] [--pec-nodes=i,j,k,...] [--skip-kappa]\n\n"
+    std::cerr << "Usage: " << argv0
+              << " <mesh.msh> [--gauge=A|D|both] [--dirichlet=none|boundary] [--dirichlet-tags=LIST] [--skip-kappa]\n\n"
               << "  --gauge=A|D|both   Which gauge variant(s) to build and report (default: both)\n"
-              << "  --pec-nodes=LIST   Comma-separated 0-based node indices to tag as PEC\n"
-              << "                     (default: none -- a single reference node is picked\n"
-              << "                     automatically, per build_tree_cotree's no-PEC fallback)\n"
+              << "  --dirichlet=none|boundary\n"
+              << "                     n x A = 0 on nothing (default), or on the whole outer\n"
+              << "                     boundary -- every edge of every face with one adjacent tet\n"
+              << "  --dirichlet-tags=LIST\n"
+              << "                     n x A = 0 on the tagged surface triangles with these\n"
+              << "                     physical tags (comma-separated); combines with --dirichlet\n"
               << "  --skip-kappa       Skip the condition-number estimate (CG-based power\n"
               << "                     iteration) and report only structural stats -- reduced\n"
               << "                     size, nonzeros, fill-in. Use this on large meshes where\n"
@@ -93,7 +98,8 @@ struct Args {
     bool want_d = true;
     bool skip_kappa = false;
     bool force_kappa = false;
-    std::vector<int> pec_nodes;
+    bool dirichlet_boundary = false;
+    std::vector<int> dirichlet_tags;
 };
 
 std::vector<int> parse_int_list(const std::string& s) {
@@ -127,8 +133,17 @@ Args parse_args(int argc, char** argv) {
             } else {
                 throw std::runtime_error("unrecognized --gauge value: " + v + " (expected A, D, or both)");
             }
-        } else if (a.rfind("--pec-nodes=", 0) == 0) {
-            args.pec_nodes = parse_int_list(a.substr(12));
+        } else if (a.rfind("--dirichlet=", 0) == 0) {
+            const std::string v = a.substr(12);
+            if (v == "boundary") {
+                args.dirichlet_boundary = true;
+            } else if (v == "none") {
+                args.dirichlet_boundary = false;
+            } else {
+                throw std::runtime_error("unrecognized --dirichlet value: " + v + " (expected none or boundary)");
+            }
+        } else if (a.rfind("--dirichlet-tags=", 0) == 0) {
+            args.dirichlet_tags = parse_int_list(a.substr(17));
         } else if (a == "--skip-kappa") {
             args.skip_kappa = true;
         } else if (a == "--force-kappa") {
@@ -203,24 +218,29 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::vector<bool> is_pec(static_cast<std::size_t>(mesh.num_nodes()), false);
-    for (int idx : args.pec_nodes) {
-        if (idx < 0 || idx >= mesh.num_nodes()) {
-            std::cerr << "error: --pec-nodes index " << idx << " is out of range (mesh has "
-                      << mesh.num_nodes() << " nodes, 0-based)\n";
-            return 1;
+    std::vector<bool> dirichlet(static_cast<std::size_t>(mesh.num_edges()), false);
+    try {
+        if (args.dirichlet_boundary) dirichlet = boundary_edge_mask(mesh);
+        if (!args.dirichlet_tags.empty()) {
+            const std::vector<bool> tagged = tagged_face_edge_mask(mesh, args.dirichlet_tags);
+            for (std::size_t e = 0; e < dirichlet.size(); ++e) dirichlet[e] = dirichlet[e] || tagged[e];
         }
-        is_pec[static_cast<std::size_t>(idx)] = true;
+    } catch (const std::exception& e) {
+        std::cerr << "error: " << e.what() << "\n";
+        return 1;
     }
+    int num_dirichlet_edges = 0;
+    for (bool d : dirichlet) num_dirichlet_edges += d ? 1 : 0;
 
     std::cout << "Mesh: " << args.mesh_path << "\n"
-              << "  nodes=" << mesh.num_nodes() << " edges=" << mesh.num_edges()
-              << " tets=" << mesh.num_tets() << " pec_nodes=" << args.pec_nodes.size() << "\n";
+              << "  nodes=" << mesh.num_nodes() << " edges=" << mesh.num_edges() << " tets=" << mesh.num_tets()
+              << " dirichlet_edges=" << num_dirichlet_edges << "\n";
 
-    const TreeCotreeResult tc = build_tree_cotree(mesh, is_pec);
-    std::cout << "  tree-cotree: num_groups=" << tc.num_groups
-              << " num_reference_groups=" << tc.num_reference_groups
-              << " tree_edge_count=" << tc.tree_edge_count << "\n\n";
+    const TreeCotreeResult tc = build_tree_cotree(mesh, dirichlet);
+    std::cout << "  tree-cotree: dirichlet_surfaces=" << tc.num_dirichlet_components
+              << " tree_edges=" << tc.tree_edge_count << " (surface " << tc.surface_tree_edge_count << ", interior "
+              << tc.interior_tree_edge_count << ")  num_groups=" << tc.num_groups
+              << " roots=" << tc.num_reference_groups << "\n\n";
 
     // M = CT * C (vacuum stand-in) -- see the file header comment for why
     // this, not a real assembled A-Phi matrix, is used.

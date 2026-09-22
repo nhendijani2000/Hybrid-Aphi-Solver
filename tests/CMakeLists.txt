@@ -36,6 +36,10 @@ add_test(NAME aphi_tests_basis_functions COMMAND aphi_tests_basis_functions)
 
 add_executable(aphi_tests_tree_cotree test_tree_cotree.cpp)
 target_link_libraries(aphi_tests_tree_cotree PRIVATE aphi_core)
+# Reads meshes/coax_via.msh to check the tree's exact counts on the real
+# target geometry (27,732 free A unknowns).
+target_compile_definitions(aphi_tests_tree_cotree PRIVATE
+    APHI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../meshes")
 add_test(NAME aphi_tests_tree_cotree COMMAND aphi_tests_tree_cotree)
 
 add_executable(aphi_tests_gauge_variants test_gauge_variants.cpp)
