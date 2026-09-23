@@ -509,7 +509,10 @@ Section 1.
 - **PEC boundary** (either target problem's outer conductor, or the sphere's
   surface in the scattering problem): tangential-A edges on that boundary are
   fixed (`n x A = 0`) and removed from the unknown set, per the boundary
-  condition already used in Phase 01's own equations' PEC limit.
+  condition already used in Phase 01's own equations' PEC limit. **A PEC is
+  two conditions, not one** -- `n x A = 0` *and* Phi fixed on that surface.
+  See Section 5.4.1 below; an earlier draft of this bullet stated only the
+  A half, which is not a PEC.
 - **Phase 07 ABC** (scattering track, outer truncation boundary): boundary
   edge and node DOFs stay in the unknown set; the ABC enters as an added
   Robin-type term in the weak form (`docs/OPEN_BOUNDARY_ABC.md`), not a DOF
@@ -518,6 +521,94 @@ Section 1.
   the coaxial/via target problem in Section 7.1 uses a lumped current-source
   excitation sufficient to exercise Phase 01-05, with the proper port
   abstraction added in Phase 06.
+
+#### 5.4.1 What Lee, Lee & Lee (2003) actually impose -- verified Sept 2026
+
+The PEC/PMC condition pair above was originally written here as this
+project's own reading of the Phase 01 equations. It has since been checked
+against a published A-V source and **confirmed**. Recorded here so the
+claim is sourced rather than asserted.
+
+**Source.** S.-C. Lee, J.-F. Lee, R. Lee, "Hierarchical Vector Finite
+Elements for Analyzing Waveguiding Structures," IEEE Trans. Microwave
+Theory Tech., vol. 51, no. 8, pp. 1897-1905, Aug. 2003,
+`APhi_Papers/AphiFreqDomainTreeCotree_SeungJFlee2003.pdf`. Equations (7)
+and (8), p. 1898, read directly from the rendered page (Sept 2026); the
+surrounding prose read from an extracted text dump. The paper's own words:
+"the simplest cases of a perfect electric conductor (PEC) and perfect
+magnetic conductor (PMC) will be considered."
+
+**Scope caveat, stated first.** This is a **2-D waveguide cross-section**
+problem -- transverse/longitudinal splitting `grad = grad_tau - gamma*z`,
+propagation constant `gamma`, gauged by `A_z = 0`. Tree-cotree is used
+there for the inexact Helmholtz decomposition of the edge elements, *not*
+as the gauge. So the conditions below live on a cross-section's boundary
+contour, not on a 3-D box. What transfers is the **structure of the
+condition pairs**, not the geometry.
+
+**Equation (7), on PEC -- both imposed (essential):**
+```
+n x A_tau = 0        and        phi = 0
+```
+
+**Equation (8), on PMC -- both natural:**
+```
+n x (mu_r^-1 curl A_tau) = 0     and     (j*k0*A_tau + grad_tau phi) . n = 0
+```
+
+Both pairs feed their bilinear form (9) directly: "Using (4) and (6) and
+the boundary conditions (7) and (8), the following bilinear form is
+obtained."
+
+**Three consequences for this project.**
+
+1. **A PEC needs both halves.** `n x A = 0` with Phi left free is *not* a
+   short circuit. Lee writes the two as a single labelled pair precisely
+   because neither alone is the PEC. This is the condition the coax port
+   sheet has to satisfy, and it is why the §5.4 bullet above was corrected.
+
+2. **The natural pair couples `n x H = 0` to zero normal E.** The second
+   half of (8) is `E . n = 0`. That makes explicit what was previously
+   argued here from the identity `n . curl H = div_s (H x n)`: if nothing
+   is imposed on a terminal, zero normal current through it comes along for
+   free. A natural A condition on a current-carrying terminal is therefore
+   inconsistent -- Lee's (8) shows the coupling rather than leaving it
+   implied.
+
+3. **Multiple PEC surfaces are handled by grouping, not by collapsing the
+   mesh.** Lee's Section V: "all the nodes on the perfect conductor need to
+   be held at the same potential, therefore, they will have the same
+   number"; "in applying Algorithm 2, we have lumped all the physical nodes
+   on the same PEC into one node"; "The PEC, which is marked as -1, is
+   assumed to be grounded"; and, for more than one PEC, "a number of zero
+   row vectors need to be added in (29)." The lumping is in the *graph the
+   spanning tree walks*, not in the mesh -- which is the group view
+   implemented independently in `include/aphi_solver/tree_cotree.hpp`
+   (`node_group` vs `is_tree_edge`), and it corroborates the decision to
+   assign one Phi DOF per Dirichlet surface without collapsing nodes.
+
+**What the paper does not give us.** No ABC, no radiation condition, no
+port or terminal condition -- PEC and PMC only, on closed waveguides. All
+four numerical examples (rectangular waveguide, shielded microstrip,
+partially filled waveguide) are metal-walled cross-sections, so condition
+(7) is applied over the entire outer boundary in every case -- but as a
+*physical* wall, never as a truncation of open space. The PMC condition
+(8) is stated and never exercised numerically. And Lee's lumping is
+asserted as a requirement of the inexact Helmholtz splitting, not derived.
+
+**Not verified.** The literal predicates in Algorithm 1 step 3 and
+Algorithm 2 step 3 (the tree's seeding condition) are set in a math font
+that neither the text extraction nor the PDF viewer rendered legibly at
+the available size. The surrounding prose is unambiguous and the points
+above rest on it, but the seeding predicate itself was not read
+character-for-character and is not claimed here.
+
+**Multi-PEC has no published numerical precedent in this source.** Lee's
+own examples all reduce to a single grounded PEC -- the degenerate
+`num_dirichlet_components == 1` case. The multi-surface path this project
+needs (coax inner conductor *plus* outer box) is the case Lee sketches in
+one sentence without results. That part carries no external validation and
+must be verified by this project's own tests.
 
 ## 6. EDA requirements vs. scattering requirements
 
@@ -668,7 +759,13 @@ are no longer a Phase 02 dependency.
   text and found to be a 2-D triangular-element scheme for waveguide
   cross-sections (Fig. 1), not a 3-D tetrahedral scheme -- it no longer
   sources the A-side basis-function decision below; it is retained here only
-  for the A-V-vs-E/H conditioning claim, which is unaffected.
+  for the A-V-vs-E/H conditioning claim, which is unaffected. **Second use
+  added (Sept 2026):** Eqs. (7) and (8), p. 1898, are now the verified
+  source for the PEC/PMC boundary-condition pairs recorded in Section
+  5.4.1, and Section V is the source for the PEC node-lumping and
+  multiple-PEC handling discussed there. The 2-D scope correction above
+  applies to that use too -- what carries over is the structure of the
+  condition pairs, not the geometry.
 - J.-M. Jin, *The Finite Element Method in Electromagnetics*, 3rd ed., Wiley,
   2014, Chapter 5 "Three-Dimensional Finite Element Analysis" -- direct,
   verified source for the second-order (10-node) nodal tetrahedral shape

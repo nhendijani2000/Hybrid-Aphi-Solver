@@ -8,6 +8,13 @@ literature check behind that choice and the from-scratch derivation of the
 ABC written directly in terms of the potentials **A** and Phi, since no such
 formula was found already published.
 
+**Before Phase 07** (i.e. for Phases 04-06) the truncation is the
+flux-tangential condition `n x A = 0` on the whole outer box -- standard
+magnetoquasistatic practice, defensible in the low-frequency regime and
+wrong once the box is electrically large. See "The interim truncation"
+below for the evidence, the limits, and the box-growth study that has to
+accompany any result produced with it.
+
 ## Why ABC over PML (recap)
 
 PML is the more common default in general full-wave E/H-field codes, but two
@@ -171,6 +178,103 @@ of problem. The ABC gap and the BEM-coupling gap are plausibly the same gap,
 found twice, from two different angles -- worth keeping in mind together when
 scoping the Phase 12 standalone-paper angle, rather than treating them as two
 unrelated findings.
+
+## The interim truncation: n x A = 0 on the domain box (Phases 04-06)
+
+Everything above is Phase 07 and later. Phases 04-06 need *a* boundary
+today, and the decision taken (Sept 2026) is the flux-tangential condition
+`n x A = 0` on the whole outer box, with A prescribed zero on every edge
+lying on that boundary. This section records why that is defensible in the
+low-frequency regime, where it stops being defensible, and what has to be
+measured to keep it honest -- so the Phase 04 choice is documented next to
+the Phase 07 plan it precedes, not left as an undocumented placeholder.
+
+### It is standard practice, and it is published
+
+`n x A = 0` is the default truncation of the magnetoquasistatic /
+eddy-current world, under several names: **"magnetic insulation"**
+(COMSOL's name for literally this condition), **"flux tangential"** or
+**"flux parallel"** (`B . n = 0`, the same condition), and plain
+**Dirichlet on A** -- which in 2-D magnetostatics is the textbook `A_z = 0`
+on a distant circular boundary. `n x A = 0` implies `B . n = 0` because the
+normal flux is the surface curl of the tangential A, which vanishes when
+the tangential A does.
+
+Published instances, all already in this document's reference list:
+
+- **Chervyakov (2023)**, arXiv:2307.12308 -- truncates a large-scale
+  magnetostatic problem on a big sphere using PMC (`n x H = 0`) *and*
+  magnetic insulation (`n . B = 0`): both halves of the dual pair, used as
+  a truncation.
+- **Zhang, Na, Jiao & Chew (2022)**, arXiv:2207.02260 -- the closest
+  published broadband A-Phi solver, truncates its nano rod-antenna example
+  with **plain PEC "for simplicity."** That is `n x A = 0` plus Phi fixed,
+  used as a truncation, inside an A-Phi solver, in print.
+- **Zhu & Jiao (2010)** -- truncates a packaging geometry with a
+  Neumann-type condition on an air layer.
+
+So the practice is general, and it is specifically attested within A-Phi.
+Note that Lee, Lee & Lee (2003) is *not* evidence for it: that paper's
+outer boundary is a physical waveguide wall or microstrip shield, exact
+physics rather than a truncation (see `docs/FORMULATION.md` Section 5.4.1).
+
+### Why it works at low frequency
+
+Quasi-static fields decay algebraically -- a current loop's B falls off as
+`1/r^3`. Place the wall a few characteristic source dimensions out and the
+true normal flux there is already small, so forcing it to zero costs
+little. On a symmetry plane the condition is not an approximation at all:
+it is exact.
+
+Physically the condition is a **perfect flux barrier**: it behaves like an
+infinitely permeable shell outside the box, pulling flux tangential and
+over-confining it. Its dual `n x H = 0` behaves like `mu -> 0` and
+over-releases flux. Running both on the same box therefore gives a
+**two-sided bracket** on the open-region answer instead of a one-sided
+guess. This is a long-standing engineering heuristic in magnetics, not a
+theorem proved here -- which side is the upper bound should be confirmed
+numerically on the first case rather than assumed.
+
+### Where it stops being defensible
+
+Once displacement current matters and the box is not electrically small,
+`n x A = 0` with Phi fixed is a **lossless PEC cavity**. It does not
+approximate open space at all -- it reflects perfectly, and produces
+spurious box resonances that poison the solution near every cavity mode.
+That is precisely the gap this document exists to close.
+
+| Regime | `n x A = 0` box | Status |
+|---|---|---|
+| DC / low-frequency EDA extraction (Phases 04-06) | fine, with a box-growth study | **current decision** |
+| Full wave, box small vs. lambda | still fine | acceptable |
+| Full wave, box comparable to lambda | perfect reflector, spurious resonances | needs the Phase 07 ABC |
+| THz phased array | unusable | needs Phase 12 FEM-BI |
+
+### What must be measured (not assumed)
+
+1. **Box-growth study.** Grow the truncation box and watch `L_DC` and
+   `R_DC` converge. This is the entire error budget for the interim
+   boundary, it is cheap, and without it the choice is unjustified rather
+   than justified. Required before any Phase 04-06 extraction result is
+   reported as converged.
+2. **Complementary bracket, optionally.** Re-run the same box with the
+   natural (`n x H = 0`) condition and check the true value falls between.
+   Confirms the box is large enough, independently of the growth study.
+3. **A resonance guard for full wave.** Before trusting any full-wave
+   result on a truncated box, check the box's lowest cavity resonance
+   against the operating frequency and refuse or warn when they approach.
+
+### Caveat specific to the Phase 04 coax target
+
+The coax of `docs/FORMULATION.md` Section 7.1 is **self-shielding** -- the
+outer conductor carries the return current and confines essentially all the
+flux inside it -- so `n x A = 0` on a surrounding box is very nearly exact
+there and its truncation error will be negligible. Good for the DC
+milestone (`R_DC ~ 1.114 mOhm`, `L_DC ~ 0.744 nH`), but it means **the coax
+case does not exercise the truncation at all.** A clean coax result is not
+evidence that the truncation is sound. A microstrip or a bare current loop
+is the case that would actually test it, and one should be added before the
+interim boundary is trusted on open geometries.
 
 ## Derivation
 
@@ -348,6 +452,13 @@ benchmark suite (Phase 08).
 
 ## References
 
+- COMSOL Multiphysics, *AC/DC Module User's Guide*, "Magnetic Insulation"
+  boundary condition -- public product documentation naming `n x A = 0` as
+  the standard magnetoquasistatic boundary/truncation condition (cited for
+  the *name and its user-visible definition* only, per this project's IP
+  rule in `docs/ROADMAP.md`: public documentation of a commercial tool's
+  user-visible behaviour may be compared against; internal implementation
+  knowledge may not).
 - S. Chen, W. C. Chew, "Numerical Electromagnetic Frequency Domain Analysis
   with Discrete Exterior Calculus," J. Comput. Phys., vol. 350, pp. 668-689,
   2017 (arXiv:1704.05145) -- Eq. (83) is the specific, verified 3-D
