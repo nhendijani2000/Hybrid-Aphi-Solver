@@ -4,12 +4,14 @@
 #include <cmath>
 #include <complex>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
 
 #include "aphi_solver/complex_matrix.hpp"
 #include "aphi_solver/conditioning.hpp"
+#include "aphi_solver/gauge_variants.hpp"
 
 using aphi_solver::Complex;
 using aphi_solver::ComplexMatrix;
@@ -205,6 +207,87 @@ void test_sparse_and_dense_assembly_agree() {
           "assemble_sparse places K_PhiA at (n_A, 0)");
 }
 
+// Phase 03.5 step 6: the dense (complex_matrix.hpp) and sparse
+// (gauge_variants.hpp) estimate_condition_number overloads are one contract,
+// not two estimators that happen to share a name. Before the Sept 2026
+// unification the dense one ran a FIXED 100 iterations with no convergence
+// test while the sparse one ran up to 500 with one, so the same matrix could
+// get two different answers depending only on which type it was stored in --
+// and nothing in the suite would have noticed. This pins them together.
+void test_condition_number_overloads_agree() {
+    // Real, symmetric, well-separated spectrum so both estimators have a
+    // single right answer to find: diag(1000, 100, 10, 1), kappa = 1000.
+    const std::vector<double> diagonal = {1000.0, 100.0, 10.0, 1.0};
+    const int n = static_cast<int>(diagonal.size());
+
+    aphi_solver::SparseMatrix sparse(n, n);
+    ComplexMatrix dense(n, n);
+    for (int i = 0; i < n; ++i) {
+        sparse.add(i, i, diagonal[i]);
+        dense(i, i) = Complex(diagonal[i], 0.0);
+    }
+    sparse.compress();
+
+    const double kappa_sparse = aphi_solver::estimate_condition_number(sparse);
+    const double kappa_dense = aphi_solver::estimate_condition_number(dense);
+
+    check(near(kappa_dense, 1000.0, 1e-6), "dense overload finds kappa = 1000 at its default");
+    check(near(kappa_sparse, 1000.0, 1e-6), "sparse overload finds kappa = 1000 at its default");
+    check(std::abs(kappa_dense - kappa_sparse) < 1e-6 * 1000.0,
+          "both overloads agree on the same matrix at their defaults");
+
+    // Pinning the DEFAULT iteration budget needs a matrix whose answer
+    // actually depends on it. The spectrum above converges in far under 100
+    // iterations, so a check written on it passes whether the default is 100
+    // or 500 -- verified by negative control (Sept 2026: the default was
+    // temporarily reverted to 100 and the whole suite still passed). The
+    // matrix below is built so power iteration converges SLOWLY but steadily:
+    // A^H A has eigenvalues (1, 0.95, 0.01), so the Rayleigh quotient's error
+    // falls like 0.95^(2k) -- still ~3e-5 at k = 100, reaching the 1e-12
+    // tolerance near k = 270. A 500-iteration budget therefore converges and a
+    // 100-iteration one does not, and the two give measurably different kappa.
+    const double sigma_slow = std::sqrt(0.95);
+    ComplexMatrix slow(3, 3);
+    slow(0, 0) = Complex(1.0, 0.0);
+    slow(1, 1) = Complex(sigma_slow, 0.0);
+    slow(2, 2) = Complex(0.1, 0.0);
+
+    const double kappa_default = aphi_solver::estimate_condition_number(slow);
+    const double kappa_500 = aphi_solver::estimate_condition_number(slow, 500, 1e-12);
+    const double kappa_100 = aphi_solver::estimate_condition_number(slow, 100, 1e-12);
+
+    check(near(kappa_default, 10.0, 1e-6), "slow-converging matrix has kappa = 10");
+    check(near(kappa_default, kappa_500, 1e-12), "dense default budget is 500");
+    check(!near(kappa_default, kappa_100, 1e-9),
+          "the 100-iteration budget is measurably worse (so the check above can fail)");
+
+    // Shared degenerate-input contract: 1.0 for n <= 1, throw if not square.
+    check(near(aphi_solver::estimate_condition_number(ComplexMatrix(1, 1)), 1.0, 0.0),
+          "dense overload returns 1.0 for n = 1");
+    aphi_solver::SparseMatrix one(1, 1);
+    one.compress();
+    check(near(aphi_solver::estimate_condition_number(one), 1.0, 0.0),
+          "sparse overload returns 1.0 for n = 1");
+
+    bool dense_threw = false;
+    try {
+        aphi_solver::estimate_condition_number(ComplexMatrix(2, 3));
+    } catch (const std::invalid_argument&) {
+        dense_threw = true;
+    }
+    check(dense_threw, "dense overload throws on a non-square matrix");
+
+    bool sparse_threw = false;
+    try {
+        aphi_solver::SparseMatrix oblong(2, 3);
+        oblong.compress();
+        aphi_solver::estimate_condition_number(oblong);
+    } catch (const std::invalid_argument&) {
+        sparse_threw = true;
+    }
+    check(sparse_threw, "sparse overload throws on a non-square matrix");
+}
+
 }  // namespace
 
 int main() {
@@ -215,6 +298,7 @@ int main() {
     test_recommend_strategy();
     test_condition_number_known_diagonal();
     test_sparse_and_dense_assembly_agree();
+    test_condition_number_overloads_agree();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

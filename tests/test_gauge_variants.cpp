@@ -375,7 +375,7 @@ void check_gauge_with_dirichlet(const Mesh& mesh, const std::vector<bool>& diric
     const int nullity_a = dense_nullity(a_dense);
     check(nullity_a == 0, label + ": Method A reduced matrix has nullity 0 (gauge complete)");
     if (nullity_a != 0) return;  // singular: nothing further can be solved
-    const std::vector<double> a_c = dense_solve(a_dense, select_cotree_entries(j, gauge_a.cotree_local_index));
+    const std::vector<double> a_c = solve_dense_real(a_dense, select_cotree_entries(j, gauge_a.cotree_local_index));
     const std::vector<double> a_full = recover_albanese_rubinacci_solution(a_c, gauge_a, num_edges);
     check(relative_curl_error(a_full) < 1e-10,
           label + ": Method A recovers B exactly (gauge not over-constrained)");
@@ -408,7 +408,7 @@ void check_gauge_with_dirichlet(const Mesh& mesh, const std::vector<bool>& diric
         const auto R = M.principal_submatrix(f2r, static_cast<int>(kept.size())).to_dense();
         std::vector<double> rhs(kept.size());
         for (std::size_t k = 0; k < kept.size(); ++k) rhs[k] = j[static_cast<std::size_t>(kept[k])];
-        const std::vector<double> sol = dense_solve(R, rhs);
+        const std::vector<double> sol = solve_dense_real(R, rhs);
         std::vector<double> a_over(static_cast<std::size_t>(num_edges), 0.0);
         for (std::size_t k = 0; k < kept.size(); ++k) a_over[static_cast<std::size_t>(kept[k])] = sol[k];
         check(relative_curl_error(a_over) > 1e-3,
@@ -423,7 +423,7 @@ void check_gauge_with_dirichlet(const Mesh& mesh, const std::vector<bool>& diric
     const int nullity_d = dense_nullity(d_dense);
     check(nullity_d == 0, label + ": Method D reduced matrix has nullity 0");
     if (nullity_d != 0) return;
-    const std::vector<double> d_c = dense_solve(d_dense, select_cotree_entries(j, gauge_d.cotree_local_index));
+    const std::vector<double> d_c = solve_dense_real(d_dense, select_cotree_entries(j, gauge_d.cotree_local_index));
     const std::vector<double> d_full = recover_munteanu_unsymmetric_solution(d_c, gauge_d, F, tc, num_edges);
     check(relative_curl_error(d_full) < 1e-10, label + ": Method D recovers B exactly");
 }
@@ -513,11 +513,11 @@ int main() {
         const std::vector<double> j = dense_matvec(M_dense, z);
 
         const std::vector<double> j_c_a = select_cotree_entries(j, gauge_a.cotree_local_index);
-        const std::vector<double> a_c_a = dense_solve(gauge_a.reduced_matrix.to_dense(), j_c_a);
+        const std::vector<double> a_c_a = solve_dense_real(gauge_a.reduced_matrix.to_dense(), j_c_a);
         const std::vector<double> a_full_a = recover_albanese_rubinacci_solution(a_c_a, gauge_a, num_edges);
 
         const std::vector<double> j_c_d = select_cotree_entries(j, gauge_d.cotree_local_index);
-        const std::vector<double> a_c_d = dense_solve(gauge_d.reduced_matrix.to_dense(), j_c_d);
+        const std::vector<double> a_c_d = solve_dense_real(gauge_d.reduced_matrix.to_dense(), j_c_d);
         const std::vector<double> a_full_d = recover_munteanu_unsymmetric_solution(a_c_d, gauge_d, F, tc, num_edges);
 
         const SparseMatrix C = build_curl_matrix(mesh);

@@ -655,12 +655,43 @@ have a settled type signature, so that phase is only about the weak form.
    estimate, which dominates wall time at these sizes): cube_4 22.9 -> 17.6
    ms, cube_6 87.3 -> 24.2 ms — the old path grows ~3.8x when the mesh
    grows 3x, the new one ~1.4x.
-6. **Clean up two API collisions before they propagate.** `dense_solve`
-   (real, `gauge_variants.hpp`) vs. `solve_dense` (complex,
-   `complex_matrix.hpp`) differ only in word order, and
-   `estimate_condition_number` exists twice with different types in
-   different headers. Both are survivable today and actively confusing once
-   step 2 makes the scalar type a template parameter.
+6. **Done (Sept 2026) — cleaned up two API collisions before they
+   propagated.** The two turned out to be very different in severity:
+   - **`dense_solve` vs. `solve_dense`** — cosmetic. Real
+     (`gauge_variants.hpp`) vs. complex (`complex_matrix.hpp`), identical
+     words in opposite order. The argument types differ, so transposing
+     them is a compile error rather than a silent bug; the cost was purely
+     that nothing told you which order went with which scalar type.
+     `dense_solve` → **`solve_dense_real`** (5 call sites, all in
+     `tests/test_gauge_variants.cpp`, where it is the small-scale ground
+     truth).
+   - **`estimate_condition_number` twice** — *not* cosmetic. Legal
+     overloads resolved by type, so they always compiled, but the dense one
+     ran a **fixed 100 iterations with no convergence test at all** while
+     the sparse one ran up to **500 with one**. `estimate_condition_number(A)`
+     therefore meant materially different things depending only on how the
+     matrix was stored, and any kappa compared across the dense/sparse
+     boundary was comparing two different estimators — the same class of
+     error as the mislabelled kappa table fixed in `fc62ea7`. Unified to one
+     contract: same default budget (500), same default `tol` (1e-12), same
+     relative convergence test, `1.0` for n <= 1, `std::invalid_argument` if
+     not square, `+inf` on a non-positive smallest eigenvalue. The dense
+     overload gained the missing convergence check.
+
+   **The regression guard needed a second attempt, and that is the point
+   worth recording.** `test_condition_number_overloads_agree` was first
+   written on `diag(1000, 100, 10, 1)` — which converges in far under 100
+   iterations, so its "the default is 500" checks passed whether the default
+   was 100 or 500. The negative control caught it: the default was
+   temporarily reverted to 100 and the whole suite still passed, 24/24. The
+   test was rebuilt on a deliberately slow-converging spectrum (`A^H A`
+   eigenvalues `(1, 0.95, 0.01)`, Rayleigh error falling like `0.95^(2k)` —
+   ~3e-5 at k = 100, reaching 1e-12 near k = 270), where the two budgets
+   give measurably different kappa. Re-run of the negative control then
+   failed 3 checks as it should. No recorded kappa in any doc changed: every
+   published table comes from the sparse path via `compare_gauges`, and the
+   printed gauge kappas (4, 1, 13.0902, 1.95521) are identical before and
+   after. Suite: 791/791.
 7. **Done (Sept 2026) — boundary-first tree-cotree with `n×A = 0` surfaces.**
    Designed in `Claude outputs/tree_cotree_boundary_first_proposal.md` from
    two measured failures of simpler trees on `cube_4`:

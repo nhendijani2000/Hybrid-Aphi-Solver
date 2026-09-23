@@ -7,7 +7,7 @@
 
 namespace aphi_solver {
 
-std::vector<double> dense_solve(std::vector<std::vector<double>> A, std::vector<double> b) {
+std::vector<double> solve_dense_real(std::vector<std::vector<double>> A, std::vector<double> b) {
     const int n = static_cast<int>(A.size());
     for (int col = 0; col < n; ++col) {
         int pivot_row = col;
@@ -20,7 +20,7 @@ std::vector<double> dense_solve(std::vector<std::vector<double>> A, std::vector<
             }
         }
         if (pivot_val < 1e-12) {
-            throw std::runtime_error("dense_solve: matrix is numerically singular");
+            throw std::runtime_error("solve_dense_real: matrix is numerically singular");
         }
         if (pivot_row != col) {
             std::swap(A[static_cast<std::size_t>(pivot_row)], A[static_cast<std::size_t>(col)]);
@@ -372,6 +372,11 @@ bool cg_solve_ata(const SparseMatrix& A, const std::vector<double>& b, std::vect
 
 double estimate_condition_number(const SparseMatrix& A, int max_iterations, double tol) {
     const int n = A.rows();
+    // Same degenerate-input contract as the dense overload (complex_matrix.hpp):
+    // a non-square matrix is a caller error, n <= 1 is trivially conditioned.
+    if (A.cols() != n) {
+        throw std::invalid_argument("estimate_condition_number: A must be square");
+    }
     if (n <= 1) return 1.0;
 
     // Largest eigenvalue of B = A^T*A (== largest squared singular value of
@@ -393,7 +398,7 @@ double estimate_condition_number(const SparseMatrix& A, int max_iterations, doub
 
     // Smallest eigenvalue of B via inverse power iteration -- same
     // algorithm as before, but each "solve B*x = u" step now uses
-    // cg_solve_ata (sparse, O(nnz) per CG iteration) instead of dense_solve
+    // cg_solve_ata (sparse, O(nnz) per CG iteration) instead of solve_dense_real
     // (dense O(n^3) Gaussian elimination from scratch every single outer
     // step).
     std::vector<double> u(static_cast<std::size_t>(n), 1.0 / std::sqrt(static_cast<double>(n)));

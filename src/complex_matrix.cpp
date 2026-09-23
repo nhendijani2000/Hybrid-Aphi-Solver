@@ -196,11 +196,20 @@ ComplexMatrix normalize(const ComplexMatrix& v) {
 
 }  // namespace
 
-double estimate_condition_number(const ComplexMatrix& A, int iterations) {
+// True once the Rayleigh quotient has settled: the same relative test the
+// sparse overload in gauge_variants.cpp uses, kept identical on purpose so
+// both estimators stop at the same point for the same matrix. See the
+// shared-contract note in complex_matrix.hpp.
+static bool converged(double next, double previous, double tol) {
+    return std::abs(next - previous) < tol * std::max(1.0, std::abs(next));
+}
+
+double estimate_condition_number(const ComplexMatrix& A, int max_iterations, double tol) {
     const int n = A.rows();
-    if (n == 0 || A.cols() != n) {
-        throw std::invalid_argument("estimate_condition_number: A must be square and non-empty");
+    if (A.cols() != n) {
+        throw std::invalid_argument("estimate_condition_number: A must be square");
     }
+    if (n <= 1) return 1.0;
     const ComplexMatrix Ah = A.hermitian();
     const ComplexMatrix M = Ah * A;  // Hermitian positive semi-definite; eigenvalues = singular values^2 of A
 
@@ -209,9 +218,12 @@ double estimate_condition_number(const ComplexMatrix& A, int iterations) {
     for (int i = 0; i < n; ++i) v_max(i, 0) = Complex(1.0, 0.0);
     v_max = normalize(v_max);
     double lambda_max = 0.0;
-    for (int it = 0; it < iterations; ++it) {
+    for (int it = 0; it < max_iterations; ++it) {
         v_max = normalize(M * v_max);
-        lambda_max = rayleigh_quotient(M, v_max);
+        const double next = rayleigh_quotient(M, v_max);
+        const bool done = converged(next, lambda_max, tol);
+        lambda_max = next;
+        if (done) break;
     }
 
     // Inverse power iteration for the smallest eigenvalue of M.
@@ -219,9 +231,12 @@ double estimate_condition_number(const ComplexMatrix& A, int iterations) {
     for (int i = 0; i < n; ++i) v_min(i, 0) = Complex(1.0, 0.0);
     v_min = normalize(v_min);
     double lambda_min = 0.0;
-    for (int it = 0; it < iterations; ++it) {
+    for (int it = 0; it < max_iterations; ++it) {
         v_min = normalize(solve_dense(M, v_min));
-        lambda_min = rayleigh_quotient(M, v_min);
+        const double next = rayleigh_quotient(M, v_min);
+        const bool done = converged(next, lambda_min, tol);
+        lambda_min = next;
+        if (done) break;
     }
 
     if (lambda_min <= 0.0) {

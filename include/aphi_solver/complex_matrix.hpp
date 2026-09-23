@@ -95,6 +95,24 @@ ComplexMatrix solve_dense(const ComplexMatrix& A, const ComplexMatrix& B);
 /// Estimate of the 2-norm condition number (largest / smallest singular value) of
 /// `A`, obtained by power iteration and inverse power iteration on A^H A. This is
 /// a diagnostic for small test/benchmark systems, not a production-scale routine.
-double estimate_condition_number(const ComplexMatrix& A, int iterations = 100);
+///
+/// **Shared contract with the sparse overload** (`gauge_variants.hpp`), unified
+/// Sept 2026 as Phase 03.5 step 6. The two differ only in storage and inner
+/// solver -- never in what a caller gets. Both:
+///   - iterate at most `max_iterations` times, defaulting to the SAME 500;
+///   - stop early once the Rayleigh quotient settles to a relative `tol`,
+///     defaulting to the SAME 1e-12;
+///   - return 1.0 for n <= 1, and throw std::invalid_argument if A is not
+///     square;
+///   - return +infinity when the smallest eigenvalue comes out non-positive.
+///
+/// Before that unification this overload ran a FIXED 100 iterations with no
+/// convergence test at all while the sparse one ran up to 500 with one, so
+/// `estimate_condition_number(A)` meant materially different things depending
+/// only on the argument type -- and any kappa compared across the dense/sparse
+/// boundary was comparing two different estimators. Keep these defaults in
+/// step if either is ever changed.
+double estimate_condition_number(const ComplexMatrix& A, int max_iterations = 500,
+                                 double tol = 1e-12);
 
 }  // namespace aphi_solver

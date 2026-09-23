@@ -16,7 +16,7 @@ namespace aphi_solver {
 /// this is the right tool here; a real sparse factorization/iterative
 /// solver is Phase 04/05's job, once assembly produces production-size
 /// systems). Throws std::runtime_error if A is numerically singular.
-std::vector<double> dense_solve(std::vector<std::vector<double>> A, std::vector<double> b);
+std::vector<double> solve_dense_real(std::vector<std::vector<double>> A, std::vector<double> b);
 
 /// The "essential incidence matrix" F = G_c * G_t^{-1} in I. Munteanu,
 /// "Tree-cotree condensation properties" (Sec. III.A) -- G here being the
@@ -217,6 +217,14 @@ std::vector<double> recover_munteanu_unsymmetric_solution(const std::vector<doub
 /// was brought forward to sparse ahead of its planned Phase 04/05 slot
 /// specifically so this estimator (and the gauge-comparison CLI built on
 /// it) can run on realistic mesh sizes -- see docs/ENGINEERING_STANDARDS.md.
+///
+/// **Shared contract with the dense overload** (`complex_matrix.hpp`), unified
+/// Sept 2026 as Phase 03.5 step 6: same default `max_iterations` (500), same
+/// default `tol` (1e-12), same relative convergence test, 1.0 for n <= 1,
+/// std::invalid_argument if A is not square, +infinity when the smallest
+/// eigenvalue comes out non-positive. The overloads differ in storage and
+/// inner solver, never in what a caller gets. Keep the defaults in step if
+/// either is ever changed -- the full note is on the dense declaration.
 double estimate_condition_number(const SparseMatrix& A, int max_iterations = 500, double tol = 1e-12);
 
 }  // namespace aphi_solver
