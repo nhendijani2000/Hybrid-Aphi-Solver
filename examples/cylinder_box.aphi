@@ -10,15 +10,20 @@
 #   R = l / (sigma * A)                          -- A is the MESHED area
 #   L = (mu0*l / 2pi) [ ln(1.0787 * W / 2a) + 1/4 ]
 #
-#   expected:  R ~ 0.1372 mOhm      L ~ 0.387 nH
+# The wire is meshed as a regular 24-gon, not a circle (tools/cylinder_box.geo
+# explains why: only planar vertical lateral faces make the linear potential
+# the exact discrete solution). So the cross-section is the polygon's area,
+# measured on this mesh as 0.1242331416 mm^2 -- 1.14 % below pi*a^2.
+#
+#   expected:  R = 0.1388 mOhm   (exact to round-off against A_mesh;
+#                                 0.1372 mOhm is the ideal-circle value and
+#                                 is NOT what this mesh should give)
+#              L = 0.3870 nH     (within ~0.5 %: the polygon's conformal
+#                                 radius differs slightly from a)
 #
 # Current enters at the bottom of the wire and the top is held at 0 V, so the
 # current read back from P2 must be -1 A. That is the first self-consistency
 # check the solver will have.
-#
-# NOTE: meshes/cylinder_box.msh does not exist yet -- it is step 3 of the
-# plan. Until then this file is useful only with the parse-only driver, which
-# never opens the mesh.
 # ---------------------------------------------------------------------------
 
 [mesh]

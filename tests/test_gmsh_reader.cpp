@@ -723,6 +723,91 @@ int main() {
                   "coax: the four boundary groups cover the entire domain boundary");
         }
     }
+
+    // meshes/cylinder_box.msh, from tools/cylinder_box.geo via Gmsh 4.13.1.
+    // The first end-to-end test geometry (examples/cylinder_box.aphi).
+    //
+    // What makes this fixture worth pinning is the exactness of its
+    // conductor. The wire is meshed as a regular 24-gon prism, not a
+    // cylinder, so that every lateral face is planar and vertical and the
+    // linear potential Phi = V*z/L is the exact discrete solution -- which
+    // is what will make the DC resistance exact to round-off rather than
+    // merely convergent. That argument fails silently if the meshed volume
+    // ever stops being the exact polygon prism, so it is checked here to
+    // full double precision rather than with a tolerance.
+    {
+        const double a = 0.2, W = 2.0, Lz = 1.0;  // mm, as the .geo writes them
+        const int N = 24;
+        const double pi = 3.14159265358979323846;
+        const std::string dir = APHI_MESH_DIR;
+
+        Mesh cy;
+        bool cy_ok = true;
+        try {
+            cy = aphi_solver::read_gmsh_msh(dir + "/cylinder_box.msh");
+        } catch (const GmshReadError& e) {
+            cy_ok = false;
+            std::cerr << "  (cylinder_box.msh unreadable: " << e.what() << ")\n";
+        }
+        check(cy_ok, "cylinder_box.msh parses");
+
+        if (cy_ok) {
+            const long long euler = static_cast<long long>(cy.num_nodes()) - cy.num_edges() +
+                                     cy.num_faces() - cy.num_tets();
+            check(euler == 1, "cylinder: Euler characteristic == 1");
+
+            double vol_wire = 0.0, vol_air = 0.0, vol_other = 0.0;
+            for (int t = 0; t < cy.num_tets(); ++t) {
+                const double v = std::abs(cy.signed_tet_volume(t));
+                switch (cy.tet_tags[static_cast<std::size_t>(t)]) {
+                    case 1: vol_wire += v; break;
+                    case 2: vol_air += v; break;
+                    default: vol_other += v; break;
+                }
+            }
+            check(vol_other == 0.0, "cylinder: every tet is either wire or air");
+            check(std::abs(vol_wire + vol_air - W * W * Lz) < 1e-9,
+                  "cylinder: the two regions fill the 2x2x1 box exactly");
+
+            // The 24-gon's area in closed form. Unlike the coax's faceted
+            // circle, this is not an approximation the mesh falls short of
+            // -- the geometry IS the polygon, so the agreement is exact and
+            // the tolerance can be 1e-12 relative.
+            const double A_polygon = 0.5 * N * a * a * std::sin(2.0 * pi / N);
+            const double A_mesh = vol_wire / Lz;
+            check(std::abs(A_mesh / A_polygon - 1.0) < 1e-12,
+                  "cylinder: the meshed wire is the EXACT 24-gon prism (this is what makes the "
+                  "DC resistance exact, not merely convergent)");
+
+            // Recorded so a change is visible: 1.14 % below the circle the
+            // polygon is inscribed in. R must be asserted against A_mesh,
+            // never against pi*a^2.
+            check(std::abs(A_mesh / (pi * a * a) - 0.988616) < 1e-5,
+                  "cylinder: A_mesh is 1.14% below pi*a^2, as a 24-gon must be");
+
+            check(cy.physical_name(3, 1) == "wire" && cy.physical_name(3, 2) == "air",
+                  "cylinder: volume region names");
+            check(cy.physical_name(2, 10) == "wire_bottom" && cy.physical_name(2, 11) == "wire_top",
+                  "cylinder: the two port surface names");
+
+            // Both end caps must be on the domain boundary: they are the
+            // boundary ports, and an internal one would be a different
+            // problem entirely.
+            int bottom = 0, top = 0, off_boundary = 0;
+            for (const auto& tf : cy.tagged_boundary_faces) {
+                const int idx = cy.find_face(tf.nodes[0], tf.nodes[1], tf.nodes[2]);
+                if (idx < 0 || !cy.is_boundary_face(idx)) {
+                    ++off_boundary;
+                    continue;
+                }
+                if (tf.tag == 10) ++bottom;
+                if (tf.tag == 11) ++top;
+            }
+            check(off_boundary == 0, "cylinder: both end caps lie on the domain boundary");
+            check(bottom > 0 && bottom == top,
+                  "cylinder: the two caps carry the same number of triangles (the wire is a prism)");
+        }
+    }
 #endif
 
     // A missing file must raise GmshReadError, not crash or return silently.

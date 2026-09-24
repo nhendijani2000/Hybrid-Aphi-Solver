@@ -64,3 +64,11 @@ Thumbs.db
 !meshes/validation_box_v22.msh
 !meshes/validation_box_v41.msh
 !meshes/coax_via.msh
+
+# cylinder_box.msh (~600 KB) is the first end-to-end test geometry
+# (examples/cylinder_box.aphi). Tracked for the same reason as coax_via.msh:
+# the DC resistance is asserted against this mesh's own cross-section area,
+# 0.1242331416 mm^2, which a regeneration under a different Gmsh version or
+# element size would change. Regenerate with tools/cylinder_box.geo only if
+# that number is re-measured and the tests updated with it.
+!meshes/cylinder_box.msh
