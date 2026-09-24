@@ -53,3 +53,7 @@ add_test(NAME aphi_tests_sparse_matrix COMMAND aphi_tests_sparse_matrix)
 add_executable(aphi_tests_problem test_problem.cpp)
 target_link_libraries(aphi_tests_problem PRIVATE aphi_core)
 add_test(NAME aphi_tests_problem COMMAND aphi_tests_problem)
+
+add_executable(aphi_tests_input_file test_input_file.cpp)
+target_link_libraries(aphi_tests_input_file PRIVATE aphi_core)
+add_test(NAME aphi_tests_input_file COMMAND aphi_tests_input_file)
