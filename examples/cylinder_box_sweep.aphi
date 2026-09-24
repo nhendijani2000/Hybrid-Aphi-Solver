@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------
+# The same cylinder, swept over frequency -- the skin-effect stage.
+#
+# Only [analysis] differs from cylinder_box.aphi: same mesh, same bodies,
+# same ports. The exact solution stays z-invariant, so the closed form is the
+# classical internal impedance of a round wire:
+#
+#   Z(w)/l = Z_int(w) + j*w*L_ext
+#   Z_int  = (gamma / (2*pi*a*sigma)) * I0(gamma*a) / I1(gamma*a),
+#            gamma = sqrt(j*w*mu*sigma)
+#   L_ext  = (mu0/2pi) ln(1.0787 * W / 2a)      -- frequency-independent,
+#                                                  the walls are lossless
+#
+# As w -> 0 this becomes R_DC + j*w*mu0/8pi, so the DC case is the zero-
+# frequency limit of this same curve.
+#
+# Range: the skin depth equals the wire radius at 109 kHz, so 1 kHz .. 10 MHz
+# takes delta/a from 10.4 down to 0.105 -- the whole transition. At 10 MHz
+# the wavelength is 30 m against a 1 mm structure, so no wave effect enters
+# anywhere in the sweep: it isolates the j*w*sigma term.
+#
+# This uses the sweep form; cylinder_box.aphi's five-point list would do as
+# well. Swapping formulation to `reduced` must give the same answer across
+# this range, which cross-checks "Phi everywhere" against "Phi in conductors".
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = ../meshes/cylinder_box.msh
+length_unit = mm
+
+[analysis]
+type        = frequency
+sweep       = log
+f_start     = 1e3                          # Hz
+f_stop      = 1e7
+f_points    = 41                           # total, both endpoints included
+formulation = full_wave                    # or: reduced
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire
+sigma       = 5.8e7
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+[port P1]
+type        = boundary_current
+surface     = wire_bottom
+current     = 1.0
+phase_deg   = 0
+
+[port P2]
+type        = boundary_voltage
+surface     = wire_top
+voltage     = 0.0

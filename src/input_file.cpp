@@ -158,6 +158,16 @@ std::vector<Section> Parser::lex() const {
         ++line_number;
         if (!raw.empty() && raw.back() == '\r') raw.pop_back();  // tolerate CRLF
 
+        // Strip a UTF-8 byte-order mark. Notepad, Visual Studio and
+        // PowerShell's Set-Content all write one by default on Windows, and
+        // without this the first line fails to parse with a message about an
+        // invisible character -- which is about as unhelpful as an error can
+        // be. Found by running the driver on a file PowerShell had written.
+        if (line_number == 1 && raw.size() >= 3 && static_cast<unsigned char>(raw[0]) == 0xEF &&
+            static_cast<unsigned char>(raw[1]) == 0xBB && static_cast<unsigned char>(raw[2]) == 0xBF) {
+            raw.erase(0, 3);
+        }
+
         const std::size_t hash = raw.find('#');
         const std::string line = trim(hash == std::string::npos ? raw : raw.substr(0, hash));
         if (line.empty()) continue;

@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Cylinder in a square box -- DC resistance and inductance.
+#
+# A copper wire of radius a = 0.2 mm on the axis of an air-filled square box
+# of side W = 2 mm, both spanning the full height l = 1 mm. With n x A = 0 on
+# every face of the box, this is exactly a square coaxial line: the box walls
+# carry the return current, and the closed-form answers are exact rather than
+# asymptotic (see `Claude outputs/input_file_plan.md` Sec. 5).
+#
+#   R = l / (sigma * A)                          -- A is the MESHED area
+#   L = (mu0*l / 2pi) [ ln(1.0787 * W / 2a) + 1/4 ]
+#
+#   expected:  R ~ 0.1372 mOhm      L ~ 0.387 nH
+#
+# Current enters at the bottom of the wire and the top is held at 0 V, so the
+# current read back from P2 must be -1 A. That is the first self-consistency
+# check the solver will have.
+#
+# NOTE: meshes/cylinder_box.msh does not exist yet -- it is step 3 of the
+# plan. Until then this file is useful only with the parse-only driver, which
+# never opens the mesh.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = ../meshes/cylinder_box.msh   # relative to THIS file
+length_unit = mm                           # m | mm | um | nm
+
+[analysis]
+type        = dc
+
+[boundary]
+outer       = flux_tangential              # n x A = 0 on the box, Phi free
+
+[Body B1]
+volume      = wire                         # a Physical Volume in the .msh
+sigma       = 5.8e7                        # S/m -- copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+[port P1]
+type        = boundary_current
+surface     = wire_bottom                  # a Physical Surface in the .msh
+current     = 1.0                          # A, peak
+
+[port P2]
+type        = boundary_voltage
+surface     = wire_top
+voltage     = 0.0                          # the 0 V reference

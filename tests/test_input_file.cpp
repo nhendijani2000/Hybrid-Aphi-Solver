@@ -200,6 +200,22 @@ void test_lexing() {
     check(r.problem.ports[0].type == PortType::BoundaryVoltage, "port type folds case");
 }
 
+// Windows editors write a UTF-8 BOM by default -- Notepad, Visual Studio
+// and PowerShell's Set-Content all do. Without stripping it the first line
+// fails to parse, complaining about an invisible character. This was found
+// by running the driver on a file PowerShell had written, not by reading
+// the code.
+void test_utf8_bom_is_tolerated() {
+    const std::string bom = "\xEF\xBB\xBF";
+    const ParseResult r = expect_ok(bom + kCylinderDC, "a file that starts with a UTF-8 BOM");
+    check(r.problem.bodies.size() == 2u, "a BOM does not disturb what follows it");
+
+    // Only at the start of the file: a BOM in the middle is still junk, and
+    // the line number must point at it.
+    expect_error("[mesh]\nfile = m.msh\n" + bom + "length_unit = mm\n", 3,
+                 "a BOM in the middle of a file is not silently skipped");
+}
+
 void test_syntax_errors() {
     expect_error("[mesh\nfile = m.msh\n", 1, "unclosed section header");
     expect_error("[]\n", 1, "empty section header");
@@ -493,6 +509,7 @@ int main() {
     test_cylinder_example_parses();
     test_frequency_example_parses();
     test_lexing();
+    test_utf8_bom_is_tolerated();
     test_syntax_errors();
     test_value_errors_and_controls();
     test_port_errors_and_controls();
