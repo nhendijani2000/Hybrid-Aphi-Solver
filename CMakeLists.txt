@@ -20,6 +20,7 @@ add_library(aphi_core
     src/conditioning.cpp
     src/equilibration.cpp
     src/mesh.cpp
+    src/problem.cpp
     src/gmsh_reader.cpp
     src/incidence.cpp
     src/basis_functions.cpp

@@ -49,3 +49,7 @@ add_test(NAME aphi_tests_gauge_variants COMMAND aphi_tests_gauge_variants)
 add_executable(aphi_tests_sparse_matrix test_sparse_matrix.cpp)
 target_link_libraries(aphi_tests_sparse_matrix PRIVATE aphi_core)
 add_test(NAME aphi_tests_sparse_matrix COMMAND aphi_tests_sparse_matrix)
+
+add_executable(aphi_tests_problem test_problem.cpp)
+target_link_libraries(aphi_tests_problem PRIVATE aphi_core)
+add_test(NAME aphi_tests_problem COMMAND aphi_tests_problem)
