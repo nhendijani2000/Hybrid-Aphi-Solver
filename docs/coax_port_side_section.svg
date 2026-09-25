@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="420" viewBox="0 0 680 420" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<title>Coaxial via, side cross-section with boundary conditions</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#854F0B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="0" y="0" width="680" height="420" fill="#FFFFFF"/>
+<rect x="100" y="80" width="360" height="200" fill="#E1F5EE"/>
+<rect x="100" y="160" width="360" height="40" fill="#FAC775"/>
+<text x="280" y="106" text-anchor="middle" font-size="12" fill="#085041">Dielectric, εr = 4.3</text>
+<g fill="none" stroke="#1D9E75" stroke-width="1">
+<circle cx="180" cy="130" r="7"/><line x1="175" y1="125" x2="185" y2="135"/><line x1="185" y1="125" x2="175" y2="135"/>
+<circle cx="280" cy="130" r="7"/><line x1="275" y1="125" x2="285" y2="135"/><line x1="285" y1="125" x2="275" y2="135"/>
+<circle cx="380" cy="130" r="7"/><line x1="375" y1="125" x2="385" y2="135"/><line x1="385" y1="125" x2="375" y2="135"/>
+<circle cx="180" cy="235" r="7"/><circle cx="280" cy="235" r="7"/><circle cx="380" cy="235" r="7"/>
+</g>
+<g fill="#1D9E75"><circle cx="180" cy="235" r="2"/><circle cx="280" cy="235" r="2"/><circle cx="380" cy="235" r="2"/></g>
+<line x1="120" y1="180" x2="195" y2="180" stroke="#854F0B" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="212" y="184" font-size="12" fill="#633806">current I</text>
+<line x1="100" y1="80" x2="460" y2="80" stroke="#5F5E5A" stroke-width="4"/>
+<line x1="100" y1="280" x2="460" y2="280" stroke="#5F5E5A" stroke-width="4"/>
+<line x1="460" y1="80" x2="460" y2="280" stroke="#5F5E5A" stroke-width="4"/>
+<line x1="100" y1="82" x2="100" y2="160" stroke="#7F77DD" stroke-width="3" stroke-dasharray="6 4"/>
+<line x1="100" y1="200" x2="100" y2="278" stroke="#7F77DD" stroke-width="3" stroke-dasharray="6 4"/>
+<line x1="100" y1="160" x2="100" y2="200" stroke="#D85A30" stroke-width="5"/>
+<text x="100" y="304" text-anchor="middle" font-size="12" fill="#444441">z = 0</text>
+<text x="460" y="304" text-anchor="middle" font-size="12" fill="#444441">z = L</text>
+<g stroke="#888780" stroke-width="0.75" stroke-dasharray="3 3"><line x1="430" y1="80" x2="484" y2="58"/><line x1="460" y1="130" x2="484" y2="130"/><line x1="440" y1="190" x2="484" y2="190"/></g>
+<g font-size="12" fill="#444441">
+<text x="490" y="62">Shield r = b (tag 10)</text>
+<text x="490" y="134">Short end (tag 11)</text>
+<text x="490" y="194">Via r = a, copper</text>
+</g>
+<line x1="60" y1="330" x2="100" y2="330" stroke="#5F5E5A" stroke-width="4"/>
+<line x1="60" y1="352" x2="100" y2="352" stroke="#D85A30" stroke-width="5"/>
+<line x1="60" y1="374" x2="100" y2="374" stroke="#7F77DD" stroke-width="3" stroke-dasharray="6 4"/>
+<g fill="none" stroke="#1D9E75" stroke-width="1"><circle cx="72" cy="396" r="6"/><line x1="68" y1="392" x2="76" y2="400"/><line x1="76" y1="392" x2="68" y2="400"/><circle cx="90" cy="396" r="6"/></g><circle cx="90" cy="396" r="1.8" fill="#1D9E75"/>
+<g font-size="12" fill="#444441">
+<text x="112" y="334">pec: Φ = 0 and n×A = 0 (shield, short end)</text>
+<text x="112" y="356">terminal of P1: Φ = V₁ and n×A = 0 (via end face, tag 20)</text>
+<text x="112" y="378">port sheet: n×A = 0, Φ free (annulus at z = 0, tag 21)</text>
+<text x="112" y="400">B circling the via: into the page above, out of it below</text>
+</g>
+</svg>

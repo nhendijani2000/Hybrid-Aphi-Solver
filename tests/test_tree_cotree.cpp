@@ -2,7 +2,7 @@
 // tests/CMakeLists.txt for why no external framework is fetched here.
 //
 // Covers the boundary-first tree-cotree construction (tree_cotree.hpp;
-// `Claude outputs/tree_cotree_boundary_first_proposal.md`) and its two
+// `docs/TREE_COTREE_BOUNDARY_FIRST.md`) and its two
 // supporting pieces: the CSR NodeAdjacency builder and the UnionFind
 // disjoint-set structure.
 //

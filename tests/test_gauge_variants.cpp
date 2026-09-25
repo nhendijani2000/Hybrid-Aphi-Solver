@@ -252,8 +252,8 @@ void test_coupled_system_reduction() {
 
 // --- Gauge correctness with n x A = 0 surfaces ------------------------------
 //
-// The boundary-first construction (`Claude outputs/
-// tree_cotree_boundary_first_proposal.md`) exists because two simpler trees
+// The boundary-first construction (`docs/TREE_COTREE_BOUNDARY_FIRST.md`)
+// exists because two simpler trees
 // fail here, in opposite ways: a plain spanning tree ignoring the surfaces
 // over-constrains (B wrong by 26-36 % on cube_4, with no error raised), and
 // one root per surface under-constrains (a singular matrix). The two checks

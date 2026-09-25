@@ -114,7 +114,7 @@ examples/              Worked input files, each documenting its own physics
 tools/                 .geo mesh sources, and the gauge-comparison CLI
 meshes/                Test meshes -- small fixtures are tracked, see .gitignore
 third_party/           Vendored or fetched dependencies (kept out of git; see .gitignore)
-docs/                  Roadmap, references, design notes
+docs/                  Roadmap, references, design notes and the design record
 build.bat              Configure + build (finds Visual Studio for you)
 run-tests.bat          Run every test executable
 ```

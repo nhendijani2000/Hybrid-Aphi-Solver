@@ -693,7 +693,7 @@ have a settled type signature, so that phase is only about the weak form.
    printed gauge kappas (4, 1, 13.0902, 1.95521) are identical before and
    after. Suite: 791/791.
 7. **Done (Sept 2026) — boundary-first tree-cotree with `n×A = 0` surfaces.**
-   Designed in `Claude outputs/tree_cotree_boundary_first_proposal.md` from
+   Designed in `docs/TREE_COTREE_BOUNDARY_FIRST.md` from
    two measured failures of simpler trees on `cube_4`:
    - a plain spanning tree that ignores the Dirichlet surfaces reaches them
      from inside at many points, closing loops of zero-A edges that pin the

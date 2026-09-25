@@ -52,7 +52,7 @@ private:
 
 /// Result of the boundary-first tree-cotree decomposition. See
 /// build_tree_cotree for the construction and
-/// `Claude outputs/tree_cotree_boundary_first_proposal.md` for why it is
+/// `docs/TREE_COTREE_BOUNDARY_FIRST.md` for why it is
 /// built this way.
 ///
 /// Two views of one spanning tree are recorded:
