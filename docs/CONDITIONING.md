@@ -52,9 +52,37 @@ Solve for `Phi'`, then recover the physical potential with
 `recover_scaled_scalar_potential(phi_prime, omega) = j*omega * phi_prime`.
 
 Trade-off: this rescales columns instead of dividing a row, so it doesn't have the
-DC singularity of Formulation 1 -- but the recovered `Phi` is now itself scaled by
-`omega`, which can reintroduce numerical trouble in a different place (very small
-`Phi'` values at very low frequency, if `Phi` itself doesn't vanish as `omega -> 0`).
+DC singularity of Formulation 1 -- but it degenerates at low frequency in its own
+way, and the two directions are worth keeping straight.
+
+**Corrected 25 Sept 2026.** This paragraph previously said the risk was "very
+small `Phi'` values at very low frequency, if `Phi` itself doesn't vanish as
+`omega -> 0`". That has the direction backwards. Since `Phi = j*omega*Phi'`,
+
+```
+Phi' = Phi / (j*omega)
+```
+
+so if `Phi` stays O(1) as `omega -> 0` -- which it does, a terminal held at 1 V
+is 1 V at any frequency -- then `Phi'` **diverges**. What becomes small is the
+matrix: the `Phi'` diagonal block is `j*omega*K_PhiPhi`, which vanishes, and a
+vanishing block against an unchanged right-hand side is precisely what produces
+a large `Phi'`. Written in terms of the element integrals (see
+`docs/ASSEMBLY_PLAN.md` Sec. 2), the `Phi'` block is `alpha * L` with
+`alpha = j*omega*sigma - omega^2*eps`, which is O(omega).
+
+So the low-frequency failure modes are opposite, not shared:
+
+| | `Phi` block scales as | as `omega -> 0` |
+|---|---|---|
+| Formulation 1 | `beta/(j*omega) * L`, i.e. O(sigma/omega) | blows up |
+| Formulation 2 | `alpha * L`, i.e. O(omega) | vanishes |
+| Formulation 3 | `beta * L`, i.e. O(sigma) | stays put |
+
+Both 1 and 2 are ill-conditioned near DC relative to the A block (which is O(1)
+through its curl-curl part); only the direction differs. That is what the
+"Formulations 1-2's DC-degeneracy trade-off" below refers to, and it is
+unaffected by this correction.
 
 ## Formulation 3 -- solve the natural non-symmetric system directly
 

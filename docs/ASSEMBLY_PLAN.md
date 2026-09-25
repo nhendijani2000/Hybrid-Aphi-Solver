@@ -62,57 +62,94 @@ from, and what `CONDITIONING.md` Formulation 1 removes by dividing the Φ
 rows by `jω`. Under that scaling the two coupling blocks become exact
 transposes and the matrix is complex-symmetric.
 
-### Symmetric and unsymmetric, from one code path
+### All three formulations, from two scalars
 
-Both forms are assembled, selected by a flag, per `ROADMAP.md` Phase 04
-step 6 ("keep all forms available since later phases compare them").
+All three of `CONDITIONING.md`'s formulations are assembled, selected by a
+flag, per `ROADMAP.md` Phase 04 step 6 ("keep all forms available since
+later phases compare them"). They differ only in two numbers.
 
-The symmetric form is `CONDITIONING.md` **Formulation 1** — divide the Φ
-equation rows by `jω`. Because `α = jω·β`, that division does not *cancel*
-a `jω`; it means one was never needed:
+Write the **coefficient-free** element integrals as
 
 ```
-C_PhiA / (jω)  =  (jω · C_APhiᵀ) / (jω)  =  C_APhiᵀ      exactly
+K = ∫ (curl W)·(curl W)     M = ∫ W·W     C = ∫ W·∇S     L = ∫ ∇S·∇S
 ```
 
-So one scalar covers both modes, applied to every Φ-row contribution:
+and introduce a **row scale `r`** (multiplying every Φ-row contribution and
+the Φ/port right-hand side) and a **column scale `c`** (the unknown
+substitution `Φ = c·Φ'`). Then every formulation is:
 
-| | `phi_row_scale` | (Φ,A) scatter | (Φ,Φ) scatter | Φ and port RHS |
-|---|---|---|---|---|
-| unsymmetric | `1` | `jω · C_APhiᵀ` | `K_PhiPhi` | unscaled |
-| symmetric | `1/(jω)` | `C_APhiᵀ` | `K_PhiPhi/(jω)` | `÷ jω` |
+| block | assembled as |
+|---|---|
+| (A,A) | `νK + αM` |
+| (A,Φ) | `c · βC` |
+| (Φ,A) | `r · αCᵀ` |
+| (Φ,Φ) | `r·c · βL` |
+| Φ and port RHS | `r ·` (port currents) |
+| prescribed Φ or V | `÷ c` before use |
+| recovered Φ or V | `× c` after the solve |
 
-The kernels themselves are unchanged — the flag only alters what multiplies
-a Φ-row block on its way into the matrix — and **the sparsity pattern is
-identical**, so it is still built once and shared between modes and across
-a sweep.
+with
 
-Four consequences, each of which needs a test:
+| | `r` | `c` | (A,Φ) | (Φ,A) | symmetric |
+|---|---|---|---|---|---|
+| **F3 — natural** | `1` | `1` | `βC` | `αCᵀ` | no |
+| **F1 — row scaling** | `1/(jω)` | `1` | `βC` | `βCᵀ` | **yes** |
+| **F2 — scaled Φ** | `1` | `jω` | `αC` | `αCᵀ` | **yes** |
 
-1. **Port rows scale too.** `V_k` is Φ-like: its row *is* the port-current
-   equation. `PORT_AND_DOF_PLAN.md` §8 records that Formulation 1 must
-   divide the `V_k` rows **and their `I_k` right-hand sides** by `jω`.
-   Missing it makes the read-back current wrong by exactly `jω`, which
-   reads as a physics error rather than a bookkeeping one.
-2. **Symmetric requires ω > 0.** `1/(jω)` is undefined at DC. Not a real
-   limitation — at ω = 0 the system decouples (`FORMULATION.md` §2) and
-   there is no coupling block to symmetrise — but the code must *refuse*
-   symmetric + DC, not divide by zero.
-3. **No recovery step.** Row scaling multiplies an equation by a constant
-   and leaves the unknowns alone, so Φ comes out unchanged. (Formulation 2,
-   `Φ = jωΦ'`, *does* change the unknown and needs
-   `recover_scaled_scalar_potential`. Keeping the two straight matters.)
-4. **Symmetry needs gauge Method A.** `CONDITIONING.md`'s own table: the
-   Munteanu projection reintroduces asymmetry regardless, so Method D +
-   Formulation 1 pays the DC-degeneracy cost for no symmetry at all. Reject
-   that combination rather than produce a non-symmetric matrix while
-   claiming otherwise.
+Both symmetric cases work because `α = jω·β`. In F1 the `jω` on the Φ row
+is divided out; in F2 it is instead supplied to the Φ *column*. Verified
+against `CONDITIONING.md`: F1 turns `(jωσ − ω²ε)` into `(σ + jωε)`; F2 gives
+`K_APhi_new = jω·K_APhi` and `K_PhiPhi_new = jω·K_PhiPhi` with `K_AA`,
+`K_PhiA` and both right-hand sides untouched. Both match.
+
+**The symmetry condition is exactly `c == r·jω`** — one runtime assertion
+rather than a claim in a comment.
+
+The kernels are untouched by the choice; it only alters what multiplies a
+block on its way into the matrix. And **the sparsity pattern is identical
+for all three**, so it is still built once and shared between modes and
+across a sweep.
+
+#### Ports, which F1 and F2 treat differently
+
+`V_k` is Φ-like — its row *is* the port-current equation — so it takes both
+scales. `PORT_AND_DOF_PLAN.md` §8 records this; getting it wrong makes the
+read-back current wrong by exactly `jω`, which reads as a physics error
+rather than a bookkeeping one.
+
+| | F1 | F2 |
+|---|---|---|
+| unknown | `V_k` unchanged | `V'_k = V_k/(jω)` |
+| the port row | ÷ `jω` | unchanged |
+| current port RHS | `I_k/(jω)` | `I_k` |
+| voltage port: prescribe | `V_k` | `V_k/(jω)` |
+| read back `I_k` | `jω ×` residual | residual |
+| after the solve | nothing | `V_k = jω·V'_k`, `Φ = jω·Φ'` |
+
+#### Three more consequences, each needing a test
+
+1. **F1 requires ω > 0**; `1/(jω)` is undefined at DC. **F2 requires it
+   too**, but for the prescribed values rather than the matrix: a voltage
+   port would need `V_k/(jω)`. Both must *refuse* DC, not divide by zero.
+   No loss — at ω = 0 the system decouples (`FORMULATION.md` §2) and there
+   is no coupling block to symmetrise. F3 works at any frequency.
+2. **They degenerate at low frequency in opposite directions**, which is
+   why keeping all three is worth the flag rather than picking one: F1's Φ
+   block is `βL/(jω)` = O(σ/ω) and blows up; F2's is `αL` = O(ω) and
+   vanishes; F3's is `βL` = O(σ) and stays put. (`CONDITIONING.md`'s
+   Formulation 2 paragraph had this backwards and was corrected 25 Sept;
+   the derivation is recorded there.)
+3. **Symmetry needs gauge Method A.** Per `CONDITIONING.md`'s own table,
+   the Munteanu projection reintroduces asymmetry regardless, so Method D +
+   F1 or F2 pays the DC-degeneracy cost for no symmetry at all. Reject that
+   combination rather than produce a non-symmetric matrix while claiming
+   otherwise.
 
 **Deferred: storing only one triangle.** A complex-symmetric matrix needs
 half the storage, and MUMPS accepts that form. Doing it now would mean
 guessing the solver's expected layout before Phase 05 has chosen one, and
-it complicates the cross-check in §7.3. Assemble full storage in both modes;
-revisit when the solver is actually linked.
+it complicates the cross-check in §7.4. Assemble full storage in all three
+modes; revisit when the solver is actually linked.
 
 Signature — **the caller owns the memory**, which is what keeps element
 matrices off the heap and makes the kernels testable in isolation:
@@ -309,21 +346,28 @@ literals — never as a re-implementation of the code under test.
 | at `ω = 0`: `α = 0`, so no mass and no Φ–A coupling | the system decouples (`FORMULATION.md` §2) | the DC path is not what §2 says it is |
 | scaling by `s`: curl-curl `→ s`, mass `→ s³`, coupling `→ s²`, `∇S·∇S → s` | dimensions | a volume factor dropped or applied twice |
 
-### 7.3 Symmetric vs unsymmetric
+### 7.3 The three formulations
 
-- **The symmetric assembly really is symmetric**: `M == Mᵀ` entry for entry
-  after assembly, not merely in the two coupling blocks.
-- **Both modes describe the same problem.** Scaling rows does not change the
-  solution, so for the same mesh and frequency the two assembled systems
-  must have the same solution. Until a solver exists, check the weaker but
-  still exact statement: multiplying every Φ and port row of the symmetric
-  matrix by `jω` reproduces the unsymmetric one entry for entry, RHS
-  included.
-- **Symmetric + DC is refused**, not divided by zero.
-- **Symmetric + gauge Method D is refused**, since the projection would
-  break the symmetry the caller asked for.
-- **The pattern is mode-independent**: `build_sparsity` output is identical
-  for both, which is what lets a sweep share it.
+- **F1 and F2 really are symmetric**: `M == Mᵀ` entry for entry after
+  assembly, not merely in the two coupling blocks. F3 must NOT be -- a
+  negative control, since a bug that symmetrised everything would otherwise
+  look like success.
+- **`c == r·jω` holds** for F1 and F2 and fails for F3. Asserted at run
+  time, not just claimed.
+- **All three describe the same problem.** Each is the natural system with
+  its Φ rows scaled by `r` and Φ columns by `c`, so the exact relation is
+  checkable without a solver: taking the F1 or F2 matrix, multiplying every
+  Φ and port row by `1/r` and every Φ and port column by `1/c`, must
+  reproduce F3 entry for entry, RHS included.
+- **F1 and F2 refuse DC**, rather than dividing by zero. F3 does not.
+- **F1 and F2 refuse gauge Method D**, since its projection would break the
+  symmetry the caller asked for.
+- **The pattern is formulation-independent**: `build_sparsity` output is
+  identical for all three, which is what lets a sweep share it.
+- **Port handling**: a voltage port under F2 must have its prescribed value
+  divided by `jω`, and its recovered `V_k` multiplied back. A round trip
+  through prescribe-then-recover must return the value written in the input
+  file.
 
 ### 7.4 Assembly-level
 
@@ -342,8 +386,8 @@ literals — never as a re-implementation of the code under test.
 
 Each must be shown to fail: drop the global edge sign; transpose one block;
 use a 1-point rule for the quadratic terms; drop the volume factor; skip the
-`jω` on the unsymmetric PhiA scatter; forget to scale the port rows in
-symmetric mode.
+`jω` on the F3 PhiA scatter; forget to scale the port rows under F1; forget
+to divide a prescribed voltage by `jω` under F2; swap `r` and `c`.
 
 ---
 
@@ -359,9 +403,9 @@ symmetric mode.
    against the triplet path.
 6. **The scatter and RHS**, including prescribed-DOF elimination, in the
    unsymmetric mode first.
-7. **The symmetric mode**, which is one scalar and its four consequences
-   (§2), checked against the unsymmetric one by the row-scaling identity in
-   §7.3.
+7. **F1 and F2**, which are two scalars and their consequences (§2),
+   each checked against F3 by the exact row/column-scaling identity in
+   §7.3, plus the port round trip.
 8. **Time it**, then decide about threading with a number in hand.
 
 ---
@@ -385,11 +429,13 @@ symmetric mode.
 4. **Frequency sweep**: build the pattern once and refill the values per
    frequency. *Recommend yes* — it is most of the reason for the two-pass
    split.
-5. **Symmetric and unsymmetric both, from one flag** (§2). *Agreed 25 Sept.*
-   The default for a solve is the open question, not whether to have both:
-   symmetric buys `LDLᵀ` over `LU` in Phase 05 — roughly half the
-   factorisation memory — but only above DC and only with gauge Method A.
-   *Recommend: unsymmetric as the default until a real solve exists to
-   compare against, then switch once symmetric is shown to give the same
-   answer.* Getting one validated field out first has been the right call
-   at every previous fork in this project.
+5. **All three formulations, from one flag** (§2). *Agreed 25 Sept.* The
+   default for a solve is the open question, not whether to have all three:
+   F1 and F2 buy `LDLᵀ` over `LU` in Phase 05 -- roughly half the
+   factorisation memory -- but only above DC and only with gauge Method A,
+   and they degenerate in opposite directions as omega falls.
+   *Recommend: F3 as the default until a validated field exists to compare
+   against, then choose between them by the Phase 05 frequency sweep, which
+   is what `CONDITIONING.md` says to do and what `recommend_strategy`
+   already takes measured arguments for.* Getting one correct answer out
+   first has been the right call at every previous fork here.
