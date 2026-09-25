@@ -310,14 +310,21 @@ exactly the mistake §5.1 warns against.
 
 ## 6. Memory, with numbers
 
-On the cylinder (26 907 unknowns, 16 040 tets, ~1.5 M nonzeros expected):
+**Measured on the cylinder**, 25 Sept, once `build_sparsity` existed --
+26 907 unknowns, 16 040 tets, **941 665 nonzeros**, 35.0 per row:
 
 | | |
 |---|---|
-| CSR `col_index` | ~6 MB |
-| CSR `values` (complex) | ~24 MB |
+| CSR `col_index` | 3.6 MB |
+| CSR `values` (complex) | 14.4 MB |
+| **total** | **17.96 MB** |
 | element matrices | **~2.6 KB, on the stack, reused** |
 | *(triplet alternative)* | *~55 MB plus a 2.3 M-element sort* |
+
+This replaces an estimate of ~1.5 M nonzeros and ~30 MB, which was high by
+about 60 %: the guess assumed 50-70 entries per row and the real figure is
+35. Worth recording that the guess was wrong in the safe direction, but
+wrong.
 
 ---
 
