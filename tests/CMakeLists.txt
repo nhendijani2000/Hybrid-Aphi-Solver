@@ -69,3 +69,7 @@ target_link_libraries(aphi_tests_dof_map PRIVATE aphi_core)
 target_compile_definitions(aphi_tests_dof_map PRIVATE
     APHI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../meshes")
 add_test(NAME aphi_tests_dof_map COMMAND aphi_tests_dof_map)
+
+add_executable(aphi_tests_quadrature test_quadrature.cpp)
+target_link_libraries(aphi_tests_quadrature PRIVATE aphi_core)
+add_test(NAME aphi_tests_quadrature COMMAND aphi_tests_quadrature)

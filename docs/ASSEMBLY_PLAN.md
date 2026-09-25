@@ -155,18 +155,24 @@ Signature — **the caller owns the memory**, which is what keeps element
 matrices off the heap and makes the kernels testable in isolation:
 
 ```cpp
-void kernel_AA(const TetGeometry& g, const Mesh& mesh, int tet,
-               const ElementCoefficients& c, std::complex<double>* out);   // 36
-void kernel_APhi(const TetGeometry& g, const Mesh& mesh, int tet,
-                 const ElementCoefficients& c, std::complex<double>* out); // 60
-void kernel_PhiPhi(const TetGeometry& g,
-                   const ElementCoefficients& c, std::complex<double>* out); // 100
+void kernel_AA     (const TetGeometry& g, const ElementCoefficients& c,
+                    std::complex<double>* out);   //  36 =  6x6
+void kernel_APhi   (const TetGeometry& g, const ElementCoefficients& c,
+                    std::complex<double>* out);   //  60 =  6x10
+void kernel_PhiPhi (const TetGeometry& g, const ElementCoefficients& c,
+                    std::complex<double>* out);   // 100 = 10x10
 ```
 
-`kernel_PhiPhi` needs no mesh or tet: P2 shape functions carry no
-orientation, only the barycentric gradients, which are in `TetGeometry`.
-`kernel_AA` and `kernel_APhi` do, because the Whitney functions need
-`tet_edge_signs`.
+**All three are pure functions of the geometry** -- no `Mesh`, no tet index,
+no global state. They use the LOCAL Whitney basis, and the global edge
+orientation is applied by the scatter through `DofMap`.s `coeff` (§9.1).
+That is exact, because `W_global = s * W_local` gives
+`A_global[p][q] = s_p * s_q * A_local[p][q]`, which is what
+`cp * cq * block[p][q]` computes; for the (A,Phi) block `grad(S)` carries no
+orientation, so `cq = 1` and only `s_p` applies.
+
+Being pure is what makes them testable against hand-computed numbers with a
+`TetGeometry` built by hand and no mesh at all.
 
 ### Quadrature
 
@@ -412,12 +418,23 @@ to divide a prescribed voltage by `jω` under F2; swap `r` and `c`.
 
 ## 9. Decisions to confirm
 
-1. **Where the edge orientation sign is applied.** The DOF map already
-   carries `tet_edge_signs` in its `coeff`. If the kernels *also* use the
-   `_global` basis, the sign is applied **twice and cancels** — and no
-   current test would catch that. *Recommend: kernels use the `_global`
-   basis; `DofMap`'s edge `coeff` becomes 1, with a test asserting it is
-   applied exactly once.* Either choice is correct; both is a silent bug.
+1. **Where the edge orientation sign is applied. Decided 25 Sept: in the
+   DOF map, via `coeff`; the kernels use the LOCAL basis.**
+
+   An earlier draft of this plan recommended the opposite -- kernels using
+   the `_global` accessors, with `DofMap`.s `coeff` reduced to 1. Writing
+   out the kernel signatures changed that: taking the sign out of the
+   kernels makes all three **pure functions of `TetGeometry`**, with no
+   `Mesh` argument and no tet index, which is what lets them be tested
+   against hand-computed numbers without a mesh existing at all. The sign
+   also then stays in the one place that already implements and tests it
+   (`test_local_dof_map` asserts `coeff == tet_edge_signs`), and no
+   committed code has to change -- nothing outside tests uses the `_global`
+   accessors yet.
+
+   What must NOT happen is both, which would apply the sign twice and
+   cancel it, and which no current test would catch. One test asserts it is
+   applied exactly once.
 2. **Complex throughout, including DC.** *Recommend yes*, per
    `FORMULATION.md` §5.2 — one assembly and solve path, at a factor of two
    in arithmetic on the DC milestone.
