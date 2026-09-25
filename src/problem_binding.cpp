@@ -8,6 +8,12 @@
 
 namespace aphi_solver {
 
+int BoundPort::side_of_tet(int t) const {
+    const auto it = std::lower_bound(touching_tets.begin(), touching_tets.end(), t);
+    if (it == touching_tets.end() || *it != t) return 0;
+    return tet_side[static_cast<std::size_t>(it - touching_tets.begin())];
+}
+
 void scale_mesh_to_metres(Mesh& mesh, LengthUnit unit) {
     const double s = length_scale(unit);
     if (s == 1.0) return;
@@ -53,6 +59,15 @@ int resolve_tag(const Mesh& mesh, const std::string& name, int dimension, int li
     fail(line, what + " '" + name + "' is not a " +
                    (dimension == 3 ? "Physical Volume" : "Physical Surface") +
                    " in the mesh. Available: " + available);
+}
+
+std::string join_names(const std::vector<std::string>& v) {
+    std::string out;
+    for (std::size_t i = 0; i < v.size(); ++i) {
+        if (i) out += ", ";
+        out += "'" + v[i] + "'";
+    }
+    return out;
 }
 
 std::vector<int> sorted_unique(std::vector<int> v) {
@@ -408,59 +423,161 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
         }
     }
 
-    // ---- DC: every conducting piece needs exactly one reference ----------
-    if (conductors_only) {
+    // ---- conduction paths -------------------------------------------------
+    // Built from sigma alone, in every regime: a path is a property of the
+    // material, not of the formulation. Two bodies that touch are one path.
+    {
         Components comp(num_tets);
+        std::vector<bool> conducting(static_cast<std::size_t>(num_tets), false);
+        for (int t = 0; t < num_tets; ++t) {
+            conducting[static_cast<std::size_t>(t)] =
+                out.bodies[static_cast<std::size_t>(out.body_of_tet[static_cast<std::size_t>(t)])]
+                    .is_conductor();
+        }
         for (int f = 0; f < mesh.num_faces(); ++f) {
             const FaceTets& ft = mesh.face_tets[static_cast<std::size_t>(f)];
             if (ft.count != 2) continue;
             const int a = ft.tets[0], b = ft.tets[1];
-            if (out.phi_tet[static_cast<std::size_t>(a)] && out.phi_tet[static_cast<std::size_t>(b)]) {
+            if (conducting[static_cast<std::size_t>(a)] && conducting[static_cast<std::size_t>(b)]) {
                 comp.unite(a, b);
             }
         }
 
-        // Which conductor pieces each port touches, and whether it fixes a
-        // potential there. A voltage port does; so does an internal current
-        // port, which holds its minus side at 0 V. A boundary current port
-        // does not -- it prescribes a flux, not a level.
-        std::map<int, std::vector<std::string>> references, touching;
+        out.path_of_tet.assign(static_cast<std::size_t>(num_tets), -1);
+        std::map<int, int> root_to_path;
+        for (int t = 0; t < num_tets; ++t) {
+            if (!conducting[static_cast<std::size_t>(t)]) continue;
+            const int root = comp.find(t);
+            auto it = root_to_path.find(root);
+            if (it == root_to_path.end()) {
+                it = root_to_path.emplace(root, static_cast<int>(out.conduction_paths.size())).first;
+                out.conduction_paths.emplace_back();
+            }
+            out.path_of_tet[static_cast<std::size_t>(t)] = it->second;
+            out.conduction_paths[static_cast<std::size_t>(it->second)].tets.push_back(t);
+        }
+        for (ConductionPath& path : out.conduction_paths) {
+            std::vector<int> bodies;
+            for (int t : path.tets) bodies.push_back(out.body_of_tet[static_cast<std::size_t>(t)]);
+            path.bodies = sorted_unique(std::move(bodies));
+        }
+
+        // Which paths each port touches, and whether it fixes a potential
+        // there. A voltage port does; so does an internal current port,
+        // which holds its minus side at 0 V. A boundary current port does
+        // not -- it prescribes a flux, not a level.
         for (std::size_t i = 0; i < out.ports.size(); ++i) {
             const BoundPort& bp = out.ports[i];
             const bool is_reference = !is_current_driven(bp.type) || bp.is_internal();
-            std::set<int> roots;
+            std::set<int> paths;
             for (int f : bp.surface.faces) {
                 const FaceTets& ft = mesh.face_tets[static_cast<std::size_t>(f)];
                 for (int k = 0; k < ft.count; ++k) {
-                    const int t = ft.tets[static_cast<std::size_t>(k)];
-                    if (out.phi_tet[static_cast<std::size_t>(t)]) roots.insert(comp.find(t));
+                    const int p = out.path_of_tet[static_cast<std::size_t>(
+                        ft.tets[static_cast<std::size_t>(k)])];
+                    if (p >= 0) paths.insert(p);
                 }
             }
-            if (roots.empty()) {
+            if (paths.empty() && conductors_only) {
                 fail(problem.ports[i].line,
                      "port '" + bp.name +
                          "' touches no conductor, so at DC it can carry no current");
             }
-            for (int r : roots) {
-                touching[r].push_back(bp.name);
-                if (is_reference) references[r].push_back(bp.name);
+            for (int p : paths) {
+                ConductionPath& path = out.conduction_paths[static_cast<std::size_t>(p)];
+                path.ports.push_back(bp.name);
+                if (is_reference) ++path.reference_count;
             }
         }
 
-        for (const auto& kv : touching) {
-            const auto it = references.find(kv.first);
-            const std::size_t count = it == references.end() ? 0 : it->second.size();
-            if (count == 0) {
-                fail(0, "a conductor carries port(s) " + kv.second.front() +
-                            " but nothing fixes its potential, so Phi there is determined only up "
-                            "to a constant. Add a voltage port on it");
+        // At DC (and in the reduced variant) Phi lives only on the
+        // conductors, so each path is its own Phi problem and needs its own
+        // reference. At full wave (sigma + j*omega*eps) couples everything
+        // through the dielectric, the domain is one Phi problem, and a
+        // single global reference -- already required at parse time --
+        // suffices.
+        //
+        // The rule is "at least one", not "exactly one". Two voltage ports
+        // on one conductor is a voltage-driven resistor: a well-posed
+        // Dirichlet problem whose current falls out as a result. An earlier
+        // draft of this code rejected that, and the test suite defended the
+        // mistake; the cylinder passed either way, which is why it went
+        // unnoticed.
+        if (conductors_only) {
+            for (ConductionPath& path : out.conduction_paths) {
+                if (path.reference_count > 0) continue;
+
+                if (!path.ports.empty()) {
+                    fail(0, "a conductor carries port(s) " + join_names(path.ports) +
+                                " but nothing fixes its potential, so Phi there is determined only "
+                                "up to a constant. Add a voltage port on it");
+                }
+
+                // Floating: no port, no reference. Legitimate (an
+                // unconnected shield or pad) but also what a forgotten
+                // connection looks like, so it is said once. Pinning the
+                // lowest-numbered node is deterministic on purpose -- "any
+                // node" is fine, "a different node between runs" is not.
+                path.is_floating = true;
+                int lowest = -1;
+                for (int t : path.tets) {
+                    for (int v : mesh.tets[static_cast<std::size_t>(t)]) {
+                        if (lowest < 0 || v < lowest) lowest = v;
+                    }
+                }
+                path.pin_node = lowest;
+                out.warnings.push_back(
+                    "a conductor of " + std::to_string(path.tets.size()) +
+                    " tets is floating: no port touches it and nothing fixes its potential. Node " +
+                    std::to_string(lowest) +
+                    " will be pinned to 0 V to keep the matrix non-singular. It carries no DC "
+                    "current, so the value is arbitrary -- but check this is not a missing "
+                    "connection.");
             }
-            if (count > 1) {
-                fail(0, "a conductor has " + std::to_string(count) +
-                            " potential references (" + it->second[0] + " and " + it->second[1] +
-                            "): Phi is over-constrained and the requested currents cannot "
-                            "generally satisfy both");
+        }
+    }
+
+    // ---- the tree-cotree gauge -------------------------------------------
+    // Run here because the DOF map cannot classify an edge without it. The
+    // mask is every edge on the outer boundary, which is what
+    // `outer = flux_tangential` means and the only option supported today.
+    out.dirichlet_edge = boundary_edge_mask(mesh);
+    out.gauge = build_tree_cotree(mesh, out.dirichlet_edge);
+
+    // ---- which side of each cut every touching tet is on ------------------
+    for (BoundPort& bp : out.ports) {
+        if (!bp.is_internal()) continue;
+
+        // A point on the cut plane, and the normal pointing minus -> plus.
+        const Vec3 origin = face_centroid(mesh, bp.surface.faces.front());
+
+        std::vector<int> touching;
+        for (int f : bp.surface.faces) {
+            const FaceTets& ft = mesh.face_tets[static_cast<std::size_t>(f)];
+            for (int k = 0; k < ft.count; ++k) touching.push_back(ft.tets[static_cast<std::size_t>(k)]);
+        }
+        // Every tet sharing a NODE with the cut, not merely a face: a tet
+        // touching at one vertex still reads a value there.
+        std::set<int> cut_nodes(bp.surface.nodes.begin(), bp.surface.nodes.end());
+        for (int t = 0; t < num_tets; ++t) {
+            for (int v : mesh.tets[static_cast<std::size_t>(t)]) {
+                if (cut_nodes.count(v)) {
+                    touching.push_back(t);
+                    break;
+                }
             }
+        }
+        bp.touching_tets = sorted_unique(std::move(touching));
+
+        bp.tet_side.reserve(bp.touching_tets.size());
+        for (int t : bp.touching_tets) {
+            Vec3 centroid(0.0, 0.0, 0.0);
+            for (int v : mesh.tets[static_cast<std::size_t>(t)]) {
+                centroid = centroid + mesh.nodes[static_cast<std::size_t>(v)];
+            }
+            centroid = centroid * 0.25;
+            const double signed_distance = (centroid - origin).dot(bp.direction);
+            bp.tet_side.push_back(signed_distance > 0.0 ? +1 : -1);
         }
     }
 

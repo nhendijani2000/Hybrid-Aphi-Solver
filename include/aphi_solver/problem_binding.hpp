@@ -7,6 +7,7 @@
 #include "aphi_solver/input_file.hpp"  // InputError
 #include "aphi_solver/mesh.hpp"
 #include "aphi_solver/problem.hpp"
+#include "aphi_solver/tree_cotree.hpp"
 
 namespace aphi_solver {
 
@@ -88,7 +89,55 @@ struct BoundPort {
     /// where the full-wave delta gap lives.
     std::vector<int> rim_edges;
 
+    /// Internal ports only: every tet sharing at least one node with the
+    /// cut, ascending, with `tet_side` giving +1 (plus side) or -1 (minus
+    /// side) for each.
+    ///
+    /// `plus_side_tet` above covers only tets with a *face* on the cut.
+    /// This covers the rest -- a tet touching at one node or one edge still
+    /// has to know which side it sees that node from, because Phi is 0 on
+    /// the minus side and the port's unknown on the plus side, and a tet
+    /// reads one or the other.
+    ///
+    /// The classification is a plane test, not a flood fill: the cut is
+    /// planar (binding rejects it otherwise) and is built from mesh faces,
+    /// so no tet straddles it and every tet's centroid is strictly on one
+    /// side. Exact, and no tolerance to tune.
+    std::vector<int> touching_tets;
+    std::vector<signed char> tet_side;
+
     bool is_internal() const { return aphi_solver::is_internal(type); }
+
+    /// +1 (plus side), -1 (minus side), or 0 if tet `t` does not touch this
+    /// cut at all. Binary search over `touching_tets`.
+    int side_of_tet(int t) const;
+};
+
+/// One electrically connected conducting region: the tets a current could
+/// flow through without leaving the conductors.
+///
+/// A path is **not** the same as a body. Two bodies that touch -- a via
+/// meeting a trace -- are one path made of two materials, and it is the
+/// path, not the body, that needs a potential reference. Conversely one
+/// body meshed as two separate islands is two paths.
+///
+/// Built from `sigma > 0` alone, never from `phi_tet`: a conduction path is
+/// a property of the material, not of which formulation is being solved.
+/// (An earlier draft built it from `phi_tet`, which is the conductors only
+/// at DC -- at full wave it would have merged the entire domain into one
+/// "path".)
+struct ConductionPath {
+    std::vector<int> tets;            ///< ascending
+    std::vector<int> bodies;          ///< indices into BoundProblem::bodies
+    std::vector<std::string> ports;   ///< ports touching this path
+    int reference_count = 0;          ///< ports on it that fix a potential
+
+    /// True when nothing fixes this path's potential and no port touches
+    /// it. At DC its Phi would be determined only up to a constant, so one
+    /// node is pinned; the value is physically meaningless, since a
+    /// floating conductor carries no DC current.
+    bool is_floating = false;
+    int pin_node = -1;  ///< the node to pin when floating, else -1
 };
 
 /// A problem bound to a mesh: everything the DOF map needs, and nothing it
@@ -104,6 +153,28 @@ struct BoundProblem {
     /// the full-wave regime; the conductors only at DC and in the reduced
     /// variant, where Phi's equation is identically empty elsewhere.
     std::vector<bool> phi_tet;
+
+    /// The conducting regions, and which one each tet belongs to (-1 where
+    /// sigma == 0). Always built, in every regime.
+    std::vector<ConductionPath> conduction_paths;
+    std::vector<int> path_of_tet;
+
+    /// The tree-cotree gauge for this mesh and boundary condition, run here
+    /// rather than left to the caller because the DOF map cannot classify a
+    /// single edge without it: every edge is FREE, TREE (a = 0, the gauge)
+    /// or DIRICHLET (a = 0, from n x A = 0), and two of the three come from
+    /// this result.
+    ///
+    /// One tree serves both regimes. The mask below comes from the boundary
+    /// condition, which does not depend on frequency, and at DC the
+    /// magnetostatic stage still needs a gauge because curl-curl is
+    /// singular without one.
+    TreeCotreeResult gauge;
+
+    /// The n x A = 0 edge mask the gauge was built from. Kept because the
+    /// DOF map needs it too, and re-deriving it is how the two could drift
+    /// apart.
+    std::vector<bool> dirichlet_edge;
 
     std::vector<std::string> warnings;
 };

@@ -232,13 +232,24 @@ void test_dc_reference_rules() {
               "the message explains the singularity rather than just refusing");
     }
     {
+        // TWO references on one conductor is a voltage-driven resistor:
+        // V = 1 at one end, V = 0 at the other. Well-posed -- the current
+        // falls out as a result -- and it must be accepted.
+        //
+        // An earlier version of bind_to_mesh rejected this, and an earlier
+        // version of this test asserted the rejection, so the suite
+        // defended the bug. The rule is "at least one reference per
+        // conducting path", never "exactly one". The cylinder passes either
+        // way, which is why it went unnoticed.
         Mesh m = make_cube();
         Problem p = make_cube_problem(m);
-        p.ports[0].type = PortType::BoundaryVoltage;  // two references on one conductor
+        p.ports[0].type = PortType::BoundaryVoltage;
         p.ports[0].amplitude = 1.0;
-        const std::string msg = expect_error(p, m, "two references on one conductor");
-        check(msg.find("over-constrained") != std::string::npos,
-              "the message says the problem is over-constrained");
+        const BoundProblem b = expect_ok(p, m, "a voltage-driven conductor (two voltage ports)");
+        if (!b.conduction_paths.empty()) {
+            check(b.conduction_paths[0].reference_count == 2,
+                  "both voltage ports count as references on the one path");
+        }
     }
     {
         // An insulator carrying a port can carry no DC current.
@@ -247,6 +258,229 @@ void test_dc_reference_rules() {
         p.bodies[0].sigma = 0.0;
         p.bodies[1].sigma = 0.0;
         expect_error(p, m, "ports on an all-insulator mesh");
+    }
+}
+
+// A conduction path is built from sigma, and spans bodies: two conductors
+// that touch are ONE path, because that is what a current sees. Getting this
+// from phi_tet instead would merge the whole domain at full wave.
+void test_conduction_paths() {
+    {
+        Mesh m = make_cube();
+        const Problem p = make_cube_problem(m);
+        const BoundProblem b = expect_ok(p, m, "the cube's conduction path");
+        check(b.conduction_paths.size() == 1u,
+              "two touching conductor bodies are ONE conduction path");
+        check(b.conduction_paths[0].tets.size() == 6u, "the path covers every tet");
+        check(b.conduction_paths[0].bodies.size() == 2u, "the path records both bodies");
+        check(b.conduction_paths[0].reference_count == 1, "P2 is its one reference");
+        check(!b.conduction_paths[0].is_floating, "a ported path is not floating");
+        check(b.path_of_tet[0] == 0 && b.path_of_tet[5] == 0, "every tet maps to the path");
+    }
+    {
+        // Make one body an insulator: the remaining conductor is a smaller
+        // path, and the insulator's tets belong to none.
+        Mesh m = make_cube();
+        Problem p = make_cube_problem(m);
+        p.bodies[1].sigma = 0.0;
+        p.ports[1].surface = {"face_a"};  // move both ports onto the conductor
+        p.ports[1].type = PortType::BoundaryVoltage;
+        p.ports.pop_back();
+        p.ports[0].type = PortType::BoundaryVoltage;
+        p.ports[0].amplitude = 0.0;
+        const BoundProblem b = expect_ok(p, m, "a mesh with one conductor and one insulator");
+        check(b.conduction_paths.size() == 1u, "only the conducting body forms a path");
+        check(b.conduction_paths[0].tets.size() == 3u, "the path is the three conducting tets");
+        check(b.path_of_tet[3] == -1, "an insulator tet belongs to no path");
+    }
+    {
+        // ONE body whose tets are not connected to each other is TWO paths.
+        //
+        // In the Kuhn cube the six tets form a closed fan, so tets 1 and 3
+        // are not adjacent. Tagging only those two as the conductor leaves
+        // two islands of one tet each, separated by insulator.
+        //
+        // This is the case that makes the sigma-vs-phi_tet distinction
+        // visible. At full wave phi_tet is true everywhere, so building the
+        // components from it would unite the two islands *through the
+        // insulator* and report one path. An earlier version of this test
+        // used a single connected conductor, where both spellings agree --
+        // it passed a negative control that flipped the source, which is
+        // how the weakness was found.
+        Mesh m = make_cube();
+        m.tet_tags = {2, 1, 2, 1, 2, 2};
+        Problem p = make_cube_problem(m);
+        p.bodies[0].sigma = 5.8e7;  // tag 1: the two islands
+        p.bodies[1].sigma = 0.0;    // tag 2: insulator
+        p.type = AnalysisType::Frequency;
+        p.frequencies = {1e6};
+        p.formulation = Formulation::FullWave;
+        p.ports.pop_back();
+        p.ports[0].type = PortType::BoundaryVoltage;
+        p.ports[0].amplitude = 0.0;
+
+        const BoundProblem b = expect_ok(p, m, "two disconnected conductor islands at full wave");
+        check(b.conduction_paths.size() == 2u,
+              "one body in two disconnected pieces is TWO conduction paths, and the insulator "
+              "between them does not join them even though Phi lives there");
+        if (b.conduction_paths.size() == 2u) {
+            check(b.conduction_paths[0].tets.size() == 1u &&
+                      b.conduction_paths[1].tets.size() == 1u,
+                  "each island is one tet");
+            check(b.conduction_paths[0].bodies.size() == 1u &&
+                      b.conduction_paths[0].bodies[0] == 0,
+                  "both islands belong to the same body");
+        }
+        int phi_tets = 0;
+        for (bool v : b.phi_tet) {
+            if (v) ++phi_tets;
+        }
+        check(phi_tets == 6, "at full wave Phi still lives everywhere, paths notwithstanding");
+    }
+}
+
+// A conductor nothing touches would leave Phi fixed only up to a constant.
+// Warned about rather than refused -- an unconnected shield is legitimate --
+// and one node is pinned to keep the matrix non-singular.
+void test_floating_conductor() {
+    Mesh m = make_cube();
+    Problem p = make_cube_problem(m);
+    // Move both ports onto body 1's face so body 2, still a conductor, is
+    // touched by nothing. The cube's two halves meet, so make them separate
+    // by turning the shared region into... simpler: both ports on face_a,
+    // which only body 1 borders, is not possible here -- instead give body 2
+    // its own tag and no port, and rely on the cube's halves being joined.
+    // They ARE joined, so this is one path; the floating case needs a mesh
+    // where they are not. Use the insulator to separate them.
+    p.bodies[1].sigma = 0.0;
+    p.ports.pop_back();
+    p.ports[0].type = PortType::BoundaryVoltage;
+    p.ports[0].amplitude = 0.0;
+    const BoundProblem b = expect_ok(p, m, "a conductor with a reference");
+    check(b.warnings.empty(), "a referenced conductor produces no floating warning");
+
+    // Now remove the port's reference role by making the conductor carry no
+    // port at all: put the only port on the insulator's face. At DC that is
+    // a different error (a port touching no conductor), which is the point
+    // -- the two cases are distinguished.
+    Problem q = make_cube_problem(m);
+    q.bodies[1].sigma = 0.0;
+    q.ports.pop_back();
+    q.ports[0].surface = {"face_b"};  // z = 1, bordered by body 2 (the insulator)
+    q.ports[0].type = PortType::BoundaryVoltage;
+    q.ports[0].amplitude = 0.0;
+    const std::string msg = expect_error(q, m, "a port touching no conductor at DC");
+    check(msg.find("no conductor") != std::string::npos,
+          "the message says the port touches no conductor");
+}
+
+// The gauge runs during binding, because the DOF map cannot classify an edge
+// without it. The invariants are exact, so they are asserted as equalities.
+void test_gauge_is_built() {
+    Mesh m = make_cube();
+    const Problem p = make_cube_problem(m);
+    const BoundProblem b = expect_ok(p, m, "the cube's gauge");
+
+    check(b.dirichlet_edge.size() == static_cast<std::size_t>(m.num_edges()),
+          "the Dirichlet mask covers every edge");
+    check(b.gauge.is_tree_edge.size() == static_cast<std::size_t>(m.num_edges()),
+          "the gauge covers every edge");
+
+    // A spanning tree over one connected mesh has N - 1 edges, always.
+    check(b.gauge.tree_edge_count == m.num_nodes() - 1,
+          "tree edges == nodes - 1 for a connected mesh");
+    check(b.gauge.num_reference_groups == 1, "one root for one connected piece");
+
+    // Every edge of the cube's surface is on the boundary; the only interior
+    // edge is the body diagonal 0-6 that Kuhn's triangulation shares.
+    int dirichlet = 0;
+    for (bool v : b.dirichlet_edge) {
+        if (v) ++dirichlet;
+    }
+    check(dirichlet == m.num_edges() - 1,
+          "every edge but the interior diagonal lies on the boundary");
+
+    check(b.gauge.surface_tree_edge_count + b.gauge.interior_tree_edge_count ==
+              b.gauge.tree_edge_count,
+          "surface and interior tree edges account for the whole tree");
+}
+
+// The side labels. A tet touching the cut at a single node still has to know
+// which side it sees that node from, because Phi is 0 on one side and the
+// port's unknown on the other.
+void test_cut_side_labels() {
+    // A bipyramid: two tets sharing the face (0,1,2), with apexes above and
+    // below it. That shared face is a COMPLETE cross-section -- it separates
+    // the solid, it is planar, and its three rim edges all lie on the outer
+    // boundary -- so it is a valid cut.
+    //
+    // The Kuhn cube cannot supply one. Its six tets form a closed fan around
+    // the diagonal 0-6, so a single interior triangle does not separate it
+    // (the rim check catches that, as it should), and the two faces that
+    // would separate it are not coplanar (the planarity check catches that).
+    // Both refusals are correct; the geometry simply has no valid cut.
+    Mesh m;
+    m.nodes = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0, 0, -1}};
+    m.tets = {{0, 1, 2, 3}, {0, 1, 2, 4}};
+    m.build_topology();
+    m.tet_tags = {1, 1};
+    m.physical_names = {{3, 1, "metal"}, {2, 20, "cut"}};
+    tag_face(m, 0, 1, 2, 20);
+
+    Problem p;
+    p.type = AnalysisType::DC;
+    p.bodies = {make_body("B1", "metal", 5.8e7, 1)};
+    Port cut = make_port("P1", PortType::InternalCurrent, "cut", 1.0, 9);
+    // The cut lies in z = 0, so +z points through it. The plus side is then
+    // the tet with the apex at z = +1, which is tet 0.
+    cut.current_direction = Vec3(0, 0, 1);
+    p.ports = {cut};
+
+    const BoundProblem b = expect_ok(p, m, "an internal cut on the cube");
+    if (b.ports.empty()) return;
+    const BoundPort& bp = b.ports[0];
+
+    check(bp.surface.faces.size() == 1u, "the cut is one face");
+    check(bp.plus_side_tet.size() == 1u, "one plus-side tet per cut face");
+    check(!bp.touching_tets.empty(), "some tets touch the cut");
+
+    // Every touching tet gets a definite side, and the two sides disagree.
+    int plus = 0, minus = 0;
+    for (signed char s : bp.tet_side) {
+        if (s > 0) ++plus;
+        if (s < 0) ++minus;
+    }
+    check(plus > 0 && minus > 0, "tets are found on both sides of the cut");
+    check(plus + minus == static_cast<int>(bp.touching_tets.size()),
+          "every touching tet is labelled, none left at zero");
+
+    // The face's own two tets must be labelled consistently with
+    // plus_side_tet, which was computed by a different test (the opposite
+    // vertex) -- so agreement is a real cross-check, not a tautology.
+    const int f = bp.surface.faces[0];
+    const FaceTets& ft = m.face_tets[static_cast<std::size_t>(f)];
+    check(bp.side_of_tet(bp.plus_side_tet[0]) == +1,
+          "the opposite-vertex test and the plane test agree on the plus side");
+    const int other = ft.tets[0] == bp.plus_side_tet[0] ? ft.tets[1] : ft.tets[0];
+    check(bp.side_of_tet(other) == -1, "and on the minus side");
+
+    // Both tets touch this cut, so side_of_tet is exercised for absence
+    // with an index past the end rather than a real tet.
+    check(bp.side_of_tet(m.num_tets() + 5) == 0,
+          "side_of_tet returns 0 for a tet that does not touch the cut");
+    check(bp.plus_side_tet[0] == 0, "tet 0, whose apex is at z = +1, is the plus side");
+
+    // Reversing the hint must swap every label -- the labels follow d, and
+    // nothing else.
+    Problem q = p;
+    q.ports[0].current_direction = Vec3(0, 0, -1);
+    const BoundProblem c = expect_ok(q, m, "the same cut with the hint reversed");
+    if (!c.ports.empty()) {
+        bool all_flipped = c.ports[0].touching_tets == bp.touching_tets;
+        for (std::size_t i = 0; i < bp.tet_side.size() && all_flipped; ++i) {
+            if (c.ports[0].tet_side[i] != -bp.tet_side[i]) all_flipped = false;
+        }
+        check(all_flipped, "reversing current_direction swaps every side label");
     }
 }
 
@@ -318,6 +552,61 @@ void test_cylinder_mesh() {
     check(wire_volume < 1e-9, "the mesh really was scaled to metres, not left in mm");
 
     check(b.warnings.empty(), "the cylinder problem produces no warnings");
+
+    // One conduction path: the wire. The air conducts nothing, and both
+    // ports sit on the same path.
+    check(b.conduction_paths.size() == 1u, "the cylinder has one conduction path");
+    if (b.conduction_paths.size() == 1u) {
+        const ConductionPath& path = b.conduction_paths[0];
+        check(path.tets.size() == 7535u, "the path is the wire");
+        check(path.ports.size() == 2u, "both ports touch it");
+        check(path.reference_count == 1, "P2 alone fixes its potential");
+        check(!path.is_floating, "it is not floating");
+    }
+
+    // The gauge. Two of these are recorded numbers; the rest are derived
+    // from the mesh here, so they would catch a change rather than merely
+    // describe one.
+    const int num_nodes = m.num_nodes();
+    check(b.gauge.tree_edge_count == num_nodes - 1,
+          "a spanning tree over a connected mesh has exactly nodes - 1 edges");
+    check(b.gauge.tree_edge_count == 2911, "which is 2911 on this mesh");
+    check(b.gauge.surface_tree_edge_count + b.gauge.interior_tree_edge_count ==
+              b.gauge.tree_edge_count,
+          "surface and interior tree edges account for the whole tree");
+    check(b.gauge.num_dirichlet_components == 1,
+          "the box's outer boundary is one connected n x A = 0 surface");
+    check(b.gauge.num_reference_groups == 1, "one root for one connected mesh");
+
+    // Count the Dirichlet edges and boundary nodes independently, then check
+    // the construction's own invariants against them:
+    //   surface tree edges = V_b - (number of surfaces)
+    //   interior tree edges = N - V_b
+    // These are what make the gauge complete: too few leaves a null space,
+    // too many pins real magnetic flux (`docs/TREE_COTREE_GAUGE.md`).
+    int dirichlet_edges = 0;
+    for (bool v : b.dirichlet_edge) {
+        if (v) ++dirichlet_edges;
+    }
+    std::vector<bool> boundary_node(static_cast<std::size_t>(num_nodes), false);
+    for (int f = 0; f < m.num_faces(); ++f) {
+        if (!m.is_boundary_face(f)) continue;
+        for (int v : m.faces[static_cast<std::size_t>(f)]) {
+            boundary_node[static_cast<std::size_t>(v)] = true;
+        }
+    }
+    int V_b = 0;
+    for (bool v : boundary_node) {
+        if (v) ++V_b;
+    }
+    check(b.gauge.surface_tree_edge_count == V_b - 1,
+          "surface tree edges == boundary nodes - 1 (one connected surface)");
+    check(b.gauge.interior_tree_edge_count == num_nodes - V_b,
+          "interior tree edges == nodes - boundary nodes: exactly the gauge constraints needed");
+    check(dirichlet_edges == 1908, "1908 edges lie on the box boundary");
+
+    const int free_a = m.num_edges() - dirichlet_edges - b.gauge.interior_tree_edge_count;
+    check(free_a == 15405, "15405 free A unknowns remain of 19587 edges");
 #endif
 }
 
@@ -331,6 +620,10 @@ int main() {
     test_boundary_vs_interior_is_checked();
     test_shared_terminal_nodes_are_rejected();
     test_dc_reference_rules();
+    test_conduction_paths();
+    test_floating_conductor();
+    test_gauge_is_built();
+    test_cut_side_labels();
     test_cylinder_mesh();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";

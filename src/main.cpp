@@ -146,11 +146,45 @@ void print_summary(const std::string& path, const ParseResult& r, const Mesh& me
         }
     }
 
+    std::cout << "\nconduction paths (" << b.conduction_paths.size() << ")\n";
+    for (std::size_t i = 0; i < b.conduction_paths.size(); ++i) {
+        const ConductionPath& path = b.conduction_paths[i];
+        std::cout << "  #" << i << "  " << std::setw(7) << path.tets.size() << " tets   bodies";
+        for (int bi : path.bodies) std::cout << " " << b.bodies[static_cast<std::size_t>(bi)].name;
+        std::cout << "   ports";
+        if (path.ports.empty()) {
+            std::cout << " (none)";
+        } else {
+            for (const std::string& n : path.ports) std::cout << " " << n;
+        }
+        std::cout << "   references " << path.reference_count;
+        if (path.is_floating) std::cout << "   [floating -- node " << path.pin_node << " pinned]";
+        std::cout << "\n";
+    }
+
     int phi_tets = 0;
     for (bool v : b.phi_tet) {
         if (v) ++phi_tets;
     }
     std::cout << "\nPhi support   " << phi_tets << " of " << mesh.num_tets() << " tets\n";
+
+    // The gauge: every A edge is free, a tree edge (a = 0 by the gauge) or a
+    // Dirichlet edge (a = 0 from n x A = 0). The three must account for all
+    // of them, which is worth showing rather than asserting quietly.
+    int dirichlet = 0;
+    for (bool v : b.dirichlet_edge) {
+        if (v) ++dirichlet;
+    }
+    const int free_a = mesh.num_edges() - dirichlet - b.gauge.interior_tree_edge_count;
+    std::cout << "gauge         tree-cotree, boundary-first\n"
+              << "              " << b.gauge.tree_edge_count << " tree edges ("
+              << b.gauge.surface_tree_edge_count << " on n x A = 0 surfaces, "
+              << b.gauge.interior_tree_edge_count << " interior)\n"
+              << "              " << dirichlet << " Dirichlet edges, "
+              << b.gauge.num_dirichlet_components << " surface(s), "
+              << b.gauge.num_reference_groups << " root(s)\n"
+              << "              " << free_a << " free A unknowns of " << mesh.num_edges()
+              << " edges\n";
 
     std::vector<std::string> warnings = r.warnings;
     warnings.insert(warnings.end(), b.warnings.begin(), b.warnings.end());
