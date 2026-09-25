@@ -23,6 +23,7 @@ add_library(aphi_core
     src/problem.cpp
     src/input_file.cpp
     src/problem_binding.cpp
+    src/dof_map.cpp
     src/gmsh_reader.cpp
     src/incidence.cpp
     src/basis_functions.cpp

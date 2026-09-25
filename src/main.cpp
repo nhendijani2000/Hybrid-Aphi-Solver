@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "aphi_solver/dof_map.hpp"
 #include "aphi_solver/gmsh_reader.hpp"
 #include "aphi_solver/input_file.hpp"
 #include "aphi_solver/problem_binding.hpp"
@@ -83,7 +84,7 @@ std::string format_frequencies(const std::vector<double>& f) {
 }
 
 void print_summary(const std::string& path, const ParseResult& r, const Mesh& mesh,
-                   const BoundProblem& b) {
+                   const BoundProblem& b, const DofMap& d) {
     const Problem& p = r.problem;
 
     std::cout << "input     " << path << "\n";
@@ -196,10 +197,41 @@ void print_summary(const std::string& path, const ParseResult& r, const Mesh& me
         for (const std::string& w : warnings) std::cout << "  - " << w << "\n";
     }
 
-    std::cout << "\nok -- bound to the mesh; " << num_solves(p) << " solve"
+    // The DOF map: every edge is exactly one of free / Dirichlet / tree, and
+    // every P2 node exactly one of five states, so these account for the
+    // whole mesh rather than sampling it.
+    int e_free = 0, e_dir = 0, e_tree = 0;
+    for (EdgeDof s : d.edge_state) {
+        if (s == EdgeDof::Free) ++e_free;
+        if (s == EdgeDof::Dirichlet) ++e_dir;
+        if (s == EdgeDof::Tree) ++e_tree;
+    }
+    int n_free = 0, n_absent = 0, n_fixed = 0, n_port = 0, n_cut = 0;
+    for (PhiDof s : d.phi_state) {
+        if (s == PhiDof::Free) ++n_free;
+        if (s == PhiDof::Absent) ++n_absent;
+        if (s == PhiDof::Fixed) ++n_fixed;
+        if (s == PhiDof::Port) ++n_port;
+        if (s == PhiDof::Cut) ++n_cut;
+    }
+
+    // std::left is sticky from the tables above, so setw would pad the
+    // wrong side of these counts.
+    std::cout << std::right;
+    std::cout << "\ndegrees of freedom\n"
+              << "  A    " << std::setw(7) << d.num_a << " free   of " << mesh.num_edges()
+              << " edges  (" << e_dir << " Dirichlet, " << e_tree << " tree)\n"
+              << "  Phi  " << std::setw(7) << d.num_phi << " free   of " << d.num_p2_nodes
+              << " P2 nodes  (" << n_absent << " absent, " << n_port << " on terminals, " << n_cut
+              << " on cuts, " << n_fixed << " pinned)\n"
+              << "  V    " << std::setw(7) << d.num_ports << "        one per port\n"
+              << "  ----------------------------------------\n"
+              << "  total" << std::setw(8) << d.num_total << " unknowns\n";
+
+    std::cout << "\nok -- bound, gauged and numbered; " << num_solves(p) << " solve"
               << (num_solves(p) == 1 ? "" : "s") << " would follow.\n"
-              << "Nothing was solved: there is no DOF map, no assembly and no linear solver yet.\n"
-              << "Next in the plan: the DOF map.\n";
+              << "Nothing was solved: there are no element matrices, no assembly and no linear\n"
+              << "solver yet. Next in the plan: element matrices, then global assembly.\n";
 }
 
 }  // namespace
@@ -221,10 +253,11 @@ int main(int argc, char** argv) {
         aphi_solver::Mesh mesh = aphi_solver::read_gmsh_msh(result.problem.mesh_file);
         aphi_solver::scale_mesh_to_metres(mesh, result.problem.length_unit);
         const aphi_solver::BoundProblem bound = aphi_solver::bind_to_mesh(result.problem, mesh);
+        const aphi_solver::DofMap dofs = aphi_solver::build_dof_map(bound, mesh);
 
         std::cout << "A-Phi solver " << aphi_solver::kVersion
                   << " -- reads and checks the problem; does not solve it yet\n\n";
-        print_summary(path, result, mesh, bound);
+        print_summary(path, result, mesh, bound, dofs);
         return 0;
     } catch (const aphi_solver::GmshReadError& e) {
         std::cerr << "mesh: " << e.what() << "\n";
