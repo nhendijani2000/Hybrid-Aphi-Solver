@@ -12,7 +12,7 @@ if not exist build\tests\aphi_tests.exe (
   exit /b 1
 )
 
-set "TESTS=aphi_tests aphi_tests_equilibration aphi_tests_incidence aphi_tests_gmsh_reader aphi_tests_basis_functions aphi_tests_tree_cotree aphi_tests_gauge_variants aphi_tests_sparse_matrix aphi_tests_problem aphi_tests_input_file aphi_tests_problem_binding aphi_tests_dof_map aphi_tests_quadrature"
+set "TESTS=aphi_tests aphi_tests_equilibration aphi_tests_incidence aphi_tests_gmsh_reader aphi_tests_basis_functions aphi_tests_tree_cotree aphi_tests_gauge_variants aphi_tests_sparse_matrix aphi_tests_problem aphi_tests_input_file aphi_tests_problem_binding aphi_tests_dof_map aphi_tests_quadrature aphi_tests_element_matrix"
 
 set "FAILED="
 for %%T in (%TESTS%) do (

@@ -350,7 +350,13 @@ literals — never as a re-implementation of the code under test.
 | `kernel_PhiPhi` row and column sums `= 0` | `Σ S_a = 1` so `Σ ∇S_a = 0` | the P2 gradients are not a partition of unity |
 | mass part positive definite for real `α > 0` | it is a mass matrix | a sign or a weight |
 | at `ω = 0`: `α = 0`, so no mass and no Φ–A coupling | the system decouples (`FORMULATION.md` §2) | the DC path is not what §2 says it is |
-| scaling by `s`: curl-curl `→ s`, mass `→ s³`, coupling `→ s²`, `∇S·∇S → s` | dimensions | a volume factor dropped or applied twice |
+| scaling by `s`: curl-curl `→ 1/s`, mass `→ s`, coupling `→ s`, `∇S·∇S → s` | dimensions: `W ~ 1/L`, `curl W ~ 1/L²`, `∇S ~ 1/L`, `dV ~ L³` | a volume factor dropped or applied twice |
+
+The curl-curl and mass terms scale in **opposite** directions (this table
+first had both wrong, corrected 25 Sept when the test was written). Refining
+a mesh grows the curl-curl term and shrinks the mass term, so their ratio
+goes as `1/s²` -- which is the low-frequency conditioning problem in
+miniature, showing up in a single element.
 
 ### 7.3 The three formulations
 

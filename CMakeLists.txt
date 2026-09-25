@@ -25,6 +25,7 @@ add_library(aphi_core
     src/problem_binding.cpp
     src/dof_map.cpp
     src/quadrature.cpp
+    src/element_matrix.cpp
     src/gmsh_reader.cpp
     src/incidence.cpp
     src/basis_functions.cpp
