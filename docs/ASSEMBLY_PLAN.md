@@ -417,7 +417,7 @@ to divide a prescribed voltage by `jω` under F2; swap `r` and `c`.
 2. **`ElementCoefficients`**, with the `ω = 0` degeneracy asserted.
 3. **`kernel_AA`** — the constant curl-curl part first, hand-checked, then
    the mass part.
-4. **`kernel_PhiPhi`**, **`kernel_APhi`**.
+4. **`kernel_PhiPhi`**, **`kernel_APhi`**. **Done 25 Sept.**
 5. **`SparsityPattern` + `Sparse<T>::from_pattern`**, tested on a small mesh
    against the triplet path.
 6. **The scatter and RHS**, including prescribed-DOF elimination, in the

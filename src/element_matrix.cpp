@@ -68,4 +68,50 @@ void kernel_AA(const TetGeometry& g, const ElementCoefficients& c, std::complex<
     }
 }
 
+void kernel_APhi(const TetGeometry& g, const ElementCoefficients& c, std::complex<double>* out) {
+    for (int i = 0; i < 60; ++i) out[static_cast<std::size_t>(i)] = std::complex<double>(0.0, 0.0);
+    if (c.beta == std::complex<double>(0.0, 0.0)) return;
+
+    const QuadratureRule q = tet_rule_degree_2();
+    for (int k = 0; k < q.count; ++k) {
+        const std::array<double, 4>& L = q.points[static_cast<std::size_t>(k)];
+        const double w = q.weights[static_cast<std::size_t>(k)] * g.volume;
+
+        std::array<Vec3, 6> edge{};
+        for (int i = 0; i < 6; ++i) edge[static_cast<std::size_t>(i)] = whitney_edge_value(g, i, L);
+        std::array<Vec3, 10> grad{};
+        for (int b = 0; b < 10; ++b) grad[static_cast<std::size_t>(b)] = p2_nodal_gradient(g, b, L);
+
+        for (int i = 0; i < 6; ++i) {
+            for (int b = 0; b < 10; ++b) {
+                const double wg =
+                    edge[static_cast<std::size_t>(i)].dot(grad[static_cast<std::size_t>(b)]);
+                out[static_cast<std::size_t>(i * 10 + b)] += c.beta * (w * wg);
+            }
+        }
+    }
+}
+
+void kernel_PhiPhi(const TetGeometry& g, const ElementCoefficients& c, std::complex<double>* out) {
+    for (int i = 0; i < 100; ++i) out[static_cast<std::size_t>(i)] = std::complex<double>(0.0, 0.0);
+    if (c.beta == std::complex<double>(0.0, 0.0)) return;
+
+    const QuadratureRule q = tet_rule_degree_2();
+    for (int k = 0; k < q.count; ++k) {
+        const std::array<double, 4>& L = q.points[static_cast<std::size_t>(k)];
+        const double w = q.weights[static_cast<std::size_t>(k)] * g.volume;
+
+        std::array<Vec3, 10> grad{};
+        for (int a = 0; a < 10; ++a) grad[static_cast<std::size_t>(a)] = p2_nodal_gradient(g, a, L);
+
+        for (int a = 0; a < 10; ++a) {
+            for (int b = 0; b < 10; ++b) {
+                const double gg =
+                    grad[static_cast<std::size_t>(a)].dot(grad[static_cast<std::size_t>(b)]);
+                out[static_cast<std::size_t>(a * 10 + b)] += c.beta * (w * gg);
+            }
+        }
+    }
+}
+
 }  // namespace aphi_solver

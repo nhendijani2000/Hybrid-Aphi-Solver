@@ -430,6 +430,313 @@ void test_terms_add() {
     check(real_only, "at DC the A-A block is purely real -- no mass term at all");
 }
 
+// ---------------------------------------------------------------------------
+// An exact integrator, for checking the quadratic blocks.
+//
+// Every basis field here is LINEAR in the barycentric coordinates:
+//
+//   Whitney, edge (a,b):      L_a grad(L_b) - L_b grad(L_a)
+//   P2 vertex v:              (4 L_v - 1) grad(L_v)
+//   P2 midpoint of (a,b):     4 (L_a grad(L_b) + L_b grad(L_a))
+//
+// so each is `c0 + sum_p c_p L_p` with constant Vec3 coefficients. The dot
+// product of two such fields integrates exactly using only
+//
+//   integral 1 dV = V,   integral L_p dV = V/4,
+//   integral L_p L_q dV = V/10 if p == q else V/20
+//
+// which gives every quadratic block without any quadrature at all. One
+// integrator, three kernels -- and it shares no code with them.
+struct LinearField {
+    Vec3 c0;
+    std::array<Vec3, 4> cL{};
+};
+
+LinearField whitney_field(const TetGeometry& g, int local_edge) {
+    const auto& e = kTetLocalEdgeVerts[static_cast<std::size_t>(local_edge)];
+    LinearField f;
+    f.cL[static_cast<std::size_t>(e.first)] = g.grad_L[static_cast<std::size_t>(e.second)];
+    f.cL[static_cast<std::size_t>(e.second)] =
+        g.grad_L[static_cast<std::size_t>(e.first)] * -1.0;
+    return f;
+}
+
+LinearField p2_gradient_field(const TetGeometry& g, int local_node) {
+    LinearField f;
+    if (local_node < 4) {
+        const std::size_t v = static_cast<std::size_t>(local_node);
+        f.c0 = g.grad_L[v] * -1.0;
+        f.cL[v] = g.grad_L[v] * 4.0;
+    } else {
+        const auto& e = kTetLocalEdgeVerts[static_cast<std::size_t>(local_node - 4)];
+        f.cL[static_cast<std::size_t>(e.first)] =
+            g.grad_L[static_cast<std::size_t>(e.second)] * 4.0;
+        f.cL[static_cast<std::size_t>(e.second)] =
+            g.grad_L[static_cast<std::size_t>(e.first)] * 4.0;
+    }
+    return f;
+}
+
+double exact_dot_integral(const TetGeometry& g, const LinearField& f, const LinearField& h) {
+    const double V = g.volume;
+    double sum = V * f.c0.dot(h.c0);
+    for (int q = 0; q < 4; ++q) {
+        sum += (V / 4.0) * f.c0.dot(h.cL[static_cast<std::size_t>(q)]);
+        sum += (V / 4.0) * f.cL[static_cast<std::size_t>(q)].dot(h.c0);
+    }
+    for (int p = 0; p < 4; ++p) {
+        for (int q = 0; q < 4; ++q) {
+            const double I = V * (p == q ? 0.1 : 0.05);
+            sum += I * f.cL[static_cast<std::size_t>(p)].dot(h.cL[static_cast<std::size_t>(q)]);
+        }
+    }
+    return sum;
+}
+
+// The integrator itself is checked against kernel_AA's mass block, which
+// test_mass_against_exact_integration already pinned by a different route.
+// If the two agree, the integrator is trustworthy for the blocks below.
+void test_integrator_agrees_with_the_mass_block() {
+    const TetGeometry g = unit_tet(1.1);
+    ElementCoefficients c;
+    c.nu = 0.0;
+    c.alpha = Complex(1.0, 0.0);
+    std::array<Complex, 36> aa{};
+    kernel_AA(g, c, aa.data());
+
+    double worst = 0.0;
+    for (int i = 0; i < 6; ++i) {
+        for (int j = 0; j < 6; ++j) {
+            const double want =
+                exact_dot_integral(g, whitney_field(g, i), whitney_field(g, j));
+            worst = std::max(worst, std::abs(aa[static_cast<std::size_t>(i * 6 + j)].real() - want));
+        }
+    }
+    check(worst < 1e-14,
+          "the linear-field integrator reproduces the mass block, so it can be trusted "
+          "for the quadratic blocks below");
+}
+
+void test_kernel_PhiPhi_exact() {
+    const TetGeometry g = unit_tet(0.8);
+    const Complex beta(3.0, -1.5);
+    ElementCoefficients c;
+    c.beta = beta;
+
+    std::array<Complex, 100> pp{};
+    kernel_PhiPhi(g, c, pp.data());
+
+    double worst = 0.0;
+    for (int a = 0; a < 10; ++a) {
+        for (int b = 0; b < 10; ++b) {
+            const double want =
+                exact_dot_integral(g, p2_gradient_field(g, a), p2_gradient_field(g, b));
+            worst = std::max(worst,
+                             std::abs(pp[static_cast<std::size_t>(a * 10 + b)] - beta * want));
+        }
+    }
+    check(worst < 1e-13,
+          "every Phi-Phi entry matches the exact integral (worst " + std::to_string(worst) + ")");
+}
+
+void test_kernel_PhiPhi_properties() {
+    const TetGeometry g = unit_tet(1.3);
+    ElementCoefficients c;
+    c.beta = Complex(2.0, 0.0);
+    std::array<Complex, 100> pp{};
+    kernel_PhiPhi(g, c, pp.data());
+
+    bool symmetric = true;
+    for (int a = 0; a < 10; ++a) {
+        for (int b = 0; b < 10; ++b) {
+            if (!near(pp[static_cast<std::size_t>(a * 10 + b)],
+                      pp[static_cast<std::size_t>(b * 10 + a)], 1e-13)) {
+                symmetric = false;
+            }
+        }
+    }
+    check(symmetric, "the Phi-Phi block is symmetric");
+
+    // sum_a S_a = 1, so sum_a grad(S_a) = 0 and both the row and column
+    // sums must vanish. This is the sharpest check on the P2 gradients as a
+    // set -- one wrong shape function and it fails.
+    double worst_row = 0.0, worst_col = 0.0;
+    for (int a = 0; a < 10; ++a) {
+        Complex row(0.0, 0.0), col(0.0, 0.0);
+        for (int b = 0; b < 10; ++b) {
+            row += pp[static_cast<std::size_t>(a * 10 + b)];
+            col += pp[static_cast<std::size_t>(b * 10 + a)];
+        }
+        worst_row = std::max(worst_row, std::abs(row));
+        worst_col = std::max(worst_col, std::abs(col));
+    }
+    check(worst_row < 1e-13, "every Phi-Phi row sums to zero (partition of unity)");
+    check(worst_col < 1e-13, "and every column");
+
+    // Positive semi-definite, singular by exactly one dimension: the
+    // constants. Probed rather than factorised -- a constant vector must
+    // give exactly zero, anything else strictly positive.
+    Complex constant_form(0.0, 0.0);
+    for (int a = 0; a < 10; ++a) {
+        for (int b = 0; b < 10; ++b) constant_form += pp[static_cast<std::size_t>(a * 10 + b)];
+    }
+    check(std::abs(constant_form) < 1e-13, "a constant Phi gives exactly zero energy");
+
+    const std::array<double, 10> probe = {1, -2, 3, 0.5, -1, 2, 0, 4, -3, 1};
+    double q = 0.0;
+    for (int a = 0; a < 10; ++a) {
+        for (int b = 0; b < 10; ++b) {
+            q += probe[static_cast<std::size_t>(a)] *
+                 pp[static_cast<std::size_t>(a * 10 + b)].real() * probe[static_cast<std::size_t>(b)];
+        }
+    }
+    check(q > 0.0, "a non-constant Phi gives strictly positive energy");
+}
+
+void test_kernel_APhi_exact() {
+    const TetGeometry g = unit_tet(0.7);
+    const Complex beta(1.0, 2.0);
+    ElementCoefficients c;
+    c.beta = beta;
+
+    std::array<Complex, 60> ap{};
+    kernel_APhi(g, c, ap.data());
+
+    double worst = 0.0;
+    for (int i = 0; i < 6; ++i) {
+        for (int b = 0; b < 10; ++b) {
+            const double want =
+                exact_dot_integral(g, whitney_field(g, i), p2_gradient_field(g, b));
+            worst = std::max(worst,
+                             std::abs(ap[static_cast<std::size_t>(i * 10 + b)] - beta * want));
+        }
+    }
+    check(worst < 1e-13,
+          "every A-Phi entry matches the exact integral (worst " + std::to_string(worst) + ")");
+
+    // Each row sums to zero, for the same partition-of-unity reason:
+    // sum_b W_i . grad(S_b) = W_i . 0.
+    double worst_row = 0.0;
+    for (int i = 0; i < 6; ++i) {
+        Complex row(0.0, 0.0);
+        for (int b = 0; b < 10; ++b) row += ap[static_cast<std::size_t>(i * 10 + b)];
+        worst_row = std::max(worst_row, std::abs(row));
+    }
+    check(worst_row < 1e-13, "every A-Phi row sums to zero");
+}
+
+// The identity that ties the coupling block to the mass block.
+//
+// A P1 function lies in the P2 space, and its gradient lies EXACTLY in the
+// Whitney space: grad(p) = sum_e (p_b - p_a) W_e. So for the P2 coefficient
+// vector q of a P1 function p, with edge coefficients a_e = p_b - p_a,
+//
+//   C q = beta * integral W_i . grad(p)
+//       = beta * sum_e a_e integral W_i . W_e
+//       = (beta/alpha) * M a
+//
+// and with alpha = beta = 1 the two kernels must agree exactly. They were
+// written independently and integrate different things, so this is real
+// evidence rather than a restatement.
+void test_coupling_matches_mass_on_gradients() {
+    const TetGeometry g = unit_tet(1.6);
+
+    ElementCoefficients c;
+    c.nu = 0.0;
+    c.alpha = Complex(1.0, 0.0);
+    c.beta = Complex(1.0, 0.0);
+
+    std::array<Complex, 36> mass{};
+    std::array<Complex, 60> coupling{};
+    kernel_AA(g, c, mass.data());
+    kernel_APhi(g, c, coupling.data());
+
+    const std::array<std::array<double, 4>, 3> fields = {
+        {{1, 0, 0, 0}, {0, 2, -1, 3}, {-1.5, 0.25, 4, -2}}};
+
+    for (const std::array<double, 4>& p : fields) {
+        // P2 coefficients of the same P1 function: nodal values at the
+        // vertices, and the midpoint of edge (a,b) takes (p_a + p_b)/2.
+        std::array<double, 10> q{};
+        for (int v = 0; v < 4; ++v) q[static_cast<std::size_t>(v)] = p[static_cast<std::size_t>(v)];
+        for (int le = 0; le < 6; ++le) {
+            const auto& e = kTetLocalEdgeVerts[static_cast<std::size_t>(le)];
+            q[static_cast<std::size_t>(4 + le)] =
+                0.5 * (p[static_cast<std::size_t>(e.first)] + p[static_cast<std::size_t>(e.second)]);
+        }
+        // Its discrete gradient, as Whitney edge coefficients.
+        std::array<double, 6> a{};
+        for (int le = 0; le < 6; ++le) {
+            const auto& e = kTetLocalEdgeVerts[static_cast<std::size_t>(le)];
+            a[static_cast<std::size_t>(le)] = p[static_cast<std::size_t>(e.second)] -
+                                              p[static_cast<std::size_t>(e.first)];
+        }
+
+        double worst = 0.0;
+        for (int i = 0; i < 6; ++i) {
+            Complex cq(0.0, 0.0), ma(0.0, 0.0);
+            for (int b = 0; b < 10; ++b) {
+                cq += coupling[static_cast<std::size_t>(i * 10 + b)] * q[static_cast<std::size_t>(b)];
+            }
+            for (int j = 0; j < 6; ++j) {
+                ma += mass[static_cast<std::size_t>(i * 6 + j)] * a[static_cast<std::size_t>(j)];
+            }
+            worst = std::max(worst, std::abs(cq - ma));
+        }
+        check(worst < 1e-13,
+              "C q == M a for the P2 representation of a P1 field -- the coupling and mass "
+              "kernels agree where the discrete gradient makes them (worst " +
+                  std::to_string(worst) + ")");
+    }
+}
+
+void test_quadratic_blocks_scale_as_s() {
+    ElementCoefficients c;
+    c.beta = Complex(1.0, 0.0);
+
+    std::array<Complex, 100> p1{}, p2{};
+    kernel_PhiPhi(unit_tet(1.0), c, p1.data());
+    kernel_PhiPhi(unit_tet(2.0), c, p2.data());
+    check(near(p2[0].real(), p1[0].real() * 2.0, 1e-13),
+          "the Phi-Phi block scales as s: grad(S) ~ 1/L, dV ~ L^3");
+
+    std::array<Complex, 60> a1{}, a2{};
+    kernel_APhi(unit_tet(1.0), c, a1.data());
+    kernel_APhi(unit_tet(2.0), c, a2.data());
+    // Entry 0 may be near zero; use the largest-magnitude entry instead.
+    int best = 0;
+    for (int i = 1; i < 60; ++i) {
+        if (std::abs(a1[static_cast<std::size_t>(i)]) > std::abs(a1[static_cast<std::size_t>(best)])) {
+            best = i;
+        }
+    }
+    check(near(a2[static_cast<std::size_t>(best)].real(),
+               a1[static_cast<std::size_t>(best)].real() * 2.0, 1e-13),
+          "the A-Phi block scales as s too");
+}
+
+// beta = 0 happens for an insulator at DC. Both blocks must then be exactly
+// zero -- Phi has no equation there at all (FORMULATION.md Sec. 2).
+void test_beta_zero_gives_empty_blocks() {
+    const TetGeometry g = unit_tet();
+    const ElementCoefficients c = element_coefficients(make_body(0.0), 0.0);
+    check(c.beta == Complex(0.0, 0.0), "an insulator at DC has beta = 0");
+
+    std::array<Complex, 100> pp{};
+    std::array<Complex, 60> ap{};
+    kernel_PhiPhi(g, c, pp.data());
+    kernel_APhi(g, c, ap.data());
+
+    bool all_zero = true;
+    for (int i = 0; i < 100; ++i) {
+        if (pp[static_cast<std::size_t>(i)] != Complex(0.0, 0.0)) all_zero = false;
+    }
+    for (int i = 0; i < 60; ++i) {
+        if (ap[static_cast<std::size_t>(i)] != Complex(0.0, 0.0)) all_zero = false;
+    }
+    check(all_zero, "both Phi blocks are exactly zero when beta is");
+}
+
 }  // namespace
 
 int main() {
@@ -443,6 +750,13 @@ int main() {
     test_scaling();
     test_curl_shortcut_matches_quadrature();
     test_terms_add();
+    test_integrator_agrees_with_the_mass_block();
+    test_kernel_PhiPhi_exact();
+    test_kernel_PhiPhi_properties();
+    test_kernel_APhi_exact();
+    test_coupling_matches_mass_on_gradients();
+    test_quadratic_blocks_scale_as_s();
+    test_beta_zero_gives_empty_blocks();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
