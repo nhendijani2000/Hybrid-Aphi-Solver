@@ -189,7 +189,7 @@ struct BoundProblem {
 void scale_mesh_to_metres(Mesh& mesh, LengthUnit unit);
 
 /// Resolves `problem` against `mesh` and checks everything that needs the
-/// mesh. See `Claude outputs/input_file_plan.md` Sec. 3.2 for the complete
+/// mesh. See `docs/INPUT_FILE_PLAN.md` Sec. 3.2 for the complete
 /// list; in outline, it rejects a name that is not in the mesh, a volume no
 /// body claims (or two do), a boundary port whose faces are interior (or an
 /// internal port whose faces are not), a non-planar cut, two terminals

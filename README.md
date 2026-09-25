@@ -38,7 +38,7 @@ Implemented:
 
 Not yet implemented: binding a parsed problem to a mesh, the DOF map,
 element matrices, global assembly, and the linear solve. See
-`docs/ROADMAP.md` Phase 04 and `Claude outputs/input_file_plan.md`.
+`docs/ROADMAP.md` Phase 04 and `docs/INPUT_FILE_PLAN.md`.
 
 ## Planned capabilities
 

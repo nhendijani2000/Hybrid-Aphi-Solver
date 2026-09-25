@@ -1,6 +1,6 @@
 // Tests for binding a parsed Problem to a mesh.
 //
-// Step 4 of `Claude outputs/input_file_plan.md` Sec. 6. Two kinds of case:
+// Step 4 of `docs/INPUT_FILE_PLAN.md` Sec. 6. Two kinds of case:
 // the real cylinder fixture, where the expected numbers are known from the
 // geometry; and tiny hand-built meshes, one per rejection, because a
 // deliberate mistake is far easier to construct in six tetrahedra than in

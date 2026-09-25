@@ -1,6 +1,6 @@
 // Tests for the degree-of-freedom map.
 //
-// Step 6 of `Claude outputs/input_file_plan.md` Sec. 6 -- the last thing
+// Step 6 of `docs/INPUT_FILE_PLAN.md` Sec. 6 -- the last thing
 // before element matrices. The map is where a mistake is cheapest to catch:
 // a mis-numbered unknown or a dropped edge sign produces a plausible matrix
 // that solves to a wrong field, with nothing to distinguish it from a bad

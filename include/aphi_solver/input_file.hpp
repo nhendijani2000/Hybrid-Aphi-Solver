@@ -45,7 +45,7 @@ struct ParseResult {
 };
 
 /// Reads and validates an input file. See
-/// `Claude outputs/input_file_plan.md` Sec. 1 for the format and Sec. 3.1
+/// `docs/INPUT_FILE_PLAN.md` Sec. 1 for the format and Sec. 3.1
 /// for the complete list of checks.
 ///
 /// **This stage never touches the mesh.** Every check here is answerable

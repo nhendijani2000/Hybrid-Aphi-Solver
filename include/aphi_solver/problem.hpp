@@ -13,7 +13,7 @@ namespace aphi_solver {
 /// says, parsed and range-checked, but **not yet bound to a mesh**. Names
 /// here are still strings -- resolving them to physical groups, faces,
 /// nodes and edges is the binding step's job (see
-/// `Claude outputs/input_file_plan.md` Sec. 3.3), and it is deliberately
+/// `docs/INPUT_FILE_PLAN.md` Sec. 3.3), and it is deliberately
 /// separate: a name that does not exist in the mesh is a different class of
 /// error from a malformed file, and reporting them at different stages is
 /// what lets each one name the right thing.

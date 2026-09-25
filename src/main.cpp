@@ -1,6 +1,6 @@
 // Command-line driver.
 //
-// **Reads and binds, as of step 4 of `Claude outputs/input_file_plan.md`.**
+// **Reads and binds, as of step 4 of `docs/INPUT_FILE_PLAN.md`.**
 // It parses an input file, opens the mesh it names, resolves every name
 // against it, checks everything both stages can check, and reports what it
 // found. It does not assemble and does not solve -- the DOF map is next --

@@ -1,6 +1,6 @@
 // Tests for the Problem description and its conventions.
 //
-// Step 1 of `Claude outputs/input_file_plan.md` Sec. 6. No parser and no
+// Step 1 of `docs/INPUT_FILE_PLAN.md` Sec. 6. No parser and no
 // mesh here on purpose. A convention error here -- an excitation entering
 // the system with the wrong sign or a phase applied backwards -- would
 // surface much later as a current of the wrong sign or an impedance with a

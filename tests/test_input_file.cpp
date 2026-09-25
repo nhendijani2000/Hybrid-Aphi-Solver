@@ -1,6 +1,6 @@
 // Tests for the input-file parser.
 //
-// Step 2 of `Claude outputs/input_file_plan.md` Sec. 6. Every fixture is a
+// Step 2 of `docs/INPUT_FILE_PLAN.md` Sec. 6. Every fixture is a
 // string literal beside its assertions rather than a temp file, so a case
 // reads as one piece.
 //
