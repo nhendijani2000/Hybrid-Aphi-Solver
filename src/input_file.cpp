@@ -444,6 +444,7 @@ void Parser::read_body(const Section& s) {
 
     Body b;
     b.name = s.name;
+    b.line = s.line;
 
     const std::vector<std::string> volumes = as_names(require(s, "volume"));
     if (volumes.size() != 1) {
@@ -481,6 +482,7 @@ void Parser::read_port(const Section& s) {
 
     Port p;
     p.name = s.name;
+    p.line = s.line;
 
     const std::string type = as_keyword(
         require(s, "type"),

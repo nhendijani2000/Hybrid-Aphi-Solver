@@ -81,13 +81,11 @@ and point it at `CMakeLists.txt`.
 
 ### What running it does today
 
-`aphi_solver` is **parse-only**. It reads an input file, validates everything
-answerable from the text alone, and prints what it found — bodies, ports,
-frequencies, warnings. It does not open the mesh and it does not solve;
-binding to the mesh is the next step of
-`Claude outputs/input_file_plan.md`. Every line of its output that would
-need the mesh says so, so the summary never implies more has been checked
-than has been.
+`aphi_solver` **reads and checks, but does not solve.** It parses the input
+file, opens the mesh it names, resolves every body and port against it, and
+prints what it found — tet counts per body, faces and vertices per port, the
+resolved port directions, and where Φ will live. What it does not have is a
+DOF map, assembly or a linear solver, and its closing lines say so.
 
 Three examples, each documenting the physics it encodes:
 
@@ -95,7 +93,7 @@ Three examples, each documenting the physics it encodes:
 |---|---|
 | `examples/cylinder_box.aphi` | a wire in a square box at DC. Targets `R = 0.1388 mΩ` (exact against the meshed cross-section) and `L = 0.3870 nH` |
 | `examples/cylinder_box_sweep.aphi` | the same geometry swept 1 kHz → 10 MHz, which spans the whole skin-effect transition |
-| `examples/loop_internal_port.aphi` | a ring driven through an internal cut, showing `current_direction` as a hint |
+| `examples/loop_internal_port.aphi` | a ring driven through an internal cut, showing `current_direction` as a hint. **Not runnable yet** -- `meshes/loop_cut.msh` has not been built, so it stops with a missing-mesh error |
 
 Worth trying deliberately: misspell a key, delete `current_direction` from
 the loop example, or turn the cylinder's 0 V port into a second current

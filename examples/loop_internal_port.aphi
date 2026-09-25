@@ -20,7 +20,10 @@
 # arbitrary, which the driver warns about. Try deleting the line to see it.
 # Z, R, L and P are unaffected either way.
 #
-# NOTE: meshes/loop_cut.msh does not exist yet. Parse-only for now.
+# NOTE: meshes/loop_cut.msh DOES NOT EXIST YET, so running this file stops
+# with "mesh: could not open file". That is correct behaviour -- the solver
+# now opens the mesh -- but it means this example is not runnable until the
+# loop geometry is built. cylinder_box.aphi is the one to run today.
 # ---------------------------------------------------------------------------
 
 [mesh]

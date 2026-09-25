@@ -90,6 +90,7 @@ enum class PortType {
 /// section of the input file.
 struct Body {
     std::string name;    ///< the section's own handle, e.g. "B1"
+    int line = 0;        ///< its line in the input file; 0 if built in code
     std::string volume;  ///< Physical Volume name, or a tag written as digits
     double sigma = 0.0;  ///< S/m. Required in the file -- never defaulted, so
                          ///< a conductor cannot silently become an insulator.
@@ -107,6 +108,7 @@ struct Body {
 /// nothing to store.
 struct Port {
     std::string name;
+    int line = 0;        ///< its line in the input file; 0 if built in code
     PortType type = PortType::BoundaryCurrent;
     std::vector<std::string> surface;  ///< Physical Surface names or tags
 

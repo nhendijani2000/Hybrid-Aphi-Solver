@@ -1,11 +1,11 @@
 // Command-line driver.
 //
-// **Parse-only, as of step 2 of `Claude outputs/input_file_plan.md`.** It
-// reads an input file, validates everything answerable from the text alone,
-// and reports what it found. It does not open the mesh and it does not
-// solve: binding is step 4 and the DOF map comes after it. Everything below
-// that would need the mesh is marked as such rather than guessed at, so the
-// output never implies more has been checked than actually has.
+// **Reads and binds, as of step 4 of `Claude outputs/input_file_plan.md`.**
+// It parses an input file, opens the mesh it names, resolves every name
+// against it, checks everything both stages can check, and reports what it
+// found. It does not assemble and does not solve -- the DOF map is next --
+// and the closing lines say so, so the output never implies more has been
+// done than has.
 
 #include <cmath>
 #include <iomanip>
@@ -14,7 +14,9 @@
 #include <string>
 #include <vector>
 
+#include "aphi_solver/gmsh_reader.hpp"
 #include "aphi_solver/input_file.hpp"
+#include "aphi_solver/problem_binding.hpp"
 #include "aphi_solver/version.hpp"
 
 namespace {
@@ -40,6 +42,10 @@ const char* port_type_name(PortType t) {
     }
     return "?";
 }
+
+// Turns -0.0 into 0.0. Negative zero is mathematically fine but reads as a
+// typo in a direction vector.
+double tidy(double v) { return v + 0.0 == 0.0 ? 0.0 : v; }
 
 std::string join(const std::vector<std::string>& v) {
     std::string out;
@@ -76,11 +82,14 @@ std::string format_frequencies(const std::vector<double>& f) {
     return s.str();
 }
 
-void print_summary(const std::string& path, const ParseResult& r) {
+void print_summary(const std::string& path, const ParseResult& r, const Mesh& mesh,
+                   const BoundProblem& b) {
     const Problem& p = r.problem;
 
     std::cout << "input     " << path << "\n";
-    std::cout << "mesh      " << p.mesh_file << "   (not opened at this stage)\n";
+    std::cout << "mesh      " << p.mesh_file << "\n";
+    std::cout << "          " << mesh.num_nodes() << " nodes, " << mesh.num_edges() << " edges, "
+              << mesh.num_faces() << " faces, " << mesh.num_tets() << " tets\n";
     std::cout << "units     " << unit_name(p.length_unit) << "  ->  " << length_scale(p.length_unit)
               << " m per unit\n";
 
@@ -97,46 +106,66 @@ void print_summary(const std::string& path, const ParseResult& r) {
               << "\n";
     std::cout << "boundary  flux_tangential   n x A = 0 on the outer boundary, Phi free\n";
 
-    std::cout << "\nbodies (" << p.bodies.size() << ")\n";
-    for (const Body& b : p.bodies) {
-        std::cout << "  " << std::left << std::setw(6) << b.name << "volume '" << b.volume << "'"
-                  << std::string(b.volume.size() < 12 ? 12 - b.volume.size() : 1, ' ')
-                  << "sigma " << std::setw(10) << b.sigma << " S/m   eps_r " << b.eps_r << "   mu_r "
-                  << b.mu_r << (b.sigma > 0.0 ? "   [conductor]" : "   [insulator]") << "\n";
+    std::cout << "\nbodies (" << b.bodies.size() << ")\n";
+    for (const BoundBody& body : b.bodies) {
+        std::ostringstream vol;
+        vol << "'" << body.volume << "' (tag " << body.tag << ")";
+        std::cout << "  " << std::left << std::setw(6) << body.name << std::setw(22) << vol.str()
+                  << std::right << std::setw(7) << body.tets.size() << " tets   sigma "
+                  << body.sigma << " S/m  eps_r " << body.eps_r << "  mu_r " << body.mu_r
+                  << (body.is_conductor() ? "   [conductor]" : "   [insulator]") << "\n";
     }
 
-    std::cout << "\nports (" << p.ports.size() << ")\n";
-    for (const Port& port : p.ports) {
-        std::cout << "  " << std::left << std::setw(6) << port.name << std::setw(18)
-                  << port_type_name(port.type) << "surface " << join(port.surface) << "\n";
-        std::cout << "        " << format_amplitude(port);
-        if (!is_current_driven(port.type) && port.amplitude == 0.0) {
+    std::cout << "\nports (" << b.ports.size() << ")\n";
+    for (std::size_t i = 0; i < b.ports.size(); ++i) {
+        const BoundPort& bp = b.ports[i];
+        const Port& src = p.ports[i];
+        std::cout << "  " << std::left << std::setw(6) << bp.name << std::setw(18)
+                  << port_type_name(bp.type) << "'" << join(src.surface) << "'\n";
+        std::cout << "        " << bp.surface.faces.size() << " faces, " << bp.surface.nodes.size()
+                  << " vertices, " << bp.surface.edges.size() << " edges\n";
+        std::cout << "        " << format_amplitude(src);
+        if (!is_current_driven(bp.type) && src.amplitude == 0.0) {
             std::cout << "   [potential reference]";
         }
         std::cout << "\n";
-        if (is_internal(port.type)) {
-            if (port.current_direction.has_value()) {
-                const Vec3& d = *port.current_direction;
-                std::cout << "        current_direction hint (" << d.x << ", " << d.y << ", " << d.z
-                          << ")  -- resolved against the cut's normal when the mesh is read\n";
-            } else {
-                std::cout << "        no current_direction -- will be derived from the mesh\n";
-            }
+
+        std::cout << "        d = (" << tidy(bp.direction.x) << ", " << tidy(bp.direction.y)
+                  << ", " << tidy(bp.direction.z) << ")  ";
+        if (!bp.is_internal()) {
+            std::cout << "[inward normal -- positive current enters here]\n";
+        } else if (bp.direction_from_hint) {
+            std::cout << "[from current_direction]\n";
+            std::cout << "        plus side: " << bp.plus_side_tet.size()
+                      << " faces resolved;  rim: " << bp.rim_edges.size() << " edges\n";
+        } else {
+            std::cout << "[derived -- the sign of this port's I and V is arbitrary;\n"
+                      << "             set current_direction to fix it]\n";
+            std::cout << "        plus side: " << bp.plus_side_tet.size()
+                      << " faces resolved;  rim: " << bp.rim_edges.size() << " edges\n";
         }
     }
 
-    std::cout << "\nwarnings  ";
-    if (r.warnings.empty()) {
+    int phi_tets = 0;
+    for (bool v : b.phi_tet) {
+        if (v) ++phi_tets;
+    }
+    std::cout << "\nPhi support   " << phi_tets << " of " << mesh.num_tets() << " tets\n";
+
+    std::vector<std::string> warnings = r.warnings;
+    warnings.insert(warnings.end(), b.warnings.begin(), b.warnings.end());
+    std::cout << "warnings      ";
+    if (warnings.empty()) {
         std::cout << "none\n";
     } else {
-        std::cout << r.warnings.size() << "\n";
-        for (const std::string& w : r.warnings) std::cout << "  - " << w << "\n";
+        std::cout << warnings.size() << "\n";
+        for (const std::string& w : warnings) std::cout << "  - " << w << "\n";
     }
 
-    std::cout << "\nok -- this file describes " << num_solves(p) << " solve"
-              << (num_solves(p) == 1 ? "" : "s") << ".\n"
-              << "Nothing was solved: the mesh is not read and no DOFs exist yet.\n"
-              << "Next in the plan: bind to the mesh (step 4), then the DOF map.\n";
+    std::cout << "\nok -- bound to the mesh; " << num_solves(p) << " solve"
+              << (num_solves(p) == 1 ? "" : "s") << " would follow.\n"
+              << "Nothing was solved: there is no DOF map, no assembly and no linear solver yet.\n"
+              << "Next in the plan: the DOF map.\n";
 }
 
 }  // namespace
@@ -154,10 +183,18 @@ int main(int argc, char** argv) {
     const std::string path = argv[1];
     try {
         const aphi_solver::ParseResult result = aphi_solver::parse_input_file(path);
+
+        aphi_solver::Mesh mesh = aphi_solver::read_gmsh_msh(result.problem.mesh_file);
+        aphi_solver::scale_mesh_to_metres(mesh, result.problem.length_unit);
+        const aphi_solver::BoundProblem bound = aphi_solver::bind_to_mesh(result.problem, mesh);
+
         std::cout << "A-Phi solver " << aphi_solver::kVersion
-                  << " -- parse-only (no mesh is read, nothing is solved)\n\n";
-        print_summary(path, result);
+                  << " -- reads and checks the problem; does not solve it yet\n\n";
+        print_summary(path, result, mesh, bound);
         return 0;
+    } catch (const aphi_solver::GmshReadError& e) {
+        std::cerr << "mesh: " << e.what() << "\n";
+        return 1;
     } catch (const aphi_solver::InputError& e) {
         // The message already carries "file:line: ", which is the form an
         // editor can jump to.
