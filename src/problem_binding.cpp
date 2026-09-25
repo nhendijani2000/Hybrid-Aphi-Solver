@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -111,14 +112,34 @@ int opposite_vertex(const Mesh& mesh, int t, int f) {
 
 /// Collects the faces of one physical surface tag, resolved to global face
 /// indices, plus the node and edge sets they span.
-BoundSurface resolve_surface(const Mesh& mesh, const std::string& name, int tag, int line) {
+/// `tagged_boundary_faces` grouped by tag: (tag, index) pairs sorted so one
+/// surface's triangles are an equal_range away. Built once for the whole
+/// bind; resolving each surface by scanning the flat list instead would be
+/// O(surfaces x tagged faces), and a real board has both in the thousands.
+using TagIndex = std::vector<std::pair<int, int>>;
+
+TagIndex index_tagged_faces(const Mesh& mesh) {
+    TagIndex out;
+    out.reserve(mesh.tagged_boundary_faces.size());
+    for (std::size_t i = 0; i < mesh.tagged_boundary_faces.size(); ++i) {
+        out.emplace_back(mesh.tagged_boundary_faces[i].tag, static_cast<int>(i));
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+BoundSurface resolve_surface(const Mesh& mesh, const TagIndex& by_tag, const std::string& name,
+                             int tag, int line) {
     BoundSurface s;
     s.name = name;
     s.tag = tag;
 
     std::vector<int> nodes, edges;
-    for (const TaggedFace& tf : mesh.tagged_boundary_faces) {
-        if (tf.tag != tag) continue;
+    const auto lo = std::lower_bound(by_tag.begin(), by_tag.end(), std::make_pair(tag, -1));
+    const auto hi = std::upper_bound(by_tag.begin(), by_tag.end(),
+                                     std::make_pair(tag, std::numeric_limits<int>::max()));
+    for (auto it = lo; it != hi; ++it) {
+        const TaggedFace& tf = mesh.tagged_boundary_faces[static_cast<std::size_t>(it->second)];
         const int f = mesh.find_face(tf.nodes[0], tf.nodes[1], tf.nodes[2]);
         if (f < 0) {
             fail(line, "surface '" + name + "' has a triangle that is not a face of any "
@@ -192,6 +213,10 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
     // ---- bodies -----------------------------------------------------------
     out.body_of_tet.assign(static_cast<std::size_t>(num_tets), -1);
 
+    // Resolve every body's tag first, then assign tets in ONE pass over the
+    // mesh. Scanning all tets once per body would be O(bodies x tets) --
+    // invisible with the two bodies of the cylinder, and not with the dozens
+    // a package model has.
     for (const Body& b : problem.bodies) {
         BoundBody bb;
         bb.name = b.name;
@@ -201,24 +226,40 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
         bb.eps_r = b.eps_r;
         bb.mu_r = b.mu_r;
 
-        const int index = static_cast<int>(out.bodies.size());
-        for (int t = 0; t < num_tets; ++t) {
-            if (mesh.tet_tags[static_cast<std::size_t>(t)] != bb.tag) continue;
-            if (out.body_of_tet[static_cast<std::size_t>(t)] >= 0) {
+        // Two bodies resolving to one tag claim the same tets. The parser
+        // already rejects a repeated volume *name*, but one body can name a
+        // group and another give its tag as digits.
+        for (const BoundBody& existing : out.bodies) {
+            if (existing.tag == bb.tag) {
                 fail(b.line, "volume '" + bb.volume + "' is already claimed by body '" +
-                                 out.bodies[static_cast<std::size_t>(
-                                                out.body_of_tet[static_cast<std::size_t>(t)])]
-                                     .name +
-                                 "'");
+                                 existing.name + "'");
             }
-            out.body_of_tet[static_cast<std::size_t>(t)] = index;
-            bb.tets.push_back(t);
-        }
-        if (bb.tets.empty()) {
-            fail(b.line, "body '" + bb.name + "': volume '" + bb.volume + "' (tag " +
-                             std::to_string(bb.tag) + ") has no tetrahedra in the mesh");
         }
         out.bodies.push_back(std::move(bb));
+    }
+
+    // tag -> body index, sorted so the pass below is O(tets * log bodies).
+    std::vector<std::pair<int, int>> body_of_tag;
+    body_of_tag.reserve(out.bodies.size());
+    for (std::size_t i = 0; i < out.bodies.size(); ++i) {
+        body_of_tag.emplace_back(out.bodies[i].tag, static_cast<int>(i));
+    }
+    std::sort(body_of_tag.begin(), body_of_tag.end());
+
+    for (int t = 0; t < num_tets; ++t) {
+        const int tag = mesh.tet_tags[static_cast<std::size_t>(t)];
+        const auto it = std::lower_bound(body_of_tag.begin(), body_of_tag.end(),
+                                         std::make_pair(tag, -1));
+        if (it == body_of_tag.end() || it->first != tag) continue;
+        out.body_of_tet[static_cast<std::size_t>(t)] = it->second;
+        out.bodies[static_cast<std::size_t>(it->second)].tets.push_back(t);
+    }
+
+    for (std::size_t i = 0; i < out.bodies.size(); ++i) {
+        if (!out.bodies[i].tets.empty()) continue;
+        fail(problem.bodies[i].line,
+             "body '" + out.bodies[i].name + "': volume '" + out.bodies[i].volume + "' (tag " +
+                 std::to_string(out.bodies[i].tag) + ") has no tetrahedra in the mesh");
     }
 
     // Every tet must belong to some body: an unclaimed region would be
@@ -246,6 +287,7 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
     }
 
     // ---- ports ------------------------------------------------------------
+    const TagIndex tagged_by_tag = index_tagged_faces(mesh);
     for (const Port& p : problem.ports) {
         BoundPort bp;
         bp.name = p.name;
@@ -258,7 +300,7 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
         std::vector<int> faces, nodes, edges;
         for (const std::string& name : p.surface) {
             const int tag = resolve_tag(mesh, name, 2, p.line, "port '" + p.name + "': surface");
-            const BoundSurface s = resolve_surface(mesh, name, tag, p.line);
+            const BoundSurface s = resolve_surface(mesh, tagged_by_tag, name, tag, p.line);
             merged.tag = s.tag;
             faces.insert(faces.end(), s.faces.begin(), s.faces.end());
             nodes.insert(nodes.end(), s.nodes.begin(), s.nodes.end());

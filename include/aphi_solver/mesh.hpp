@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstddef>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -201,10 +200,12 @@ public:
     int num_tets() const { return static_cast<int>(tets.size()); }
 
     /// Returns the global edge index for the (unordered) vertex pair {i, j},
-    /// or -1 if no such edge exists in this mesh. O(log num_edges) via an
-    /// internal lookup map built by build_topology -- used by
-    /// incidence.hpp's build_curl_matrix, so this needs to be more than a
-    /// linear scan once meshes stop being test-sized.
+    /// or -1 if no such edge exists in this mesh. O(log num_edges) by binary
+    /// search over `edges`, which build_topology leaves in ascending key
+    /// order -- so there is no separate lookup structure to keep in step.
+    /// Used by incidence.hpp's build_curl_matrix and by the port and mask
+    /// code in problem_binding.cpp, which between them call it about 200 000
+    /// times on a 16 000-tet mesh; a linear scan would not do.
     int find_edge(int i, int j) const;
 
     /// Returns the global face index for the (unordered) vertex triple
@@ -228,9 +229,6 @@ public:
     /// mesh entity.
     std::string physical_name(int dimension, int tag) const;
 
-private:
-    std::map<std::pair<int, int>, int> edge_lookup_;
-    std::map<std::array<int, 3>, int> face_lookup_;
 };
 
 }  // namespace aphi_solver
