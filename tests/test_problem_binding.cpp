@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 // Tests for binding a parsed Problem to a mesh.
 //
 // Step 4 of `docs/INPUT_FILE_PLAN.md` Sec. 6. Two kinds of case:
@@ -484,6 +485,93 @@ void test_cut_side_labels() {
     }
 }
 
+
+// The delta gap is about Phi's SUPPORT, not about the mesh.
+//
+// It is natural to read "the rim lies inside the region where Phi lives" as a
+// meshing defect -- the cut not quite reaching the conductor's surface. It is
+// not. The rim is exactly on the ring's surface; what changes is where Phi
+// stops. So this pins both halves: the geometry, and the fact that the warning
+// follows the formulation and nothing else.
+void test_delta_gap_is_about_phi_support() {
+#ifdef APHI_MESH_DIR
+    const std::string dir = APHI_MESH_DIR;
+    Mesh raw;
+    try {
+        raw = read_gmsh_msh(dir + "/loop_cut.msh");
+    } catch (const std::exception& e) {
+        check(false, std::string("loop_cut.msh unreadable: ") + e.what());
+        return;
+    }
+
+    // --- the geometry, in millimetres, before any scaling -----------------
+    // tools/loop_cut.geo: Ri = 0.6, Ro = 1.0, t = 0.3, N = 24. A polygon
+    // EDGE's interior points sit at R*cos(pi/N), not R, so both radii count.
+    const double Ri = 0.6, Ro = 1.0, t = 0.3;
+    const double shrink = std::cos(M_PI / 24.0);
+
+    Mesh m = raw;
+    scale_mesh_to_metres(m, LengthUnit::Millimetre);
+    Problem dc;
+    dc.type = AnalysisType::DC;
+    dc.length_unit = LengthUnit::Millimetre;
+    dc.bodies = {make_body("B1", "ring", 5.8e7, 10), make_body("B2", "air", 0.0, 15)};
+    Port pr = make_port("P1", PortType::InternalCurrent, "loop_cut", 1.0, 20);
+    pr.current_direction = Vec3{0.0, 1.0, 0.0};
+    dc.ports = {pr};
+
+    const BoundProblem b = expect_ok(dc, m, "the loop at DC");
+    if (b.ports.empty()) return;
+
+    int off_surface = 0;
+    for (int e : b.ports[0].rim_edges) {
+        const std::pair<int, int>& ends = raw.edges[static_cast<std::size_t>(e)];
+        for (int n : {ends.first, ends.second}) {
+            const Vec3& v = raw.nodes[static_cast<std::size_t>(n)];
+            const double r = std::sqrt(v.x * v.x + v.y * v.y);
+            const bool on_wall = std::abs(r - Ro) < 1e-9 || std::abs(r - Ro * shrink) < 1e-9 ||
+                                 std::abs(r - Ri) < 1e-9 || std::abs(r - Ri * shrink) < 1e-9;
+            const bool on_face = std::abs(std::abs(v.z) - t / 2) < 1e-9;
+            if (!on_wall && !on_face) ++off_surface;
+        }
+    }
+    check(off_surface == 0,
+          "every rim node lies exactly on the ring's surface -- the cut is a true "
+          "cross-section, so the delta gap is not a meshing error");
+    check(b.warnings.empty(), "and at DC there is no delta-gap warning");
+
+    // --- the same port, the same mesh, only the formulation changed --------
+    for (const Formulation f : {Formulation::FullWave, Formulation::Reduced}) {
+        Mesh ac_mesh = raw;
+        scale_mesh_to_metres(ac_mesh, LengthUnit::Millimetre);
+        Problem ac = dc;
+        ac.type = AnalysisType::Frequency;
+        ac.frequencies = {1e6};
+        ac.formulation = f;
+        const BoundProblem ab = expect_ok(ac, ac_mesh, "the loop at 1 MHz");
+        if (ab.bodies.empty()) continue;
+
+        int phi_tets = 0;
+        for (bool v : ab.phi_tet) {
+            if (v) ++phi_tets;
+        }
+        const bool warned = !ab.warnings.empty();
+        if (f == Formulation::FullWave) {
+            check(phi_tets == ac_mesh.num_tets(), "full_wave: Phi lives on every tet");
+            check(warned,
+                  "so the conductor's surface is interior to Phi's support and the cut IS a "
+                  "delta gap");
+        } else {
+            check(phi_tets == static_cast<int>(ab.bodies[0].tets.size()),
+                  "reduced: Phi lives only on the ring");
+            check(!warned,
+                  "so the rim is on the edge of Phi's support and there is NO delta gap -- the "
+                  "warning follows the formulation, not the mesh");
+        }
+    }
+#endif
+}
+
 // The loop mesh: the first INTERNAL port on real geometry.
 //
 // A boundary port's terminal is handed to it by the mesh -- the faces are on
@@ -766,6 +854,7 @@ int main() {
     test_cut_side_labels();
     test_cylinder_mesh();
     test_loop_mesh();
+    test_delta_gap_is_about_phi_support();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

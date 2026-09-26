@@ -458,10 +458,22 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
                                " of its rim edges are surrounded by conductor. Current would flow "
                                "around the uncut part and the port would be partly shorted");
             }
+            // The rim is on the conductor's surface -- that is what a
+            // cross-section's rim IS. What makes this a delta gap is that Phi
+            // extends past the conductor at full wave, so the conductor's
+            // surface is INTERIOR to Phi's support and the cut does not reach
+            // the edge of it. Say that, because "the rim lies inside the
+            // region where Phi lives" reads as "the rim is off the surface",
+            // and it is not.
             out.warnings.push_back(
-                "port '" + bp.name + "' is a delta gap: its rim lies inside the region where Phi "
-                "lives, so the field there is singular and the gap capacitance depends on mesh "
-                "refinement. This is the standard idealization, not an error.");
+                "port '" + bp.name +
+                "' is a delta gap: its rim is on the conductor's surface, but Phi extends past "
+                "the conductor (formulation = full_wave puts Phi on the whole domain), so the "
+                "cut does not reach the edge of Phi's support. Phi therefore jumps across a "
+                "surface whose rim is interior, the field is singular along that rim, and the "
+                "gap capacitance depends on mesh refinement. This is the standard idealization, "
+                "not an error -- at DC, or with formulation = reduced, Phi stops at the "
+                "conductor and the rim is on the edge of its support, so this does not arise.");
         }
     }
 

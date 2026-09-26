@@ -50,3 +50,28 @@ current           = 1.0
 # the two symmetric ones store only the upper triangle, for about half the
 # memory.
 conditioning = row_scaled                  # natural | row_scaled | scaled_phi
+
+# ---------------------------------------------------------------------------
+# On the delta-gap warning this file produces.
+#
+# It is NOT a meshing problem, and the cut is not slightly off the ring's
+# surface: every rim node sits exactly on it (the outer wall, the inner wall,
+# or a flat face -- asserted in tests/test_problem_binding.cpp).
+#
+# What matters is where PHI stops, not where the conductor stops. With
+# `formulation = full_wave` above, beta = sigma + j*omega*eps is non-zero in
+# the air too, so Phi lives on the whole box and the ring's surface is
+# INTERIOR to Phi's support. A surface that cuts the ring does not cut the
+# box, so Phi jumps across a surface whose rim is interior: the field is
+# singular along that rim, like any gap or slot excitation, and the energy
+# stored near it -- hence the gap capacitance -- depends on mesh refinement.
+#
+# Change `formulation` to `reduced` and the warning disappears: Phi then stops
+# at the conductor, the rim lies on the edge of its support, and the cut is a
+# complete cut of the region Phi occupies. Same mesh, same port. At DC the
+# same is true automatically.
+#
+# Removing it at full wave would mean extending the cut from box wall to box
+# wall -- a topological cut of the whole domain rather than a cross-section of
+# the conductor. That is a different model, not a better mesh.
+# ---------------------------------------------------------------------------
