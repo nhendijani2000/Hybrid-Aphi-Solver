@@ -1,6 +1,42 @@
 # Sparse linear solver: build-vs-buy, and what's implemented so far
 
-## Decision: don't hand-roll sparse factorization -- link a library
+> **SUPERSEDED, 26 Sept 2026 — the decision below was reversed.**
+>
+> The recommendation in the next section was "don't hand-roll sparse
+> factorization, link a library", with MUMPS the leading candidate, and it said
+> explicitly to revisit that "once Phase 04 produces real assembled systems to
+> benchmark MUMPS against on your actual meshes". Those systems now exist:
+> 37368 unknowns and 1557522 nonzeros unsymmetric, 797445 symmetric, on
+> `cylinder_box.msh` at 1 MHz; a 41-point sweep sharing one structure.
+>
+> **The decision is now: in-house, no third-party library, at any stage.**
+> `docs/SOLVER_PLAN.md` is the plan. It is staged — a correct, deterministic,
+> reference-quality direct solver first (AMD reordering, static pivoting,
+> iterative refinement, scalar), then performance and robustness work in-house
+> later, only where a measurement says it is needed.
+>
+> What did *not* change: the technical content below is still accurate about
+> what a production-grade sparse direct solver involves, and about the
+> licensing landscape, and the Bunch-Kaufman and fill-reducing-reordering
+> requirements it names are exactly what `SOLVER_PLAN.md` §5 and §3 address. Two
+> things in it are worth carrying forward rather than discarding:
+>
+> - **the scope warning is real.** A competitive sparse direct solver is years
+>   of work. `SOLVER_PLAN.md` answers it by not trying to be competitive: Stage
+>   1 is explicitly allowed to be slow, because its job is to be right and to
+>   serve as the reference the rest is checked against.
+> - **the "solver mode is derived, not a free field" rule** in the section after
+>   next still holds unchanged, and is restated in `SOLVER_PLAN.md` §7.
+>
+> The reason for reversing it is a dependency policy rather than a numerical
+> one: no third-party library in the build. Worth recording plainly, because on
+> capability the two routes barely differ — a library would supply nested
+> dissection, supernodal blocking and Bunch-Kaufman pivoting, all of which are
+> `SOLVER_PLAN.md` Stage 2 items and none of which are needed for a correct
+> answer.
+
+## Original recommendation (superseded): don't hand-roll sparse factorization -- link a library
+
 
 Writing a production-grade sparse direct solver for complex-symmetric indefinite
 systems (numerically stable pivoting, à la Bunch-Kaufman, plus fill-reducing

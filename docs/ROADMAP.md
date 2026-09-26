@@ -856,6 +856,13 @@ around what the assembled matrix actually is: sparse, complex *symmetric*
 coefficients), and typically ill-conditioned. Scaling and reordering happen
 *before* factorization, not as an afterthought.
 
+**Plan: `docs/SOLVER_PLAN.md`** (26 Sept 2026). In-house at every stage — the
+"link MUMPS" recommendation in `docs/LINEAR_SOLVER.md` is superseded there and
+marked as such. Staged: a correct, deterministic, reference-quality direct
+solver first (AMD reordering, static pivoting, iterative refinement, scalar),
+then performance and robustness work in-house only where a measurement says it
+is needed. The steps below are unchanged by that; the plan says how.
+
 1. **Dense direct-solve baseline — done.** `solve_dense` in the conditioning
    module, ground truth for every sparse/iterative result on small problems.
 2. **Diagonal equilibration — done.** Symmetric Ruiz-style scaling
