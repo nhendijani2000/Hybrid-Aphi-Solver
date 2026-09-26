@@ -59,3 +59,13 @@ phase_deg   = 0
 type        = boundary_voltage
 surface     = wire_top
 voltage     = 0.0
+
+[solver]
+# At a real frequency all three scalings are available (docs/CONDITIONING.md).
+# The two symmetric ones store only the upper triangle -- about half the
+# memory of the unsymmetric form on this mesh.
+#
+#   natural      unsymmetric; needs a general LU
+#   row_scaled   symmetric; the Phi rows are divided by j*omega
+#   scaled_phi   symmetric; the unknown becomes Phi/(j*omega)
+conditioning = natural

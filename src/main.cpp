@@ -1,12 +1,15 @@
 // Command-line driver.
 //
-// **Reads and binds, as of step 4 of `docs/INPUT_FILE_PLAN.md`.**
-// It parses an input file, opens the mesh it names, resolves every name
-// against it, checks everything both stages can check, and reports what it
-// found. It does not assemble and does not solve -- the DOF map is next --
-// and the closing lines say so, so the output never implies more has been
-// done than has.
+// **Reads, binds and assembles.** It parses an input file, opens the mesh it
+// names, resolves every name against it, checks everything each stage can
+// check, builds the DOF map and the sparsity pattern, and assembles the
+// system at every frequency the file asks for.
+//
+// It does **not** solve: there is no linear solver yet. The closing lines say
+// so, so the output never implies more has been done than has.
 
+#include <chrono>
+#include <memory>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -14,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "aphi_solver/assembly.hpp"
 #include "aphi_solver/dof_map.hpp"
 #include "aphi_solver/gmsh_reader.hpp"
 #include "aphi_solver/input_file.hpp"
@@ -237,20 +241,134 @@ void print_summary(const std::string& path, const ParseResult& r, const Mesh& me
               << "  ----------------------------------------\n"
               << "  total" << std::setw(8) << d.num_total << " unknowns\n";
 
-    std::cout << "\nok -- bound, gauged and numbered; " << num_solves(p) << " solve"
-              << (num_solves(p) == 1 ? "" : "s") << " would follow.\n"
-              << "Nothing was solved: there are no element matrices, no assembly and no linear\n"
-              << "solver yet. Next in the plan: element matrices, then global assembly.\n";
+}
+
+/// Assembles the system at every frequency the file asks for, and reports
+/// what each pass produced.
+///
+/// Uses the sweep path from `docs/ASSEMBLY_PLAN.md` Sec. 11-13 rather than
+/// calling `assemble` per frequency: the structure is frequency-independent,
+/// so the pattern, the matrix and the scatter positions are built once and
+/// only the values are recomputed.
+///
+/// Storage follows the conditioning. The two symmetric ones get a
+/// `SparseSymmetric`, which holds the upper triangle for about half the
+/// memory; `Natural` cannot, since its (Phi,A) block is `j*omega` times its
+/// (A,Phi) block.
+void assemble_all(const Problem& p, const Mesh& mesh, const BoundProblem& bound,
+                  const DofMap& dofs) {
+    using Clock = std::chrono::steady_clock;
+    const auto ms = [](Clock::time_point a, Clock::time_point b) {
+        return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+    const double mb = 1048576.0;
+
+    const bool symmetric = conditioning_needs_ac(p.conditioning);
+    const SparsityStorage storage =
+        symmetric ? SparsityStorage::UpperTriangle : SparsityStorage::Full;
+
+    auto t0 = Clock::now();
+    const SparsityPattern pattern = build_sparsity(dofs, bound, mesh, storage);
+    auto t1 = Clock::now();
+
+    std::cout << "\nassembly\n";
+    std::cout << "  conditioning  " << conditioning_keyword(p.conditioning) << "  ->  "
+              << (symmetric ? "symmetric, upper triangle stored"
+                            : "unsymmetric, both triangles stored")
+              << "\n";
+    std::cout << "  pattern       " << pattern.nnz() << " nonzeros, "
+              << static_cast<double>(pattern.nnz()) / dofs.num_total << " per row, "
+              << pattern.nnz() * (sizeof(std::complex<double>) + sizeof(int)) / mb
+              << " MB of values and columns   [" << ms(t0, t1) << " ms]\n";
+
+    // The list of frequencies to assemble at. DC is one pass at omega = 0.
+    std::vector<double> omegas;
+    if (p.type == AnalysisType::DC) {
+        omegas.push_back(0.0);
+    } else {
+        for (double f : p.frequencies) omegas.push_back(2.0 * M_PI * f);
+    }
+
+    // A ScatterMap is built once and reused, and pays for itself after the
+    // first refill -- so it is worth it from two frequencies up, and roughly
+    // a wash for one. ASSEMBLY_PLAN Sec. 13 has the numbers.
+    std::unique_ptr<ScatterMap> map;
+    double map_ms = 0.0;
+    if (omegas.size() > 1) {
+        auto m0 = Clock::now();
+        map.reset(new ScatterMap(ScatterMap::build(pattern, dofs, mesh, bound)));
+        auto m1 = Clock::now();
+        map_ms = ms(m0, m1);
+        std::cout << "  scatter map   " << map->bytes() / mb << " MB, reused at every frequency   ["
+                  << map_ms << " ms]\n";
+    } else {
+        std::cout << "  scatter map   not built: one pass only, so it would cost more than it "
+                     "saves\n";
+    }
+
+    auto a0 = Clock::now();
+    AssembledSystem full;
+    SymmetricSystem half;
+    if (symmetric) {
+        half = make_symmetric_system(pattern, dofs.num_total);
+    } else {
+        full = make_system(pattern, dofs.num_total);
+    }
+    auto a1 = Clock::now();
+    std::cout << "  allocated     "
+              << (symmetric ? half.matrix.nnz() : full.matrix.nnz())
+              << " complex values once for the whole sweep   [" << ms(a0, a1) << " ms]\n\n";
+
+    std::cout << std::right;
+    std::cout << "  " << std::setw(12) << "frequency" << std::setw(12) << "largest |a|"
+              << std::setw(12) << "|rhs|_inf" << std::setw(10) << "ms\n";
+    double total_ms = 0.0;
+    for (double omega : omegas) {
+        auto r0 = Clock::now();
+        if (symmetric) {
+            refill(half, bound, mesh, dofs, pattern, omega, p.conditioning, map.get());
+        } else {
+            refill(full, bound, mesh, dofs, pattern, omega, p.conditioning, map.get());
+        }
+        auto r1 = Clock::now();
+        total_ms += ms(r0, r1);
+
+        double worst = 0.0, worst_rhs = 0.0;
+        const std::vector<std::complex<double>>& values =
+            symmetric ? half.matrix.values() : full.matrix.values();
+        const std::vector<std::complex<double>>& rhs = symmetric ? half.rhs : full.rhs;
+        for (const std::complex<double>& v : values) worst = std::max(worst, std::abs(v));
+        for (const std::complex<double>& v : rhs) worst_rhs = std::max(worst_rhs, std::abs(v));
+
+        std::ostringstream label;
+        if (omega == 0.0) {
+            label << "DC";
+        } else {
+            label << std::setprecision(4) << omega / (2.0 * M_PI) << " Hz";
+        }
+        std::cout << "  " << std::setw(12) << label.str() << std::setw(12) << worst
+                  << std::setw(12) << worst_rhs << std::setw(10) << ms(r0, r1) << "\n";
+    }
+
+    std::cout << "\n  " << omegas.size() << " assembl" << (omegas.size() == 1 ? "y" : "ies")
+              << " in " << total_ms << " ms";
+    if (omegas.size() > 1) {
+        std::cout << ", " << total_ms / omegas.size() << " ms each";
+    }
+    std::cout << "\n";
+
+    std::cout << "\nok -- assembled. Nothing was SOLVED: there is no linear solver yet, so no\n"
+              << "currents, voltages, R or L come out of this. Next in the plan: the solver.\n";
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc != 2) {
-        std::cerr << "A-Phi solver " << aphi_solver::kVersion << " -- parse-only driver\n\n"
+        std::cerr << "A-Phi solver " << aphi_solver::kVersion << " -- assembles, does not solve\n\n"
                   << "usage: " << (argc > 0 ? argv[0] : "aphi_solver") << " <input-file>\n\n"
-                  << "Reads and validates an input file, then prints what it found.\n"
-                  << "It does not open the mesh and does not solve.\n\n"
+                  << "Reads and validates an input file, opens its mesh, numbers the unknowns\n"
+                  << "and assembles the system at every frequency. It does not solve.\n\n"
                   << "try: aphi_solver examples/cylinder_box.aphi\n";
         return 2;
     }
@@ -265,8 +383,9 @@ int main(int argc, char** argv) {
         const aphi_solver::DofMap dofs = aphi_solver::build_dof_map(bound, mesh);
 
         std::cout << "A-Phi solver " << aphi_solver::kVersion
-                  << " -- reads and checks the problem; does not solve it yet\n\n";
+                  << " -- reads, checks and assembles; does not solve it yet\n\n";
         print_summary(path, result, mesh, bound, dofs);
+        assemble_all(result.problem, mesh, bound, dofs);
         return 0;
     } catch (const aphi_solver::GmshReadError& e) {
         std::cerr << "mesh: " << e.what() << "\n";
