@@ -62,33 +62,22 @@ inline void add_at(const SparsityPattern& pattern, std::vector<Complex>& values,
     values[static_cast<std::size_t>(slot)] += value;
 }
 
-/// Where every entry of one tet belongs in the value array.
+/// The live global DOFs of one tet, sorted and uniqued, and where each local
+/// DOF sits among them.
 ///
 /// Locating entries -- not computing them -- was 68 % of assembly time when
 /// each was found by its own `find_slot`: 75 ms of 107 on the cylinder, over
 /// 3.6 M searches (docs/ASSEMBLY_PLAN.md Sec. 11). A tet contributes at most
 /// 16 distinct global DOFs, so all ~225 of its entries lie in 16 rows and 16
-/// columns. Sorting those DOFs once lets each row be swept in ASCENDING
-/// column order, so every search resumes where the previous one stopped
-/// instead of at the row's beginning: 76 ms -> 34 ms, for 16x16 ints of
-/// stack and nothing per tet on the heap.
-struct TetSlots {
-    int n = 0;                     ///< distinct live global DOFs, at most 16
-    std::array<int, 16> live{};    ///< their global indices, ascending
-    std::array<int, 6> edge_at{};  ///< local edge -> index into `live`, or -1
-    std::array<int, 10> phi_at{};  ///< local Phi node -> ditto
-    std::array<int, 256> slot{};   ///< [row_at * 16 + col_at] -> value index
-
-    int of(int row_at, int col_at) const {
-        return slot[static_cast<std::size_t>(row_at * 16 + col_at)];
-    }
+/// columns.
+struct TetLive {
+    int n = 0;
+    std::array<int, 16> live{};
+    std::array<int, 6> edge_at{};
+    std::array<int, 10> phi_at{};
 };
 
-/// Fills `s` for one tet. Every pair looked up here must exist, because
-/// `build_sparsity` formed the pattern from exactly these lists; a miss
-/// means the symbolic and numeric passes disagree, so it throws rather than
-/// dropping a term.
-void locate(const SparsityPattern& pattern, const TetDofs& d, TetSlots& s) {
+void gather_live(const TetDofs& d, TetLive& s) {
     s.n = 0;
     for (const DofEntry& e : d.edge) {
         if (e.index >= 0) s.live[static_cast<std::size_t>(s.n++)] = e.index;
@@ -114,7 +103,29 @@ void locate(const SparsityPattern& pattern, const TetDofs& d, TetSlots& s) {
     for (int i = 0; i < 10; ++i) {
         s.phi_at[static_cast<std::size_t>(i)] = position(d.phi[static_cast<std::size_t>(i)].index);
     }
+}
 
+/// Fills `out` with the value-array index of every (row, column) pair among
+/// `s.live`, row-major with stride `s.n`.
+///
+/// Each row is swept in ASCENDING column order so every `lower_bound`
+/// resumes where the previous one stopped instead of at the row's beginning.
+/// That is the whole optimisation, and it is why the live list is sorted.
+///
+/// Every pair must exist, because `build_sparsity` formed the pattern from
+/// exactly these lists; a miss means the symbolic and numeric passes
+/// disagree, so it throws rather than dropping a term.
+void locate(const SparsityPattern& pattern, const TetLive& s, int* out,
+            std::size_t capacity) {
+    // `out` holds an n x n block. Checking that here, once per tet, turns a
+    // mismatch between this and whoever sized the buffer into an exception
+    // instead of a write past the end -- which in a `ScatterMap` means heap
+    // corruption during construction, before any test can look at it.
+    if (static_cast<std::size_t>(s.n) * static_cast<std::size_t>(s.n) > capacity) {
+        throw std::logic_error("locate: a tet with " + std::to_string(s.n) +
+                               " live DOFs needs " + std::to_string(s.n * s.n) +
+                               " slots but was given " + std::to_string(capacity) + ".");
+    }
     for (int r = 0; r < s.n; ++r) {
         const int row = s.live[static_cast<std::size_t>(r)];
         auto it = pattern.col_index.begin() + pattern.row_ptr[static_cast<std::size_t>(row)];
@@ -122,9 +133,6 @@ void locate(const SparsityPattern& pattern, const TetDofs& d, TetSlots& s) {
             pattern.col_index.begin() + pattern.row_ptr[static_cast<std::size_t>(row) + 1];
         for (int col = 0; col < s.n; ++col) {
             const int want = s.live[static_cast<std::size_t>(col)];
-            // From `it`, not from the row's beginning: the columns are
-            // ascending, so the previous hit is a valid lower bound for
-            // this one. That is the whole optimisation.
             it = std::lower_bound(it, end, want);
             if (it == end || *it != want) {
                 throw std::logic_error(
@@ -133,11 +141,22 @@ void locate(const SparsityPattern& pattern, const TetDofs& d, TetSlots& s) {
                     "). The sparsity pattern and the scatter disagree about the matrix's "
                     "shape; dropping the term would give a quietly wrong matrix.");
             }
-            s.slot[static_cast<std::size_t>(r * 16 + col)] =
-                static_cast<int>(it - pattern.col_index.begin());
+            out[r * s.n + col] = static_cast<int>(it - pattern.col_index.begin());
         }
     }
 }
+
+/// One tet's scatter positions, however they were obtained -- worked out on
+/// the spot, or read from a `ScatterMap`. The scatter loop is written once,
+/// against this.
+struct TetScatter {
+    int n = 0;
+    const int* edge_at = nullptr;
+    const int* phi_at = nullptr;
+    const int* slot = nullptr;  ///< n x n, row-major
+
+    int of(int row_at, int col_at) const { return slot[row_at * n + col_at]; }
+};
 
 /// The prescribed value of local Phi node `q` expressed in the SCALED
 /// unknown, `Phi_given / c`. Eliminating a column multiplies this by that
@@ -149,22 +168,94 @@ inline Complex prescribed(const TetDofs& d, int q, const Complex& column_scale) 
 
 }  // namespace
 
-AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofMap& dofs,
-                         const SparsityPattern& pattern, double omega, Formulation3 formulation) {
-    const FormulationScales scales = formulation_scales(formulation, omega);
-    const Complex jw(0.0, omega);
+// ---------------------------------------------------------------- ScatterMap
 
+ScatterMap ScatterMap::build(const SparsityPattern& pattern, const DofMap& dofs, const Mesh& mesh,
+                             const BoundProblem& bound) {
+    const int num_tets = mesh.num_tets();
+    ScatterMap m;
+    m.live_.assign(static_cast<std::size_t>(num_tets), 0);
+    m.pos_.assign(static_cast<std::size_t>(num_tets) * 16, -1);
+    m.offset_.assign(static_cast<std::size_t>(num_tets) + 1, 0);
+
+    // Two passes, so `slot_` is allocated once at its exact size rather than
+    // grown. The blocks are not all the same size: a tet on the Dirichlet
+    // boundary, or outside Phi's support, has fewer than 16 live DOFs.
+    std::vector<TetLive> live(static_cast<std::size_t>(num_tets));
+    for (int t = 0; t < num_tets; ++t) {
+        const std::size_t u = static_cast<std::size_t>(t);
+        gather_live(dofs.local_dofs(t, mesh, bound), live[u]);
+        m.live_[u] = live[u].n;
+        m.offset_[u + 1] =
+            m.offset_[u] + static_cast<std::size_t>(live[u].n) * static_cast<std::size_t>(live[u].n);
+    }
+    m.slot_.assign(m.offset_[static_cast<std::size_t>(num_tets)], -1);
+
+    for (int t = 0; t < num_tets; ++t) {
+        const std::size_t u = static_cast<std::size_t>(t);
+        for (int i = 0; i < 6; ++i) {
+            m.pos_[u * 16 + static_cast<std::size_t>(i)] =
+                live[u].edge_at[static_cast<std::size_t>(i)];
+        }
+        for (int i = 0; i < 10; ++i) {
+            m.pos_[u * 16 + 6 + static_cast<std::size_t>(i)] =
+                live[u].phi_at[static_cast<std::size_t>(i)];
+        }
+        locate(pattern, live[u], m.slot_.data() + m.offset_[u],
+               m.offset_[u + 1] - m.offset_[u]);
+    }
+    return m;
+}
+
+std::size_t ScatterMap::bytes() const {
+    return live_.size() * sizeof(int) + pos_.size() * sizeof(int) +
+           offset_.size() * sizeof(std::size_t) + slot_.size() * sizeof(int);
+}
+
+// ------------------------------------------------------------------ assembly
+
+AssembledSystem make_system(const SparsityPattern& pattern, int num_unknowns) {
     AssembledSystem out;
     out.matrix = SparseMatrixZ::from_pattern(pattern.rows, pattern.cols, pattern.row_ptr,
                                              pattern.col_index);
-    out.rhs.assign(static_cast<std::size_t>(dofs.num_total), Complex(0.0, 0.0));
-    std::vector<Complex>& values = out.matrix.mutable_values();
+    out.rhs.assign(static_cast<std::size_t>(num_unknowns), Complex(0.0, 0.0));
+    return out;
+}
 
-    // Reused for every tet. ~3.7 KB on the stack, never heap.
+void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh,
+            const DofMap& dofs, const SparsityPattern& pattern, double omega,
+            Formulation3 formulation, const ScatterMap* scatter) {
+    const FormulationScales scales = formulation_scales(formulation, omega);
+    const Complex jw(0.0, omega);
+
+    if (system.matrix.rows() != pattern.rows || system.matrix.nnz() != pattern.nnz()) {
+        throw std::invalid_argument(
+            "refill: this system was not made from this pattern. Their shapes must agree, or "
+            "the slots the scatter writes to mean something else.");
+    }
+    if (system.rhs.size() != static_cast<std::size_t>(dofs.num_total)) {
+        throw std::invalid_argument("refill: the right-hand side is not one entry per unknown.");
+    }
+    if (scatter != nullptr && scatter->num_tets() != mesh.num_tets()) {
+        throw std::invalid_argument("refill: the ScatterMap was built for a different mesh (" +
+                                    std::to_string(scatter->num_tets()) + " tets against " +
+                                    std::to_string(mesh.num_tets()) + ").");
+    }
+
+    std::vector<Complex>& values = system.matrix.mutable_values();
+
+    // The scatter accumulates, so anything left from a previous frequency has
+    // to go first. Zeroing an array already held is 0.6 ms against 11.4 to
+    // allocate a fresh one, which is why `make_system` is separate.
+    std::fill(values.begin(), values.end(), Complex(0.0, 0.0));
+    std::fill(system.rhs.begin(), system.rhs.end(), Complex(0.0, 0.0));
+
+    // Reused for every tet. ~4.8 KB on the stack, never heap.
     std::array<Complex, 36> aa{};
     std::array<Complex, 60> ap{};
     std::array<Complex, 100> pp{};
-    TetSlots where;
+    TetLive live;
+    std::array<int, 256> scratch{};
 
     // Bodies then tets, so the coefficients are a per-body cost rather than
     // a per-tet one. The bodies partition the tets, so each is visited once.
@@ -175,7 +266,15 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
             const TetGeometry g = compute_tet_geometry(mesh, tet);
             const TetDofs d = dofs.local_dofs(tet, mesh, bound);
 
-            locate(pattern, d, where);
+            TetScatter where;
+            if (scatter != nullptr) {
+                where = {scatter->live_count(tet), scatter->edge_at(tet), scatter->phi_at(tet),
+                         scatter->slots(tet)};
+            } else {
+                gather_live(d, live);
+                locate(pattern, live, scratch.data(), scratch.size());
+                where = {live.n, live.edge_at.data(), live.phi_at.data(), scratch.data()};
+            }
 
             kernel_AA(g, c, aa.data());
             kernel_APhi(g, c, ap.data());
@@ -185,15 +284,14 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
             for (int p = 0; p < 6; ++p) {
                 const DofEntry& rp = d.edge[static_cast<std::size_t>(p)];
                 if (rp.index < 0) continue;
-                const int row_at = where.edge_at[static_cast<std::size_t>(p)];
+                const int row_at = where.edge_at[p];
                 for (int q = 0; q < 6; ++q) {
                     const DofEntry& cq = d.edge[static_cast<std::size_t>(q)];
                     // A prescribed edge has a = 0, so it contributes
                     // nothing to the right-hand side either -- unlike a
                     // prescribed Phi, which generally does.
                     if (cq.index < 0) continue;
-                    values[static_cast<std::size_t>(
-                        where.of(row_at, where.edge_at[static_cast<std::size_t>(q)]))] +=
+                    values[static_cast<std::size_t>(where.of(row_at, where.edge_at[q]))] +=
                         (rp.coeff * cq.coeff) * aa[static_cast<std::size_t>(p * 6 + q)];
                 }
             }
@@ -206,7 +304,7 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
             for (int p = 0; p < 6; ++p) {
                 const DofEntry& e = d.edge[static_cast<std::size_t>(p)];
                 if (e.index < 0) continue;
-                const int row_at = where.edge_at[static_cast<std::size_t>(p)];
+                const int row_at = where.edge_at[p];
                 for (int q = 0; q < 10; ++q) {
                     const DofEntry& n = d.phi[static_cast<std::size_t>(q)];
                     const Complex block = ap[static_cast<std::size_t>(p * 10 + q)];
@@ -214,8 +312,7 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
                     // (A, Phi): the Phi DOF is the column, so a prescribed
                     // one moves to the A row's right-hand side.
                     if (n.index >= 0) {
-                        values[static_cast<std::size_t>(
-                            where.of(row_at, where.phi_at[static_cast<std::size_t>(q)]))] +=
+                        values[static_cast<std::size_t>(where.of(row_at, where.phi_at[q]))] +=
                             scales.column * (e.coeff * n.coeff) * block;
                     } else {
                         // The eliminated column carries its own matrix
@@ -228,7 +325,7 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
                         // under ScaledPhi.
                         const Complex fixed = prescribed(d, q, scales.column);
                         if (fixed != Complex(0.0, 0.0)) {
-                            out.rhs[static_cast<std::size_t>(e.index)] -=
+                            system.rhs[static_cast<std::size_t>(e.index)] -=
                                 scales.column * e.coeff * block * fixed;
                         }
                     }
@@ -236,8 +333,7 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
                     // (Phi, A): the Phi DOF is now the row. A prescribed
                     // row has no equation at all, so it is simply absent.
                     if (n.index >= 0) {
-                        values[static_cast<std::size_t>(
-                            where.of(where.phi_at[static_cast<std::size_t>(q)], row_at))] +=
+                        values[static_cast<std::size_t>(where.of(where.phi_at[q], row_at))] +=
                             scales.row * jw * (n.coeff * e.coeff) * block;
                     }
                 }
@@ -247,18 +343,17 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
             for (int p = 0; p < 10; ++p) {
                 const DofEntry& rp = d.phi[static_cast<std::size_t>(p)];
                 if (rp.index < 0) continue;
-                const int row_at = where.phi_at[static_cast<std::size_t>(p)];
+                const int row_at = where.phi_at[p];
                 for (int q = 0; q < 10; ++q) {
                     const DofEntry& cq = d.phi[static_cast<std::size_t>(q)];
                     const Complex block = pp[static_cast<std::size_t>(p * 10 + q)];
                     if (cq.index >= 0) {
-                        values[static_cast<std::size_t>(
-                            where.of(row_at, where.phi_at[static_cast<std::size_t>(q)]))] +=
+                        values[static_cast<std::size_t>(where.of(row_at, where.phi_at[q]))] +=
                             scales.row * scales.column * (rp.coeff * cq.coeff) * block;
                     } else {
                         const Complex fixed = prescribed(d, q, scales.column);
                         if (fixed != Complex(0.0, 0.0)) {
-                            out.rhs[static_cast<std::size_t>(rp.index)] -=
+                            system.rhs[static_cast<std::size_t>(rp.index)] -=
                                 scales.row * scales.column * rp.coeff * block * fixed;
                         }
                     }
@@ -277,7 +372,7 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
             // The port row is the terminal's current balance, scattered
             // from the tets and therefore carrying the row scale, so the
             // driving current must carry it too.
-            out.rhs[static_cast<std::size_t>(row)] += scales.row * bound.ports[k].amplitude;
+            system.rhs[static_cast<std::size_t>(row)] += scales.row * bound.ports[k].amplitude;
         } else {
             // Nothing was scattered into this row: the terminal is a
             // prescribed Phi, so the port has no column. The row holds the
@@ -294,10 +389,15 @@ AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofM
             // residual of this row any more; extraction has to re-form the
             // terminal's current balance. See docs/ASSEMBLY_PLAN.md Sec. 10.
             add_at(pattern, values, row, row, Complex(1.0, 0.0));
-            out.rhs[static_cast<std::size_t>(row)] += dofs.port_value[k] / scales.column;
+            system.rhs[static_cast<std::size_t>(row)] += dofs.port_value[k] / scales.column;
         }
     }
+}
 
+AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofMap& dofs,
+                         const SparsityPattern& pattern, double omega, Formulation3 formulation) {
+    AssembledSystem out = make_system(pattern, dofs.num_total);
+    refill(out, bound, mesh, dofs, pattern, omega, formulation);
     return out;
 }
 

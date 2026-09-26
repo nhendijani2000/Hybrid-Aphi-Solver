@@ -732,3 +732,87 @@ The shape, keeping `assemble` as the one-shot so no caller changes:
 
 `refill` zeroes the values and accumulates; `make_system` keeps the
 validation, which then happens once per mesh rather than once per frequency.
+
+---
+
+## 13. A and the `from_pattern` hoist, 25 Sept: 2.86x per frequency
+
+`assemble` splits into `make_system` (allocate and validate, once per mesh)
+and `refill` (clear and accumulate, once per frequency), with
+`assemble` kept as the one-shot that calls both so no existing caller or test
+changed. `ScatterMap` holds every tet's scatter positions, built once and
+passed to `refill`.
+
+Measured on `cylinder_box.msh`, 16040 tets, 37368 unknowns, 1557522
+nonzeros, 10 frequencies:
+
+| | total | per frequency |
+|---|---|---|
+| `assemble()` per frequency, as before | 845.5 ms | 84.6 ms |
+| `make_system` once + `refill` | 740.3 ms | 74.0 ms |
+| + a `ScatterMap` | 295.3 ms | **29.5 ms** |
+
+`ScatterMap::build`: 40.3 ms once, **14.8 MB** against 23.8 MB for the matrix
+values themselves.
+
+- **the hoist alone: 1.14x** — 10.5 ms per frequency, matching the 11.4 -> 0.6
+  ms measured for the allocation in Sec. 12.
+- **with the map: 2.86x** per frequency, 2.52x including the build.
+
+**When the map pays for itself: immediately.** It costs 40.3 ms to build and
+saves 44.5 ms per `refill`, so it is ahead after the first one. For a single
+solve it is a wash (84.6 ms one-shot against ~81 ms built-then-used), which
+is why `refill` takes it as an optional pointer rather than always building
+one, and why memory scaling with the mesh is acceptable: a sweep that wants
+it asks.
+
+### Tests
+
+1433 checks, up from 1411. The new ones are about the two ways this can go
+quietly wrong rather than crash:
+
+- **`refill` must clear.** The scatter accumulates, so a `refill` that forgot
+  to zero would double every value -- and the result would still be
+  symmetric, still have the right pattern, and still scale correctly between
+  formulations. It would pass every other test in the file. Two checks pin
+  it: refilling twice at one omega gives the same system, and refilling at
+  1 GHz after 1 MHz equals a fresh assembly at 1 GHz.
+- **The two scatter paths must agree bitwise.** The map changes only where
+  the slots come from, not the values or the order they accumulate in, so it
+  has no licence to differ in the last bits either. Demanding exact equality
+  catches a subtly wrong slot that a tolerance would hide.
+- **The map is validated against `find_slot`**, the independent lookup it
+  exists to replace: every slot, every local-DOF position, and the live
+  list's strict ascent.
+
+### Controls: two that could only crash, and the fix
+
+| control | outcome |
+|---|---|
+| `refill` forgets to clear the values | caught, 2 checks |
+| `refill` forgets to clear the RHS | caught, 2 checks |
+| read the slot table with stride 16 instead of `n` | caught, 6 checks |
+| `locate` writes the table TRANSPOSED (stays in bounds) | caught, 5 checks |
+| a system made from another pattern | refused |
+| a RHS of the wrong length | refused |
+| a `ScatterMap` built for another mesh | refused |
+| size a tet's block `n` instead of `n*n` | crash only -- see below |
+| `phi_at` / `slots()` off by one | crash only |
+
+The last two are out-of-bounds accesses, and the first version of them
+corrupted the heap **inside `ScatterMap::build`**, before any check could
+look at anything. A crash is a detection, but a weak one: the same mistake
+landing *in* bounds would give a silently wrong matrix.
+
+Two things followed. `locate` now takes its buffer's capacity and throws if
+`n*n` exceeds it, which turns that heap corruption into
+`locate: a tet with 5 live DOFs needs 25 slots but was given 5` --
+demonstrated, not assumed. And the transposing control was added precisely
+because it stays in bounds: it is the one that shows the checks, rather than
+the memory protection, are doing the work.
+
+Worth recording separately: the first run of these controls reported three of
+them as NOT caught. That was the control harness, which looked for `FAIL:`
+lines and saw none because the test binary had died before printing anything.
+A harness that cannot tell "no failures" from "no output" will certify a
+broken test suite as sound.

@@ -112,6 +112,30 @@ double max_abs(const SparseMatrixZ& m) {
     return worst;
 }
 
+/// Values equal to within rounding. Used where the two paths could legally
+/// differ in the last bits.
+bool same_values(const AssembledSystem& a, const AssembledSystem& b) {
+    if (a.matrix.nnz() != b.matrix.nnz() || a.rhs.size() != b.rhs.size()) return false;
+    const double scale = std::max(max_abs(a.matrix), 1e-300);
+    for (std::size_t k = 0; k < a.matrix.values().size(); ++k) {
+        if (std::abs(a.matrix.values()[k] - b.matrix.values()[k]) > 1e-12 * scale) return false;
+    }
+    double rhs_scale = 1e-300;
+    for (const Complex& v : a.rhs) rhs_scale = std::max(rhs_scale, std::abs(v));
+    for (std::size_t k = 0; k < a.rhs.size(); ++k) {
+        if (std::abs(a.rhs[k] - b.rhs[k]) > 1e-12 * rhs_scale) return false;
+    }
+    return true;
+}
+
+/// Exactly equal, bit for bit. The ScatterMap changes only WHERE the slots
+/// come from, not the values or the order they are accumulated in, so it has
+/// no licence to differ at all -- and demanding that catches a subtle wrong
+/// slot that a tolerance would hide.
+bool bitwise_equal(const AssembledSystem& a, const AssembledSystem& b) {
+    return a.matrix.values() == b.matrix.values() && a.rhs == b.rhs;
+}
+
 // ---------------------------------------------------------------------------
 
 void test_from_pattern() {
@@ -539,6 +563,218 @@ void test_cylinder() {
 #endif
 }
 
+// The ScatterMap, validated against `find_slot` -- the independent lookup it
+// exists to replace.
+//
+// Without this the map's failure modes are caught only because a wrong index
+// happens to leave the value array and crash. A wrong index that landed IN
+// bounds would give a silently wrong matrix, so every slot is checked
+// against what the pattern says, through the map's public accessors.
+void test_scatter_map_is_consistent() {
+    Mesh m = make_cube();
+    const BoundProblem b = bind_cube(m, 1e6);
+    const DofMap d = build_dof_map(b, m);
+    const SparsityPattern sp = build_sparsity(d, b, m);
+    const ScatterMap map = ScatterMap::build(sp, d, m, b);
+
+    check(map.num_tets() == m.num_tets(), "the map covers every tet");
+
+    int checked = 0;
+    bool counts_sane = true, positions_sane = true, slots_right = true, live_ascending = true;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const TetDofs td = d.local_dofs(t, m, b);
+        const int n = map.live_count(t);
+        if (n < 0 || n > 16) counts_sane = false;
+
+        // Rebuild the tet's live list independently, the way build_sparsity
+        // does, and require the map to agree about its size.
+        std::vector<int> live;
+        for (const DofEntry& e : td.edge) {
+            if (e.index >= 0) live.push_back(e.index);
+        }
+        for (const DofEntry& e : td.phi) {
+            if (e.index >= 0) live.push_back(e.index);
+        }
+        std::sort(live.begin(), live.end());
+        live.erase(std::unique(live.begin(), live.end()), live.end());
+        if (static_cast<int>(live.size()) != n) counts_sane = false;
+
+        // Each local DOF's position must point at its own global index.
+        for (int i = 0; i < 6; ++i) {
+            const int at = map.edge_at(t)[i];
+            if (td.edge[static_cast<std::size_t>(i)].index < 0) {
+                if (at != -1) positions_sane = false;
+            } else if (at < 0 || at >= n ||
+                       live[static_cast<std::size_t>(at)] !=
+                           td.edge[static_cast<std::size_t>(i)].index) {
+                positions_sane = false;
+            }
+        }
+        for (int i = 0; i < 10; ++i) {
+            const int at = map.phi_at(t)[i];
+            if (td.phi[static_cast<std::size_t>(i)].index < 0) {
+                if (at != -1) positions_sane = false;
+            } else if (at < 0 || at >= n ||
+                       live[static_cast<std::size_t>(at)] !=
+                           td.phi[static_cast<std::size_t>(i)].index) {
+                positions_sane = false;
+            }
+        }
+
+        // And every slot must be the one find_slot would return. This is the
+        // check that makes a wrong index a failure rather than a crash.
+        for (int r = 0; r < n; ++r) {
+            for (int c = 0; c < n; ++c) {
+                const int got = map.slots(t)[r * n + c];
+                const int want = sp.find_slot(live[static_cast<std::size_t>(r)],
+                                              live[static_cast<std::size_t>(c)]);
+                if (got != want || got < 0 || got >= static_cast<int>(sp.nnz())) {
+                    slots_right = false;
+                }
+                ++checked;
+            }
+        }
+        for (int i = 1; i < n; ++i) {
+            if (live[static_cast<std::size_t>(i)] <= live[static_cast<std::size_t>(i - 1)]) {
+                live_ascending = false;
+            }
+        }
+    }
+    check(counts_sane, "live_count matches an independently built live list for every tet");
+    check(positions_sane, "edge_at and phi_at point at each local DOF's own global index");
+    check(live_ascending, "the live list is strictly ascending -- what lets the sweep resume");
+    check(slots_right, "every one of the " + std::to_string(checked) +
+                           " slots is the one find_slot returns");
+}
+
+// `make_system` + `refill` split, and the reusable `ScatterMap`. Together
+// these are what makes a frequency sweep cheap, and both have a failure mode
+// that produces a plausible-looking wrong matrix rather than a crash:
+// `refill` forgetting to clear, and the two scatter paths disagreeing.
+void test_refill_and_scatter_map() {
+    Mesh m = make_cube();
+    const double omega = 2.0 * M_PI * 1e6;
+    const BoundProblem b = bind_cube(m, 1e6);
+    const DofMap d = build_dof_map(b, m);
+    const SparsityPattern sp = build_sparsity(d, b, m);
+
+    const AssembledSystem once = assemble(b, m, d, sp, omega, Formulation3::Natural);
+
+    // --- make_system on its own -----------------------------------------
+    AssembledSystem sys = make_system(sp, d.num_total);
+    check(sys.matrix.rows() == sp.rows && sys.matrix.nnz() == sp.nnz(),
+          "make_system adopts the pattern's shape");
+    check(max_abs(sys.matrix) == 0.0, "and starts at zero");
+    bool rhs_zero = true;
+    for (const Complex& v : sys.rhs) {
+        if (v != Complex(0.0, 0.0)) rhs_zero = false;
+    }
+    check(rhs_zero && sys.rhs.size() == static_cast<std::size_t>(d.num_total),
+          "with one zero RHS entry per unknown");
+
+    // --- refill reproduces assemble --------------------------------------
+    refill(sys, b, m, d, sp, omega, Formulation3::Natural);
+    check(same_values(sys, once), "make_system + refill equals assemble exactly");
+
+    // --- refill CLEARS ----------------------------------------------------
+    // The scatter accumulates, so a refill that forgot to zero would double
+    // every value. The result would still be symmetric, still have the right
+    // pattern, and still scale correctly between formulations -- it would
+    // look right to every other test here.
+    refill(sys, b, m, d, sp, omega, Formulation3::Natural);
+    check(same_values(sys, once), "a second refill at the same omega gives the same system, "
+                                  "not twice it -- it clears first");
+
+    // --- a sweep: no residue from the previous frequency -------------------
+    const double other = 2.0 * M_PI * 1e9;
+    refill(sys, b, m, d, sp, other, Formulation3::Natural);
+    const AssembledSystem fresh = assemble(b, m, d, sp, other, Formulation3::Natural);
+    check(same_values(sys, fresh),
+          "refilling at 1 GHz after 1 MHz equals a fresh assembly at 1 GHz");
+    check(!same_values(sys, once),
+          "and differs from the 1 MHz system, so the frequency really did change it");
+
+    // --- the ScatterMap path is the same computation ----------------------
+    const ScatterMap map = ScatterMap::build(sp, d, m, b);
+    check(map.num_tets() == m.num_tets(), "the map covers every tet");
+    check(map.bytes() > 0, "and holds something");
+
+    AssembledSystem mapped = make_system(sp, d.num_total);
+    refill(mapped, b, m, d, sp, omega, Formulation3::Natural, &map);
+    check(bitwise_equal(mapped, once),
+          "the ScatterMap path is BITWISE identical to working the slots out per tet -- "
+          "same slots, same order, same arithmetic");
+
+    // Across all three formulations, since the map is shared between them.
+    for (const Formulation3 f : {Formulation3::RowScaled, Formulation3::ScaledPhi}) {
+        AssembledSystem a = assemble(b, m, d, sp, omega, f);
+        AssembledSystem c = make_system(sp, d.num_total);
+        refill(c, b, m, d, sp, omega, f, &map);
+        check(bitwise_equal(a, c), "one ScatterMap serves every formulation");
+    }
+
+    // --- the map really is frequency-independent ---------------------------
+    // Rebuilding it is not a function of omega at all; assert that using one
+    // built before any assembly still works at a different frequency.
+    AssembledSystem swept = make_system(sp, d.num_total);
+    refill(swept, b, m, d, sp, other, Formulation3::Natural, &map);
+    check(bitwise_equal(swept, fresh), "and one map serves every frequency");
+
+    // --- the guards -------------------------------------------------------
+    // Passing a system or a map that belongs to a different problem would
+    // write into slots that mean something else, so both are refused.
+    //
+    // Worth recording why this does not use the DC cube as the "other"
+    // problem, which was the first attempt: the cube is a single CONDUCTOR,
+    // so Phi lives on all of it at DC and at AC alike and the two patterns
+    // are identical. `phi_on_conductors_only` only changes the structure
+    // when there is a non-conducting body to exclude.
+    SparsityPattern tiny;
+    tiny.rows = 3;
+    tiny.cols = 3;
+    tiny.row_ptr = {0, 1, 2, 3};
+    tiny.col_index = {0, 1, 2};
+
+    bool refused_system = false;
+    try {
+        AssembledSystem wrong = make_system(tiny, 3);
+        refill(wrong, b, m, d, sp, omega, Formulation3::Natural);
+    } catch (const std::invalid_argument&) {
+        refused_system = true;
+    }
+    check(refused_system, "a system made from another pattern is refused");
+
+    bool refused_rhs = false;
+    try {
+        AssembledSystem short_rhs = make_system(sp, d.num_total - 1);
+        refill(short_rhs, b, m, d, sp, omega, Formulation3::Natural);
+    } catch (const std::invalid_argument&) {
+        refused_rhs = true;
+    }
+    check(refused_rhs, "so is a RHS of the wrong length");
+
+    bool refused_map = false;
+    try {
+        ScatterMap wrong_map = ScatterMap::build(sp, d, m, b);
+        Mesh bigger = make_cube();
+        bigger.tets.push_back(bigger.tets.front());  // one more tet, nothing else
+        bigger.build_topology();
+        refill(sys, b, bigger, d, sp, omega, Formulation3::Natural, &wrong_map);
+    } catch (const std::invalid_argument&) {
+        refused_map = true;
+    }
+    check(refused_map, "and a ScatterMap built for a different mesh");
+
+    bool accepted_matching = true;
+    try {
+        AssembledSystem right = make_system(sp, d.num_total);
+        refill(right, b, m, d, sp, omega, Formulation3::Natural);
+    } catch (...) {
+        accepted_matching = false;
+    }
+    check(accepted_matching, "and a matching one is not -- the guard is not simply always firing");
+}
+
 }  // namespace
 
 int main() {
@@ -548,6 +784,8 @@ int main() {
     test_formulations_are_row_and_column_scalings();
     test_symmetry();
     test_dc_refuses_the_scaled_formulations();
+    test_scatter_map_is_consistent();
+    test_refill_and_scatter_map();
     test_cylinder();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";

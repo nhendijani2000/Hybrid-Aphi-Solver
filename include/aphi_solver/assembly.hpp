@@ -1,6 +1,7 @@
 #pragma once
 
 #include <complex>
+#include <cstddef>
 #include <vector>
 
 #include "aphi_solver/dof_map.hpp"
@@ -48,16 +49,81 @@ struct FormulationScales {
 /// there is no coupling block to symmetrise.
 FormulationScales formulation_scales(Formulation3 f, double omega);
 
+/// Every tet's scatter positions, computed once and reused at every
+/// frequency -- candidate A of `docs/ASSEMBLY_PLAN.md` Sec. 11.
+///
+/// `refill` otherwise works out where each of a tet's ~225 entries belongs
+/// as it goes, which measured 43 % of its time. That bookkeeping depends on
+/// the mesh and the DOF map only, never on omega, so across a frequency
+/// sweep it is the same work repeated. This holds the answer instead.
+///
+/// **Optional, and deliberately so.** The cost is `live^2` ints per tet, up
+/// to about 1 KB, and it scales with the mesh rather than with the sweep.
+/// `bytes()` reports the real figure. Pass it to `refill` for a sweep; leave
+/// it out for a single solve, where building it would cost more than it
+/// saves.
+class ScatterMap {
+public:
+    /// Builds the map for every tet of the mesh. The bodies partition the
+    /// tets, so indexing by tet id covers exactly what `refill` visits.
+    ///
+    /// Throws std::logic_error on a pair the pattern has no slot for -- the
+    /// same condition, and for the same reason, as `refill`.
+    static ScatterMap build(const SparsityPattern& pattern, const DofMap& dofs, const Mesh& mesh,
+                            const BoundProblem& bound);
+
+    /// Heap bytes held, for reporting before deciding to build one.
+    std::size_t bytes() const;
+
+    int num_tets() const { return static_cast<int>(live_.size()); }
+
+    /// Distinct live global DOFs of one tet, at most 16.
+    int live_count(int tet) const { return live_[static_cast<std::size_t>(tet)]; }
+
+    /// Local edge (0..5) and local P2 node (0..9) to its position among this
+    /// tet's live DOFs, or -1 when that DOF is eliminated.
+    const int* edge_at(int tet) const { return &pos_[static_cast<std::size_t>(tet) * 16]; }
+    const int* phi_at(int tet) const { return &pos_[static_cast<std::size_t>(tet) * 16 + 6]; }
+
+    /// This tet's `live_count` x `live_count` block of value-array indices,
+    /// row-major.
+    const int* slots(int tet) const {
+        return slot_.data() + offset_[static_cast<std::size_t>(tet)];
+    }
+
+private:
+    std::vector<int> live_;          ///< per tet: distinct live DOFs
+    std::vector<int> pos_;           ///< per tet: 6 edge positions then 10 Phi
+    std::vector<std::size_t> offset_;  ///< per tet + 1: its block's start in slot_
+    std::vector<int> slot_;          ///< sum over tets of live^2
+};
+
 /// What one assembly produced.
 struct AssembledSystem {
     SparseMatrixZ matrix;
     std::vector<std::complex<double>> rhs;
 };
 
-/// Assembles the global system: one pass over the bodies, then over each
-/// body's tets, evaluating the three kernels into stack buffers and
-/// scattering them straight into `pattern`'s slots. Nothing per-element is
-/// kept.
+/// Allocates a system for `pattern` with every value zero. The structure is
+/// validated here, so once per mesh rather than once per frequency.
+///
+/// Separate from `refill` because allocating it is not cheap: 23.8 MB of
+/// fresh pages on the cylinder and the first write to each, which measured
+/// 11.4 ms against 0.6 ms to re-zero an array already held
+/// (`docs/ASSEMBLY_PLAN.md` Sec. 12). A sweep should do it once.
+AssembledSystem make_system(const SparsityPattern& pattern, int num_unknowns);
+
+/// Assembles into an existing system, **clearing it first**. Safe to call
+/// repeatedly on one `AssembledSystem` at different frequencies, which is
+/// the point: the matrix's structure is frequency-independent even though
+/// essentially every value is not.
+///
+/// `scatter`, when given, must have been built from this same `pattern`,
+/// `dofs`, `mesh` and `bound`; it replaces working out each entry's position.
+///
+/// One pass over the bodies, then over each body's tets, evaluating the
+/// three kernels into stack buffers and scattering them straight into
+/// `pattern`'s slots. Nothing per-element is kept.
 ///
 /// Material coefficients are computed **once per body**, which is why the
 /// loop is bodies-then-tets rather than over tets directly.
@@ -78,6 +144,12 @@ struct AssembledSystem {
 /// Throws std::logic_error if a scatter finds no slot: that means the
 /// symbolic and numeric passes disagree about the matrix's shape, and
 /// dropping the term instead would give a quietly wrong matrix.
+void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh,
+            const DofMap& dofs, const SparsityPattern& pattern, double omega,
+            Formulation3 formulation, const ScatterMap* scatter = nullptr);
+
+/// `make_system` then `refill`, for a single solve. A sweep should call the
+/// two separately and keep the system between frequencies.
 AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofMap& dofs,
                          const SparsityPattern& pattern, double omega, Formulation3 formulation);
 
