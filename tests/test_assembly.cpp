@@ -136,6 +136,64 @@ bool bitwise_equal(const AssembledSystem& a, const AssembledSystem& b) {
     return a.matrix.values() == b.matrix.values() && a.rhs == b.rhs;
 }
 
+/// Indices whose row is a voltage port's CONSTRAINT row rather than a
+/// physical equation. `V' = V_given / c` carries no row scale and its
+/// diagonal is 1 in every formulation, so the `r * c` relation below does not
+/// apply to it -- it has to be excluded and checked on its own terms.
+std::vector<char> constraint_rows(const DofMap& d) {
+    std::vector<char> is_constraint(static_cast<std::size_t>(d.num_total), 0);
+    for (std::size_t k = 0; k < d.port_is_fixed.size(); ++k) {
+        if (d.port_is_fixed[k]) is_constraint[static_cast<std::size_t>(d.port_index[k])] = 1;
+    }
+    return is_constraint;
+}
+
+/// The exact relation between a symmetric formulation and the natural one:
+/// the worst `|scaled/(r*c) - natural|`, divided by the largest entry of the
+/// natural matrix.
+///
+/// Neither a global relative tolerance nor a per-entry one works here, and
+/// both failures were measured on the cylinder rather than guessed at:
+///
+///  - `1e-6 * max|natural|` is what this test used to use. With the cube's
+///    peak of 7.3e13 that is a tolerance of 7.3e7, which quietly swallowed a
+///    6.3e6 discrepancy on the port constraint row -- the one row the
+///    relation does not govern.
+///  - A per-entry RELATIVE bound goes the other way: the worst relative error
+///    on the cylinder is 1.5e-3, at an entry of magnitude 9.8e-19, which is
+///    3e-30 of the peak. That entry is the cancellation of much larger terms,
+///    and the two formulations round the cancellation differently. Nothing is
+///    wrong with it and no useful bound can hold there.
+///
+/// Normalising by the peak gives both. The genuine floating-point noise is
+/// 2.2e-17 of the peak -- the worst absolute error, 7.6e-6, sits on an entry
+/// of 2.1e10, which is one ulp. The port-row discrepancy is 1.8e-5 of the
+/// peak. A threshold of 1e-14 separates them by nine orders of magnitude.
+double worst_scaling_error(const SparseMatrixZ& scaled, const SparseMatrixZ& natural,
+                           const DofMap& d, const FormulationScales& s,
+                           const std::vector<char>& is_constraint) {
+    double peak = 0.0;
+    for (const Complex& v : natural.values()) peak = std::max(peak, std::abs(v));
+    if (peak == 0.0) return 0.0;
+
+    double worst = 0.0;
+    for (int r = 0; r < natural.rows(); ++r) {
+        if (is_constraint[static_cast<std::size_t>(r)]) continue;
+        for (int k = natural.row_ptr()[static_cast<std::size_t>(r)];
+             k < natural.row_ptr()[static_cast<std::size_t>(r) + 1]; ++k) {
+            const int col = natural.col_index()[static_cast<std::size_t>(k)];
+            if (is_constraint[static_cast<std::size_t>(col)]) continue;
+            const Complex n = natural.values()[static_cast<std::size_t>(k)];
+            Complex undone = entry(scaled, r, col);
+            if (r >= d.num_a) undone /= s.row;
+            if (col >= d.num_a) undone /= s.column;
+            worst = std::max(worst, std::abs(undone - n));
+        }
+    }
+    return worst / peak;
+}
+
+
 // ---------------------------------------------------------------------------
 
 void test_from_pattern() {
@@ -361,21 +419,28 @@ void test_formulations_are_row_and_column_scalings() {
         const FormulationScales s = formulation_scales(which, omega);
         const AssembledSystem scaled = assemble(b, m, d, sp, omega, which);
 
-        double worst = 0.0;
-        for (int r = 0; r < d.num_total; ++r) {
-            for (int k = scaled.matrix.row_ptr()[static_cast<std::size_t>(r)];
-                 k < scaled.matrix.row_ptr()[static_cast<std::size_t>(r) + 1]; ++k) {
-                const int col = scaled.matrix.col_index()[static_cast<std::size_t>(k)];
-                Complex undone = scaled.matrix.values()[static_cast<std::size_t>(k)];
-                if (is_phi_row(r)) undone /= s.row;
-                if (is_phi_row(col)) undone /= s.column;
-                worst = std::max(worst,
-                                 std::abs(undone - natural.matrix.values()[static_cast<std::size_t>(k)]));
-            }
+        // Normalised by the peak and EXCLUDING the voltage port's constraint
+        // row, which the r * c relation does not govern -- it is `V' =
+        // V_given / c` with a unit diagonal, not a physical equation.
+        //
+        // This check used to compare every row against `1e-6 * max|natural|`.
+        // With the cube's peak of 7.3e13 that is a tolerance of 7.3e7, and the
+        // constraint row's 6.3e6 discrepancy sat inside it -- so the row was
+        // being swallowed rather than handled, and the check was 8 orders
+        // looser than it needed to be.
+        const std::vector<char> is_constraint = constraint_rows(d);
+        const double worst = worst_scaling_error(scaled.matrix, natural.matrix, d, s, is_constraint);
+        check(worst < 1e-14,
+              "undoing the row and column scales reproduces the natural system to machine "
+              "precision (worst error / peak = " + std::to_string(worst) + ")");
+        bool constraint_diagonals = true;
+        for (int i = 0; i < d.num_total; ++i) {
+            if (!is_constraint[static_cast<std::size_t>(i)]) continue;
+            if (entry(scaled.matrix, i, i) != Complex(1.0, 0.0)) constraint_diagonals = false;
+            if (entry(natural.matrix, i, i) != Complex(1.0, 0.0)) constraint_diagonals = false;
         }
-        check(worst < 1e-6 * max_abs(natural.matrix),
-              "undoing the row and column scales reproduces the natural system (worst " +
-                  std::to_string(worst) + ")");
+        check(constraint_diagonals,
+              "and the constraint row it excludes has a unit diagonal in BOTH formulations");
 
         // The right-hand side has to follow the same rule, and it is where
         // the column scale is easiest to get wrong. Every row's RHS is its
@@ -824,6 +889,165 @@ void test_refill_and_scatter_map() {
     check(accepted_matching, "and a matching one is not -- the guard is not simply always firing");
 }
 
+// F1 and F2 on the two real meshes -- the cylinder and the torus -- with the
+// symmetric storage the input file's `conditioning` key selects.
+//
+// The cube tests already cover the algebra; this covers it on geometry that
+// has a tree-cotree gauge over 19000 edges, an internal cut in the torus's
+// case, and Phi living on the whole domain rather than one body. If a
+// formulation were going to come apart on real topology, it would be here.
+void test_f1_f2_on_real_meshes() {
+#ifdef APHI_MESH_DIR
+    const std::string dir = APHI_MESH_DIR;
+
+    struct Case {
+        const char* mesh;
+        const char* conductor;
+        const char* label;
+    };
+    const Case cases[] = {{"cylinder_box.msh", "wire", "cylinder"},
+                          {"loop_cut.msh", "ring", "torus"}};
+
+    for (const Case& c : cases) {
+        Mesh m;
+        try {
+            m = read_gmsh_msh(dir + "/" + c.mesh);
+        } catch (const std::exception& e) {
+            check(false, std::string(c.mesh) + " unreadable: " + e.what());
+            continue;
+        }
+        scale_mesh_to_metres(m, LengthUnit::Millimetre);
+
+        // AC, because F1 and F2 do not exist at DC -- they divide by j*omega.
+        const double f = 1e6;
+        const double omega = 2.0 * M_PI * f;
+        Problem p;
+        p.type = AnalysisType::Frequency;
+        p.frequencies = {f};
+        p.formulation = Formulation::FullWave;
+        p.length_unit = LengthUnit::Millimetre;
+        Body cond;
+        cond.name = "B1";
+        cond.volume = c.conductor;
+        cond.sigma = 5.8e7;
+        cond.line = 1;
+        Body air;
+        air.name = "B2";
+        air.volume = "air";
+        air.sigma = 0.0;
+        air.line = 2;
+        p.bodies = {cond, air};
+
+        if (std::string(c.mesh) == "cylinder_box.msh") {
+            Port a;
+            a.name = "P1";
+            a.type = PortType::BoundaryCurrent;
+            a.surface = {"wire_bottom"};
+            a.amplitude = 1.0;
+            a.line = 3;
+            Port bb;
+            bb.name = "P2";
+            bb.type = PortType::BoundaryVoltage;
+            bb.surface = {"wire_top"};
+            bb.amplitude = 2.5;
+            bb.phase_deg = 30.0;
+            bb.line = 4;
+            p.ports = {a, bb};
+        } else {
+            Port a;
+            a.name = "P1";
+            a.type = PortType::InternalCurrent;
+            a.surface = {"loop_cut"};
+            a.amplitude = 1.0;
+            a.current_direction = Vec3{0.0, 1.0, 0.0};
+            a.line = 3;
+            p.ports = {a};
+        }
+
+        const BoundProblem b = bind_to_mesh(p, m);
+        const DofMap d = build_dof_map(b, m);
+        const std::vector<char> is_constraint = constraint_rows(d);
+
+        const SparsityPattern full = build_sparsity(d, b, m);
+        const SparsityPattern upper = build_sparsity(d, b, m, SparsityStorage::UpperTriangle);
+        const AssembledSystem natural = assemble(b, m, d, full, omega, Conditioning::Natural);
+
+        std::size_t diagonal = 0;
+        for (int r = 0; r < full.rows; ++r) {
+            if (full.find_slot(r, r) >= 0) ++diagonal;
+        }
+        check(upper.nnz() == (full.nnz() + diagonal) / 2,
+              std::string(c.label) + ": the upper pattern is (full + diagonal) / 2 -- " +
+                  std::to_string(upper.nnz()) + " of " + std::to_string(full.nnz()));
+
+        for (const Conditioning which : {Conditioning::RowScaled, Conditioning::ScaledPhi}) {
+            const std::string what = std::string(c.label) + ", " + conditioning_keyword(which);
+            const FormulationScales s = formulation_scales(which, omega);
+
+            SymmetricSystem sym = make_symmetric_system(upper, d.num_total);
+            refill(sym, b, m, d, upper, omega, which);
+
+            // Symmetric to the bit, on the real mesh. The (Phi,A) block is the
+            // transpose of the same beta*C values the (A,Phi) block uses, so
+            // there is no rounding for a tolerance to absorb.
+            const SparseMatrixZ expanded = sym.matrix.to_full();
+            double asym = 0.0, mag = 0.0;
+            for (const Complex& v : expanded.values()) mag = std::max(mag, std::abs(v));
+            for (int r = 0; r < expanded.rows(); ++r) {
+                for (int k = expanded.row_ptr()[static_cast<std::size_t>(r)];
+                     k < expanded.row_ptr()[static_cast<std::size_t>(r) + 1]; ++k) {
+                    const int col = expanded.col_index()[static_cast<std::size_t>(k)];
+                    asym = std::max(asym, std::abs(expanded.values()[static_cast<std::size_t>(k)] -
+                                                   entry(expanded, col, r)));
+                }
+            }
+            check(asym == 0.0, what + ": symmetric to the bit (worst " + std::to_string(asym) +
+                                   " against entries up to " + std::to_string(mag) + ")");
+
+            // And it is the SAME system as the natural one, entry by entry,
+            // once the row and column scales are undone.
+            const double rel = worst_scaling_error(expanded, natural.matrix, d, s, is_constraint);
+            check(rel < 1e-14,
+                  what + ": undoing r and c reproduces the natural matrix to machine precision "
+                         "(worst error / peak = " + std::to_string(rel) + ")");
+
+            // The constraint rows the relation excludes, checked on their own
+            // terms: diagonal exactly 1, whatever the formulation.
+            bool constraints_ok = true;
+            for (int i = 0; i < d.num_total; ++i) {
+                if (!is_constraint[static_cast<std::size_t>(i)]) continue;
+                if (entry(expanded, i, i) != Complex(1.0, 0.0)) constraints_ok = false;
+                if (natural.matrix.row_ptr()[static_cast<std::size_t>(i) + 1] -
+                        natural.matrix.row_ptr()[static_cast<std::size_t>(i)] !=
+                    1) {
+                    constraints_ok = false;
+                }
+            }
+            check(constraints_ok,
+                  what + ": every voltage-port constraint row is a lone unit diagonal");
+
+            // The right-hand side follows the same rule: 1 on an A row, r on a
+            // Phi row or a current port's row, 1/c on a constraint row.
+            double rhs_worst = 0.0, rhs_peak = 0.0;
+            for (const Complex& v : natural.rhs) rhs_peak = std::max(rhs_peak, std::abs(v));
+            for (int i = 0; i < d.num_total; ++i) {
+                Complex row_scale(1.0, 0.0);
+                if (i >= d.num_a) row_scale = s.row;
+                if (is_constraint[static_cast<std::size_t>(i)]) {
+                    row_scale = Complex(1.0, 0.0) / s.column;
+                }
+                const Complex undone = sym.rhs[static_cast<std::size_t>(i)] / row_scale;
+                rhs_worst = std::max(rhs_worst,
+                                     std::abs(undone - natural.rhs[static_cast<std::size_t>(i)]));
+            }
+            check(rhs_peak > 0.0 && rhs_worst / rhs_peak < 1e-14,
+                  what + ": and the right-hand side too (worst error / peak = " +
+                      std::to_string(rhs_worst / std::max(rhs_peak, 1e-300)) + ")");
+        }
+    }
+#endif
+}
+
 // Symmetric storage: half the matrix, all of the information.
 //
 // The one thing that must be true is that expanding the stored triangle
@@ -1000,6 +1224,7 @@ int main() {
     test_scatter_map_is_consistent();
     test_refill_and_scatter_map();
     test_symmetric_storage();
+    test_f1_f2_on_real_meshes();
     test_cylinder();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";

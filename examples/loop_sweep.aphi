@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# The ring of loop_internal_port.aphi, swept in frequency.
+#
+# Its purpose is the [solver] section below. The two SYMMETRIC conditionings
+# divide by j*omega, so neither exists at DC -- loop_internal_port.aphi is a
+# DC run and can only use `natural`. This file is where the ring can be
+# assembled with row_scaled or scaled_phi.
+#
+# At a non-zero frequency `formulation = full_wave` puts Phi on the whole
+# domain, not just the ring, so this has considerably more unknowns than the
+# DC case and the internal cut's rim now lies inside Phi's support. That is
+# the delta-gap idealisation, and the driver says so as a warning rather than
+# an error -- the field at the rim is singular and the gap capacitance depends
+# on mesh refinement. Expected, not a defect.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = ../meshes/loop_cut.msh
+length_unit = mm
+
+[analysis]
+type        = frequency
+sweep       = log
+f_start     = 1e4                          # Hz
+f_stop      = 1e8
+f_points    = 5
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = ring
+sigma       = 5.8e7
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+[port P1]
+type              = internal_current
+surface           = loop_cut
+current_direction = +y
+current           = 1.0
+
+[solver]
+# Try all three. They describe the same system and must give the same answer;
+# the two symmetric ones store only the upper triangle, for about half the
+# memory.
+conditioning = row_scaled                  # natural | row_scaled | scaled_phi

@@ -94,6 +94,7 @@ Three examples, each documenting the physics it encodes:
 | `examples/cylinder_box.aphi` | a wire in a square box at DC. Targets `R = 0.1388 mΩ` (exact against the meshed cross-section) and `L = 0.3870 nH` |
 | `examples/cylinder_box_sweep.aphi` | the same geometry swept 1 kHz → 10 MHz, which spans the whole skin-effect transition |
 | `examples/loop_internal_port.aphi` | a ring driven through an internal cut, showing `current_direction` as a hint. Built by `tools/loop_cut.geo` |
+| `examples/loop_sweep.aphi` | the ring swept 10 kHz → 100 MHz, and where `conditioning = row_scaled` or `scaled_phi` can be tried: both are refused at DC |
 
 Worth trying deliberately: misspell a key, delete `current_direction` from
 the loop example, or turn the cylinder's 0 V port into a second current
