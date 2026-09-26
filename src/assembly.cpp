@@ -131,7 +131,15 @@ void locate(const SparsityPattern& pattern, const TetLive& s, int* out,
         auto it = pattern.col_index.begin() + pattern.row_ptr[static_cast<std::size_t>(row)];
         const auto end =
             pattern.col_index.begin() + pattern.row_ptr[static_cast<std::size_t>(row) + 1];
+        // An upper-triangle pattern holds nothing before the diagonal, and
+        // `live` is sorted, so those columns are exactly `col < r`. They get
+        // -1, which the scatter reads as "fold onto the mirror, which another
+        // iteration writes" rather than as a missing slot.
         for (int col = 0; col < s.n; ++col) {
+            if (pattern.upper_only && col < r) {
+                out[r * s.n + col] = -1;
+                continue;
+            }
             const int want = s.live[static_cast<std::size_t>(col)];
             it = std::lower_bound(it, end, want);
             if (it == end || *it != want) {
@@ -222,33 +230,24 @@ AssembledSystem make_system(const SparsityPattern& pattern, int num_unknowns) {
     return out;
 }
 
-void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh,
-            const DofMap& dofs, const SparsityPattern& pattern, double omega,
-            Conditioning formulation, const ScatterMap* scatter) {
+namespace {
+
+/// The scatter itself, over a values array laid out alongside `pattern`.
+/// Shared by the full and symmetric `refill` overloads, which differ only in
+/// where that array lives and in what they check first -- so there is exactly
+/// one copy of the physics.
+void scatter_into(std::vector<Complex>& values, std::vector<Complex>& rhs,
+                  const BoundProblem& bound, const Mesh& mesh, const DofMap& dofs,
+                  const SparsityPattern& pattern, double omega, Conditioning formulation,
+                  const ScatterMap* scatter) {
     const FormulationScales scales = formulation_scales(formulation, omega);
     const Complex jw(0.0, omega);
-
-    if (system.matrix.rows() != pattern.rows || system.matrix.nnz() != pattern.nnz()) {
-        throw std::invalid_argument(
-            "refill: this system was not made from this pattern. Their shapes must agree, or "
-            "the slots the scatter writes to mean something else.");
-    }
-    if (system.rhs.size() != static_cast<std::size_t>(dofs.num_total)) {
-        throw std::invalid_argument("refill: the right-hand side is not one entry per unknown.");
-    }
-    if (scatter != nullptr && scatter->num_tets() != mesh.num_tets()) {
-        throw std::invalid_argument("refill: the ScatterMap was built for a different mesh (" +
-                                    std::to_string(scatter->num_tets()) + " tets against " +
-                                    std::to_string(mesh.num_tets()) + ").");
-    }
-
-    std::vector<Complex>& values = system.matrix.mutable_values();
 
     // The scatter accumulates, so anything left from a previous frequency has
     // to go first. Zeroing an array already held is 0.6 ms against 11.4 to
     // allocate a fresh one, which is why `make_system` is separate.
     std::fill(values.begin(), values.end(), Complex(0.0, 0.0));
-    std::fill(system.rhs.begin(), system.rhs.end(), Complex(0.0, 0.0));
+    std::fill(rhs.begin(), rhs.end(), Complex(0.0, 0.0));
 
     // Reused for every tet. ~4.8 KB on the stack, never heap.
     std::array<Complex, 36> aa{};
@@ -291,7 +290,9 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
                     // nothing to the right-hand side either -- unlike a
                     // prescribed Phi, which generally does.
                     if (cq.index < 0) continue;
-                    values[static_cast<std::size_t>(where.of(row_at, where.edge_at[q]))] +=
+                    const int slot = where.of(row_at, where.edge_at[q]);
+                    if (slot < 0) continue;  // lower triangle; its mirror carries it
+                    values[static_cast<std::size_t>(slot)] +=
                         (rp.coeff * cq.coeff) * aa[static_cast<std::size_t>(p * 6 + q)];
                 }
             }
@@ -312,8 +313,11 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
                     // (A, Phi): the Phi DOF is the column, so a prescribed
                     // one moves to the A row's right-hand side.
                     if (n.index >= 0) {
-                        values[static_cast<std::size_t>(where.of(row_at, where.phi_at[q]))] +=
-                            scales.column * (e.coeff * n.coeff) * block;
+                        const int slot = where.of(row_at, where.phi_at[q]);
+                        if (slot >= 0) {
+                            values[static_cast<std::size_t>(slot)] +=
+                                scales.column * (e.coeff * n.coeff) * block;
+                        }
                     } else {
                         // The eliminated column carries its own matrix
                         // coefficient -- including the column scale --
@@ -325,7 +329,7 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
                         // under ScaledPhi.
                         const Complex fixed = prescribed(d, q, scales.column);
                         if (fixed != Complex(0.0, 0.0)) {
-                            system.rhs[static_cast<std::size_t>(e.index)] -=
+                            rhs[static_cast<std::size_t>(e.index)] -=
                                 scales.column * e.coeff * block * fixed;
                         }
                     }
@@ -333,8 +337,11 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
                     // (Phi, A): the Phi DOF is now the row. A prescribed
                     // row has no equation at all, so it is simply absent.
                     if (n.index >= 0) {
-                        values[static_cast<std::size_t>(where.of(where.phi_at[q], row_at))] +=
-                            scales.row * jw * (n.coeff * e.coeff) * block;
+                        const int slot = where.of(where.phi_at[q], row_at);
+                        if (slot >= 0) {
+                            values[static_cast<std::size_t>(slot)] +=
+                                scales.row * jw * (n.coeff * e.coeff) * block;
+                        }
                     }
                 }
             }
@@ -348,12 +355,15 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
                     const DofEntry& cq = d.phi[static_cast<std::size_t>(q)];
                     const Complex block = pp[static_cast<std::size_t>(p * 10 + q)];
                     if (cq.index >= 0) {
-                        values[static_cast<std::size_t>(where.of(row_at, where.phi_at[q]))] +=
-                            scales.row * scales.column * (rp.coeff * cq.coeff) * block;
+                        const int slot = where.of(row_at, where.phi_at[q]);
+                        if (slot >= 0) {
+                            values[static_cast<std::size_t>(slot)] +=
+                                scales.row * scales.column * (rp.coeff * cq.coeff) * block;
+                        }
                     } else {
                         const Complex fixed = prescribed(d, q, scales.column);
                         if (fixed != Complex(0.0, 0.0)) {
-                            system.rhs[static_cast<std::size_t>(rp.index)] -=
+                            rhs[static_cast<std::size_t>(rp.index)] -=
                                 scales.row * scales.column * rp.coeff * block * fixed;
                         }
                     }
@@ -372,7 +382,7 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
             // The port row is the terminal's current balance, scattered
             // from the tets and therefore carrying the row scale, so the
             // driving current must carry it too.
-            system.rhs[static_cast<std::size_t>(row)] += scales.row * bound.ports[k].amplitude;
+            rhs[static_cast<std::size_t>(row)] += scales.row * bound.ports[k].amplitude;
         } else {
             // Nothing was scattered into this row: the terminal is a
             // prescribed Phi, so the port has no column. The row holds the
@@ -389,9 +399,87 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
             // residual of this row any more; extraction has to re-form the
             // terminal's current balance. See docs/ASSEMBLY_PLAN.md Sec. 10.
             add_at(pattern, values, row, row, Complex(1.0, 0.0));
-            system.rhs[static_cast<std::size_t>(row)] += dofs.port_value[k] / scales.column;
+            rhs[static_cast<std::size_t>(row)] += dofs.port_value[k] / scales.column;
         }
     }
+}
+
+/// Shared by both overloads: the system, the pattern and the map must all
+/// describe the same problem, or the scatter writes into slots that mean
+/// something else.
+void check_shapes(int matrix_rows, std::size_t matrix_nnz, std::size_t rhs_size,
+                  const Mesh& mesh, const DofMap& dofs, const SparsityPattern& pattern,
+                  const ScatterMap* scatter) {
+    if (matrix_rows != pattern.rows || matrix_nnz != pattern.nnz()) {
+        throw std::invalid_argument(
+            "refill: this system was not made from this pattern. Their shapes must agree, or "
+            "the slots the scatter writes to mean something else.");
+    }
+    if (rhs_size != static_cast<std::size_t>(dofs.num_total)) {
+        throw std::invalid_argument("refill: the right-hand side is not one entry per unknown.");
+    }
+    if (scatter != nullptr && scatter->num_tets() != mesh.num_tets()) {
+        throw std::invalid_argument("refill: the ScatterMap was built for a different mesh (" +
+                                    std::to_string(scatter->num_tets()) + " tets against " +
+                                    std::to_string(mesh.num_tets()) + ").");
+    }
+}
+
+}  // namespace
+
+void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh,
+            const DofMap& dofs, const SparsityPattern& pattern, double omega,
+            Conditioning formulation, const ScatterMap* scatter) {
+    check_shapes(system.matrix.rows(), system.matrix.nnz(), system.rhs.size(), mesh, dofs, pattern,
+                 scatter);
+    if (pattern.upper_only) {
+        throw std::invalid_argument(
+            "refill: this pattern holds only the upper triangle, which belongs in a "
+            "SparseSymmetric. A full matrix filled from it would be missing every "
+            "lower-triangle entry.");
+    }
+    scatter_into(system.matrix.mutable_values(), system.rhs, bound, mesh, dofs, pattern, omega,
+                 formulation, scatter);
+}
+
+void refill(SymmetricSystem& system, const BoundProblem& bound, const Mesh& mesh,
+            const DofMap& dofs, const SparsityPattern& pattern, double omega,
+            Conditioning formulation, const ScatterMap* scatter) {
+    check_shapes(system.matrix.rows(), system.matrix.nnz(), system.rhs.size(), mesh, dofs, pattern,
+                 scatter);
+    if (!pattern.upper_only) {
+        throw std::invalid_argument(
+            "refill: a SparseSymmetric holds only the upper triangle, so it needs a pattern "
+            "built with SparsityStorage::UpperTriangle. A full pattern would reserve slots "
+            "below the diagonal that nothing ever writes.");
+    }
+    // The load-bearing check. Storing one triangle is only lossless if the
+    // matrix IS symmetric, which is exactly `c == r * j*omega`. Under
+    // Natural the (Phi,A) block is `j*omega` times the (A,Phi) block, so
+    // folding them together would silently discard that factor -- a wrong
+    // matrix that still looks plausible.
+    const FormulationScales scales = formulation_scales(formulation, omega);
+    if (!scales.symmetric) {
+        throw std::invalid_argument(
+            std::string("refill: conditioning = ") + conditioning_keyword(formulation) +
+            " does not give a symmetric matrix, so only half of it cannot be stored. Its "
+            "(Phi,A) block is j*omega times its (A,Phi) block. Use row_scaled or scaled_phi "
+            "for symmetric storage, or a full SparseMatrixZ for this one.");
+    }
+    scatter_into(system.matrix.mutable_values(), system.rhs, bound, mesh, dofs, pattern, omega,
+                 formulation, scatter);
+}
+
+SymmetricSystem make_symmetric_system(const SparsityPattern& pattern, int num_unknowns) {
+    if (!pattern.upper_only) {
+        throw std::invalid_argument(
+            "make_symmetric_system: needs a pattern built with "
+            "SparsityStorage::UpperTriangle.");
+    }
+    SymmetricSystem out;
+    out.matrix = SparseSymmetricZ::from_pattern(pattern.rows, pattern.row_ptr, pattern.col_index);
+    out.rhs.assign(static_cast<std::size_t>(num_unknowns), Complex(0.0, 0.0));
+    return out;
 }
 
 AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofMap& dofs,

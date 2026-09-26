@@ -775,6 +775,170 @@ void test_refill_and_scatter_map() {
     check(accepted_matching, "and a matching one is not -- the guard is not simply always firing");
 }
 
+// Symmetric storage: half the matrix, all of the information.
+//
+// The one thing that must be true is that expanding the stored triangle
+// reproduces the full assembly ENTRY FOR ENTRY. Everything else here -- the
+// halved count, matvec, the refusals -- is secondary to that.
+void test_symmetric_storage() {
+    Mesh m = make_cube();
+    const double omega = 2.0 * M_PI * 1e6;
+    const BoundProblem b = bind_cube(m, 1e6);
+    const DofMap d = build_dof_map(b, m);
+    const SparsityPattern full = build_sparsity(d, b, m);
+    const SparsityPattern upper = build_sparsity(d, b, m, SparsityStorage::UpperTriangle);
+
+    check(!full.upper_only && upper.upper_only, "the pattern says which half it holds");
+
+    // The stored count: (full + diagonal) / 2, since every off-diagonal pair
+    // is stored once and every diagonal entry once.
+    std::size_t diagonal = 0;
+    for (int r = 0; r < full.rows; ++r) {
+        if (full.find_slot(r, r) >= 0) ++diagonal;
+    }
+    check(upper.nnz() == (full.nnz() + diagonal) / 2,
+          "the upper pattern holds (full + diagonal) / 2 entries: " +
+              std::to_string(upper.nnz()) + " of " + std::to_string(full.nnz()));
+
+    bool nothing_below = true;
+    for (int r = 0; r < upper.rows; ++r) {
+        for (int k = upper.row_ptr[static_cast<std::size_t>(r)];
+             k < upper.row_ptr[static_cast<std::size_t>(r) + 1]; ++k) {
+            if (upper.col_index[static_cast<std::size_t>(k)] < r) nothing_below = false;
+        }
+    }
+    check(nothing_below, "and nothing below the diagonal");
+
+    for (const Conditioning which : {Conditioning::RowScaled, Conditioning::ScaledPhi}) {
+        const std::string name = conditioning_keyword(which);
+
+        const AssembledSystem whole = assemble(b, m, d, full, omega, which);
+        SymmetricSystem half = make_symmetric_system(upper, d.num_total);
+        refill(half, b, m, d, upper, omega, which);
+
+        check(half.matrix.nnz() == upper.nnz(), name + ": the symmetric matrix fills its pattern");
+
+        // THE check. Expand the triangle and compare against the full
+        // assembly, which was built by a different code path through a
+        // different pattern.
+        const SparseMatrixZ expanded = half.matrix.to_full();
+        check(expanded.nnz() == whole.matrix.nnz(),
+              name + ": expanding the triangle gives the full matrix's nonzero count");
+        double worst = 0.0;
+        double scale = 0.0;
+        for (const Complex& v : whole.matrix.values()) scale = std::max(scale, std::abs(v));
+        for (int r = 0; r < whole.matrix.rows(); ++r) {
+            for (int k = whole.matrix.row_ptr()[static_cast<std::size_t>(r)];
+                 k < whole.matrix.row_ptr()[static_cast<std::size_t>(r) + 1]; ++k) {
+                const int c = whole.matrix.col_index()[static_cast<std::size_t>(k)];
+                worst = std::max(worst, std::abs(whole.matrix.values()[static_cast<std::size_t>(k)] -
+                                                entry(expanded, r, c)));
+            }
+        }
+        check(worst == 0.0, name + ": and every entry is identical, not merely close (worst " +
+                                std::to_string(worst) + ")");
+
+        // The RHS is not affected by how the matrix is stored.
+        bool rhs_same = half.rhs.size() == whole.rhs.size();
+        for (std::size_t k = 0; k < half.rhs.size() && rhs_same; ++k) {
+            if (half.rhs[k] != whole.rhs[k]) rhs_same = false;
+        }
+        check(rhs_same, name + ": the right-hand side is unchanged");
+
+        // matvec must mirror. A general CSR matvec over the same arrays would
+        // give the wrong answer, which is why this is a separate type.
+        std::vector<Complex> x(static_cast<std::size_t>(d.num_total));
+        for (int i = 0; i < d.num_total; ++i) {
+            x[static_cast<std::size_t>(i)] = Complex(1.0 + 0.5 * i, 0.25 * i - 1.0);
+        }
+        const std::vector<Complex> y_sym = half.matrix.matvec(x);
+        const std::vector<Complex> y_full = whole.matrix.matvec(x);
+        double worst_y = 0.0, y_scale = 0.0;
+        for (const Complex& v : y_full) y_scale = std::max(y_scale, std::abs(v));
+        for (std::size_t k = 0; k < y_sym.size(); ++k) {
+            worst_y = std::max(worst_y, std::abs(y_sym[k] - y_full[k]));
+        }
+        check(worst_y < 1e-12 * y_scale,
+              name + ": matvec agrees with the full matrix's (worst " + std::to_string(worst_y) +
+                  ")");
+
+        // Either index order finds the one stored copy.
+        bool both_orders = true;
+        for (int r = 0; r < std::min(20, d.num_total); ++r) {
+            for (int c = 0; c < std::min(20, d.num_total); ++c) {
+                if (half.matrix.find_slot(r, c) != half.matrix.find_slot(c, r)) both_orders = false;
+            }
+        }
+        check(both_orders, name + ": find_slot normalises the pair, so either order works");
+
+        // A ScatterMap built from the upper pattern works the same way.
+        const ScatterMap map = ScatterMap::build(upper, d, m, b);
+        SymmetricSystem mapped = make_symmetric_system(upper, d.num_total);
+        refill(mapped, b, m, d, upper, omega, which, &map);
+        check(mapped.matrix.values() == half.matrix.values() && mapped.rhs == half.rhs,
+              name + ": a ScatterMap over the upper pattern gives the same result bitwise");
+    }
+
+    // --- the refusals -----------------------------------------------------
+    //
+    // Storing one triangle is lossless only if the matrix IS symmetric. Under
+    // Natural the (Phi,A) block is j*omega times the (A,Phi) block, so folding
+    // them would silently drop that factor. That must be refused, not
+    // approximated.
+    bool refused_natural = false;
+    try {
+        SymmetricSystem s = make_symmetric_system(upper, d.num_total);
+        refill(s, b, m, d, upper, omega, Conditioning::Natural);
+    } catch (const std::invalid_argument&) {
+        refused_natural = true;
+    }
+    check(refused_natural, "symmetric storage refuses the unsymmetric Natural conditioning");
+
+    // And the two halves cannot be crossed over.
+    bool refused_full_into_symmetric = false;
+    try {
+        SymmetricSystem s = make_symmetric_system(upper, d.num_total);
+        refill(s, b, m, d, full, omega, Conditioning::RowScaled);
+    } catch (const std::invalid_argument&) {
+        refused_full_into_symmetric = true;
+    }
+    check(refused_full_into_symmetric, "a symmetric system refuses a full pattern");
+
+    bool refused_upper_into_full = false;
+    try {
+        AssembledSystem s = make_system(full, d.num_total);
+        refill(s, b, m, d, upper, omega, Conditioning::RowScaled);
+    } catch (const std::invalid_argument&) {
+        refused_upper_into_full = true;
+    }
+    check(refused_upper_into_full, "and a full system refuses an upper-triangle pattern");
+
+    bool refused_make = false;
+    try {
+        make_symmetric_system(full, d.num_total);
+    } catch (const std::invalid_argument&) {
+        refused_make = true;
+    }
+    check(refused_make, "make_symmetric_system refuses a full pattern too");
+
+    // from_pattern refuses a structure with anything below the diagonal: it
+    // would be stored and never read, since matvec mirrors instead.
+    bool refused_below = false;
+    try {
+        SparseSymmetricZ::from_pattern(2, {0, 1, 2}, {0, 0});
+    } catch (const std::invalid_argument&) {
+        refused_below = true;
+    }
+    check(refused_below, "SparseSymmetric refuses an entry below the diagonal");
+    bool accepted_upper = true;
+    try {
+        SparseSymmetricZ::from_pattern(2, {0, 2, 3}, {0, 1, 1});
+    } catch (...) {
+        accepted_upper = false;
+    }
+    check(accepted_upper, "control: a genuine upper triangle is accepted");
+}
+
 }  // namespace
 
 int main() {
@@ -786,6 +950,7 @@ int main() {
     test_dc_refuses_the_scaled_formulations();
     test_scatter_map_is_consistent();
     test_refill_and_scatter_map();
+    test_symmetric_storage();
     test_cylinder();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";

@@ -816,3 +816,107 @@ them as NOT caught. That was the control harness, which looked for `FAIL:`
 lines and saw none because the test binary had died before printing anything.
 A harness that cannot tell "no failures" from "no output" will certify a
 broken test suite as sound.
+
+---
+
+## 14. Symmetric storage, 25 Sept
+
+Two things landed together, because the first is useless without a way to ask
+for it.
+
+### The input file chooses
+
+    [solver]
+    conditioning = natural      # natural | row_scaled | scaled_phi
+
+`Formulation3` became **`Conditioning`**, declared in `problem.hpp` so the
+parser can name it. The old name mattered: the input file already has a
+`formulation` key (`full_wave` / `reduced`) which decides **where Phi lives**,
+not how the Phi equations are scaled. Two settings both called "formulation"
+was a trap, and it caught me mid-explanation. One test asserts both can be set
+and do not collide.
+
+`row_scaled` and `scaled_phi` are refused at **parse** time with `type = dc`,
+carrying the user's line number, rather than throwing from inside assembly
+where nothing knows the line. The default is `natural`, the only one defined
+at every frequency.
+
+### `SparseSymmetric<T>`
+
+Before this there was exactly one matrix class, `Sparse<T>`: general CSR, both
+triangles, whatever the conditioning. `SparseSymmetric<T>` stores the upper
+triangle only, with `SymmetricSystem` and a `refill` overload beside the
+existing ones.
+
+**A separate type, not a flag on `Sparse<T>`.** An upper-triangle CSR array is
+indistinguishable from a general one by inspection, so handing one to a
+general `matvec` gives a wrong answer with no complaint. That is the exact
+failure mode this project keeps finding; a distinct type makes it a compile
+error.
+
+`A = A^T`, **not** `A = A^H`. These are complex symmetric, which permits a
+complex `LDL^T` but not Cholesky, and COCG rather than CG.
+
+### Measured, cylinder at 1 MHz, 37368 unknowns
+
+| | entries | values | with structure |
+|---|---|---|---|
+| full | 1557522 | 23.77 MB | 29.85 MB |
+| symmetric | **797445** | **12.17 MB** | **15.35 MB** |
+| | 51.2 % | | 48.6 % saved |
+
+Two things came out better than expected, and one worse:
+
+- **`build_sparsity` halves too**, 62 -> 29 ms, which I had not predicted.
+  Half the pairs to count, fill and sort.
+- **`refill` is 20 % faster**, 29.6 -> 23.9 ms, from half the scatter writes.
+- **The `ScatterMap` does NOT shrink**: 14.8 MB either way. It stores `n^2`
+  slots per tet regardless, and half are now -1. Storing only the upper
+  triangle's slots would save ~7 MB. Not done; recorded as the next easy win.
+
+### One scatter, not two
+
+`refill`'s body became an internal `scatter_into` over a values array, with
+the two public overloads differing only in where that array lives and what
+they check first. So there is exactly one copy of the physics. The
+lower-triangle entries are folded onto their mirrors by `locate`, which
+returns -1 for them when `pattern.upper_only`; the scatter skips a negative
+slot.
+
+### The guard that matters
+
+Storing one triangle is lossless **only if the matrix is symmetric**. Under
+`Natural` the (Phi,A) block is `j*omega` times the (A,Phi) block, so folding
+them would silently discard that factor and give a wrong matrix that still
+looks plausible -- symmetric, right pattern, right scaling between
+formulations. `refill(SymmetricSystem&, ...)` refuses a conditioning whose
+`FormulationScales::symmetric` is false, and refuses a full pattern; the full
+overload refuses an upper-triangle one.
+
+### Controls
+
+1445 -> 1468 checks. The load-bearing test expands the stored triangle and
+compares against the full assembly **entry for entry, exactly** -- built
+through a different pattern by a different path.
+
+| control | outcome |
+|---|---|
+| `to_full` forgets to mirror | caught, 4 checks |
+| `matvec` forgets the mirror term | caught, 2 checks |
+| `locate` drops the UPPER triangle instead | caught (clean exception) |
+| the symmetry guard removed | caught, 1 check |
+| upper pattern counts one entry too few per row | caught -- see below |
+| an entry below the diagonal in `from_pattern` | refused |
+| a full pattern into a symmetric system, and vice versa | refused |
+
+The miscount corrupted the heap inside `build_sparsity`'s fill, which is the
+second time that class of bug has appeared here. So the fill now checks its
+cursor against what the counting pass reserved and throws
+`build_sparsity: row N received more entries than the counting pass reserved`
+instead. It costs one comparison per entry in a function that runs once per
+mesh, and the measurement confirms no change (62 ms either way).
+
+The guard removal is caught only by the refusal check, not by a correctness
+one -- the correctness tests assemble only the symmetric conditionings. That
+is acceptable because the guard's premise is itself tested: `test_symmetry`
+asserts the Natural matrix is *visibly* not symmetric.

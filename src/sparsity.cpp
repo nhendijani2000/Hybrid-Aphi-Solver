@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <array>
+#include <stdexcept>
+#include <string>
 
 namespace aphi_solver {
 
@@ -14,10 +16,12 @@ int SparsityPattern::find_slot(int row, int col) const {
     return static_cast<int>(it - col_index.begin());
 }
 
-SparsityPattern build_sparsity(const DofMap& dofs, const BoundProblem& bound, const Mesh& mesh) {
+SparsityPattern build_sparsity(const DofMap& dofs, const BoundProblem& bound, const Mesh& mesh,
+                               SparsityStorage storage) {
     SparsityPattern p;
     p.rows = dofs.num_total;
     p.cols = dofs.num_total;
+    p.upper_only = storage == SparsityStorage::UpperTriangle;
     p.row_ptr.assign(static_cast<std::size_t>(p.rows) + 1, 0);
 
     // A tet's live DOFs: at most 16 (6 edges + 10 P2 nodes), fewer once
@@ -48,7 +52,10 @@ SparsityPattern build_sparsity(const DofMap& dofs, const BoundProblem& bound, co
         int n = 0;
         gather(t, n);
         for (int i = 0; i < n; ++i) {
-            p.row_ptr[static_cast<std::size_t>(live[static_cast<std::size_t>(i)]) + 1] += n;
+            // Upper triangle: row `live[i]` keeps only the columns at or
+            // after it, and the list is sorted, so that is the tail from i.
+            const int kept = p.upper_only ? n - i : n;
+            p.row_ptr[static_cast<std::size_t>(live[static_cast<std::size_t>(i)]) + 1] += kept;
         }
     }
     // A voltage port's row gets nothing from the tets: its terminal is a
@@ -71,9 +78,22 @@ SparsityPattern build_sparsity(const DofMap& dofs, const BoundProblem& bound, co
         gather(t, n);
         for (int i = 0; i < n; ++i) {
             const int row = live[static_cast<std::size_t>(i)];
-            for (int j = 0; j < n; ++j) {
+            for (int j = p.upper_only ? i : 0; j < n; ++j) {
                 // Both (i,j) and (j,i): the matrix is not symmetric in
                 // general, so one triangle would lose the Phi-A coupling.
+                // Pass 1 counted this row's upper bound; writing past it is a
+                // heap overrun, which is how a miscount in pass 1 showed up
+                // when it was tried as a negative control. One comparison per
+                // entry turns that into a diagnosable exception, and
+                // build_sparsity runs once per mesh so it costs nothing that
+                // matters.
+                if (cursor[static_cast<std::size_t>(row)] >=
+                    p.row_ptr[static_cast<std::size_t>(row) + 1]) {
+                    throw std::logic_error(
+                        "build_sparsity: row " + std::to_string(row) +
+                        " received more entries than the counting pass reserved for it. The "
+                        "count and the fill disagree.");
+                }
                 p.col_index[static_cast<std::size_t>(cursor[static_cast<std::size_t>(row)]++)] =
                     live[static_cast<std::size_t>(j)];
             }
@@ -83,6 +103,11 @@ SparsityPattern build_sparsity(const DofMap& dofs, const BoundProblem& bound, co
     for (std::size_t k = 0; k < dofs.port_is_fixed.size(); ++k) {
         if (!dofs.port_is_fixed[k]) continue;
         const int row = dofs.port_index[k];
+        if (cursor[static_cast<std::size_t>(row)] >=
+            p.row_ptr[static_cast<std::size_t>(row) + 1]) {
+            throw std::logic_error("build_sparsity: no room reserved for port row " +
+                                   std::to_string(row) + "'s constraint diagonal.");
+        }
         p.col_index[static_cast<std::size_t>(cursor[static_cast<std::size_t>(row)]++)] = row;
     }
 

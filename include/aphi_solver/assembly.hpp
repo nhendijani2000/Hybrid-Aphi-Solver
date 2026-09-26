@@ -7,6 +7,7 @@
 #include "aphi_solver/dof_map.hpp"
 #include "aphi_solver/element_matrix.hpp"
 #include "aphi_solver/sparse_matrix.hpp"
+#include "aphi_solver/sparse_symmetric.hpp"
 #include "aphi_solver/sparsity.hpp"
 
 namespace aphi_solver {
@@ -91,9 +92,18 @@ private:
     std::vector<int> slot_;          ///< sum over tets of live^2
 };
 
-/// What one assembly produced.
+/// What one assembly produced, with both triangles stored. Works for any
+/// conditioning, including the unsymmetric `Natural`.
 struct AssembledSystem {
     SparseMatrixZ matrix;
+    std::vector<std::complex<double>> rhs;
+};
+
+/// The same, with only the upper triangle stored -- about half the memory.
+/// Valid only for a conditioning whose matrix really is symmetric, which
+/// `refill` enforces rather than trusting the caller.
+struct SymmetricSystem {
+    SparseSymmetricZ matrix;
     std::vector<std::complex<double>> rhs;
 };
 
@@ -105,6 +115,11 @@ struct AssembledSystem {
 /// 11.4 ms against 0.6 ms to re-zero an array already held
 /// (`docs/ASSEMBLY_PLAN.md` Sec. 12). A sweep should do it once.
 AssembledSystem make_system(const SparsityPattern& pattern, int num_unknowns);
+
+/// The symmetric counterpart. Needs a pattern built with
+/// `SparsityStorage::UpperTriangle`; a full pattern is refused, since it would
+/// reserve slots below the diagonal that nothing ever writes.
+SymmetricSystem make_symmetric_system(const SparsityPattern& pattern, int num_unknowns);
 
 /// Assembles into an existing system, **clearing it first**. Safe to call
 /// repeatedly on one `AssembledSystem` at different frequencies, which is
@@ -138,6 +153,18 @@ AssembledSystem make_system(const SparsityPattern& pattern, int num_unknowns);
 /// symbolic and numeric passes disagree about the matrix's shape, and
 /// dropping the term instead would give a quietly wrong matrix.
 void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh,
+            const DofMap& dofs, const SparsityPattern& pattern, double omega,
+            Conditioning formulation, const ScatterMap* scatter = nullptr);
+
+/// The symmetric overload. Identical physics -- literally the same scatter --
+/// with the lower-triangle writes folded onto their mirrors, which the
+/// pattern's `upper_only` flag drives.
+///
+/// Throws std::invalid_argument if `formulation` is one whose matrix is NOT
+/// symmetric. Under `Natural` the (Phi,A) block is `j*omega` times the (A,Phi)
+/// block, so keeping one triangle would silently discard that factor and give a
+/// wrong matrix that still looks plausible.
+void refill(SymmetricSystem& system, const BoundProblem& bound, const Mesh& mesh,
             const DofMap& dofs, const SparsityPattern& pattern, double omega,
             Conditioning formulation, const ScatterMap* scatter = nullptr);
 
