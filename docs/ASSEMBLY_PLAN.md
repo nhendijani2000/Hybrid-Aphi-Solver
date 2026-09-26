@@ -704,3 +704,31 @@ is absent from the air and the structure genuinely differs: 26907 unknowns
 and 939575 nonzeros, against 37368 and 1557522 for the same mesh at AC. A DC
 run and an AC sweep each need their own DOF map and pattern; only the
 frequencies *within* one AC `Problem` share them.
+
+### `from_pattern`'s cost is the allocator, not the copy
+
+Sec. 12's table put `from_pattern` at 9.1 ms and implied the copying was the
+waste. Splitting it (it runs 9-11 ms depending on the run):
+
+| | |
+|---|---|
+| `from_pattern` as `assemble` calls it | 11.4 ms |
+| copying `row_ptr` + `col_index` | 1.9 ms |
+| the validation walk over 1.56 M columns | 0.9 ms |
+| allocator + first touch of 23.8 MB | ~8 ms |
+| **zeroing an already-allocated array** | **0.6 ms** |
+
+The cost is the OS handing over 23.8 MB of fresh pages and the first write to
+each. So reusing one allocation is worth **11.4 -> 0.6 ms**, more than Sec. 12
+claimed, and the copies and validation are a minor part of it.
+
+The shape, keeping `assemble` as the one-shot so no caller changes:
+
+    AssembledSystem sys = make_system(pattern, dofs.num_total);   // once
+    for (double f : problem.frequencies) {
+        refill(sys, bound, mesh, dofs, pattern, two_pi * f, formulation);
+        // solve
+    }
+
+`refill` zeroes the values and accumulates; `make_system` keeps the
+validation, which then happens once per mesh rather than once per frequency.
