@@ -484,6 +484,146 @@ void test_cut_side_labels() {
     }
 }
 
+// The loop mesh: the first INTERNAL port on real geometry.
+//
+// A boundary port's terminal is handed to it by the mesh -- the faces are on
+// the outer boundary and that is that. An internal port has to work out which
+// side is which, and every number below is about that. Expected values come
+// from the geometry in tools/loop_cut.geo, not from a previous run.
+void test_loop_mesh() {
+#ifdef APHI_MESH_DIR
+    const std::string dir = APHI_MESH_DIR;
+    Mesh m;
+    try {
+        m = read_gmsh_msh(dir + "/loop_cut.msh");
+    } catch (const std::exception& e) {
+        check(false, std::string("loop_cut.msh unreadable: ") + e.what());
+        return;
+    }
+    scale_mesh_to_metres(m, LengthUnit::Millimetre);
+
+    Problem p;
+    p.type = AnalysisType::DC;
+    p.length_unit = LengthUnit::Millimetre;
+    p.bodies = {make_body("B1", "ring", 5.8e7, 10), make_body("B2", "air", 0.0, 15)};
+    Port port = make_port("P1", PortType::InternalCurrent, "loop_cut", 1.0, 20);
+    port.current_direction = Vec3{0.0, 1.0, 0.0};  // +y, as the example file says
+    p.ports = {port};
+
+    const BoundProblem b = expect_ok(p, m, "the loop problem");
+    if (b.bodies.empty() || b.ports.empty()) return;
+
+    check(b.bodies[0].is_conductor() && !b.bodies[1].is_conductor(),
+          "the ring conducts and the air does not");
+    check(b.bodies[0].tets.size() + b.bodies[1].tets.size() ==
+              static_cast<std::size_t>(m.num_tets()),
+          "the two bodies partition the mesh");
+
+    // The cut is INTERNAL: every one of its faces must have a tet on both
+    // sides. A cut accidentally left on the outer boundary, or drawn inside a
+    // volume rather than between two, would fail here -- and it is the whole
+    // reason the geometry is built as two half-annuli.
+    const BoundPort& cut = b.ports[0];
+    check(is_internal(cut.type), "the port is internal");
+    check(cut.surface.faces.size() > 0u, "the cut has faces");
+    int interior = 0;
+    for (int f : cut.surface.faces) {
+        if (!m.is_boundary_face(f)) ++interior;
+    }
+    check(interior == static_cast<int>(cut.surface.faces.size()),
+          "every face of the cut has a tet on BOTH sides -- it is interior, not a boundary");
+
+    // Both sides are ring tets, not air: a cross-section of the conductor.
+    int plus = 0, minus = 0, in_air = 0;
+    for (int f : cut.surface.faces) {
+        for (int k = 0; k < 2; ++k) {
+            const int t =
+                m.face_tets[static_cast<std::size_t>(f)].tets[static_cast<std::size_t>(k)];
+            if (t < 0) continue;
+            const int body = b.body_of_tet[static_cast<std::size_t>(t)];
+            if (body != 0) {
+                ++in_air;
+            } else if (cut.side_of_tet(t) > 0) {
+                ++plus;
+            } else {
+                ++minus;
+            }
+        }
+    }
+    check(in_air == 0, "the cut lies entirely inside the conductor");
+    check(plus > 0 && minus > 0,
+          "and it has tets on a plus side AND a minus side (" + std::to_string(plus) + " / " +
+              std::to_string(minus) + ")");
+
+    // The hint only resolves the sign, so the resolved direction must agree
+    // with it to within 90 degrees -- here the cut's normal is +/-y, so this
+    // is +y exactly.
+    check(near(cut.direction.y, 1.0, 1e-9),
+          "the resolved direction follows the +y hint, not the mesh's arbitrary face order");
+    check(std::abs(cut.direction.x) < 1e-9 && std::abs(cut.direction.z) < 1e-9,
+          "and it is purely +y, as a cut at theta = 0 must be");
+
+    // The control the example file promises: reversing the hint reverses the
+    // direction, and nothing else about the binding changes. Without this the
+    // check above could pass on code that ignored the hint and happened to
+    // pick +y from the mesh's face order.
+    Problem reversed = p;
+    reversed.ports[0].current_direction = Vec3{0.0, -1.0, 0.0};
+    const BoundProblem rb = expect_ok(reversed, m, "the loop with the hint reversed");
+    if (!rb.ports.empty()) {
+        check(near(rb.ports[0].direction.y, -1.0, 1e-9), "-y reverses the resolved direction");
+        check(rb.ports[0].surface.faces.size() == cut.surface.faces.size(),
+              "and the cut is otherwise the same surface");
+    }
+
+    // A hint only has to be within 90 degrees of what is meant, so an
+    // off-axis one must give the same answer as the clean axis.
+    Problem sloppy = p;
+    sloppy.ports[0].current_direction = Vec3{0.1, 0.9, -0.2};
+    const BoundProblem sb = expect_ok(sloppy, m, "the loop with an off-axis hint");
+    if (!sb.ports.empty()) {
+        check(near(sb.ports[0].direction.y, 1.0, 1e-9),
+              "0.1 0.9 -0.2 resolves to the same +y as the clean hint -- it picks a SIGN, "
+              "not a normal");
+    }
+
+    // The cut fully spans the ring. If it did not, current would flow around
+    // the uncut part and the port would be partly shorted, which
+    // problem_binding refuses outright at DC -- so `expect_ok` above already
+    // proves it. Assert the rim is genuinely a rim, on the ring's surface.
+    check(cut.rim_edges.size() > 0u, "the cut has a rim");
+
+    // One conduction path, and the cut is its own potential reference: a
+    // floating loop has no other. This is what makes the loop test different
+    // from the cylinder, where a 0 V terminal supplies the reference.
+    check(b.conduction_paths.size() == 1u, "the ring is one conduction path");
+    if (!b.conduction_paths.empty()) {
+        check(b.conduction_paths[0].tets.size() == b.bodies[0].tets.size(),
+              "which is the whole ring -- the cut does not disconnect it");
+        check(b.conduction_paths[0].reference_count >= 1,
+              "and the internal port references it, so nothing else has to");
+    }
+
+    // At DC Phi lives only in the ring.
+    int phi_tets = 0;
+    for (bool v : b.phi_tet) {
+        if (v) ++phi_tets;
+    }
+    check(phi_tets == static_cast<int>(b.bodies[0].tets.size()),
+          "at DC, Phi lives on the ring's tets and no others");
+
+    // The ring is a closed loop: it must NOT touch the outer boundary, or it
+    // would be an electrode rather than a floating loop.
+    bool ring_on_boundary = false;
+    for (int f = 0; f < m.num_faces(); ++f) {
+        if (!m.is_boundary_face(f)) continue;
+        const int t = m.face_tets[static_cast<std::size_t>(f)].tets[0];
+        if (b.body_of_tet[static_cast<std::size_t>(t)] == 0) ring_on_boundary = true;
+    }
+    check(!ring_on_boundary, "the ring touches no outer face -- it floats inside the air");
+#endif
+}
+
 // The real fixture. Numbers here come from the geometry, not from a previous
 // run of this code -- which is what makes them a check rather than a record.
 void test_cylinder_mesh() {
@@ -625,6 +765,7 @@ int main() {
     test_gauge_is_built();
     test_cut_side_labels();
     test_cylinder_mesh();
+    test_loop_mesh();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

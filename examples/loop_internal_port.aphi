@@ -20,10 +20,12 @@
 # arbitrary, which the driver warns about. Try deleting the line to see it.
 # Z, R, L and P are unaffected either way.
 #
-# NOTE: meshes/loop_cut.msh DOES NOT EXIST YET, so running this file stops
-# with "mesh: could not open file". That is correct behaviour -- the solver
-# now opens the mesh -- but it means this example is not runnable until the
-# loop geometry is built. cylinder_box.aphi is the one to run today.
+# The mesh is built by tools/loop_cut.geo, which explains why the ring is made
+# of two half-annuli: a port surface needs a tet on each side, so the cut has
+# to BE the interface between two volumes rather than a surface drawn inside
+# one. Regenerate with:
+#
+#     gmsh -3 tools/loop_cut.geo -o meshes/loop_cut.msh
 # ---------------------------------------------------------------------------
 
 [mesh]
