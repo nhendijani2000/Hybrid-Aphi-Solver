@@ -51,6 +51,14 @@ SparsityPattern build_sparsity(const DofMap& dofs, const BoundProblem& bound, co
             p.row_ptr[static_cast<std::size_t>(live[static_cast<std::size_t>(i)]) + 1] += n;
         }
     }
+    // A voltage port's row gets nothing from the tets: its terminal is a
+    // prescribed Phi, so the port has no column and no current-balance
+    // equation was scattered into its row. Assembly writes the constraint
+    // `V = V_given` there instead, which needs a diagonal slot.
+    for (std::size_t k = 0; k < dofs.port_is_fixed.size(); ++k) {
+        if (!dofs.port_is_fixed[k]) continue;
+        p.row_ptr[static_cast<std::size_t>(dofs.port_index[k]) + 1] += 1;
+    }
     for (int r = 0; r < p.rows; ++r) {
         p.row_ptr[static_cast<std::size_t>(r) + 1] += p.row_ptr[static_cast<std::size_t>(r)];
     }
@@ -70,6 +78,12 @@ SparsityPattern build_sparsity(const DofMap& dofs, const BoundProblem& bound, co
                     live[static_cast<std::size_t>(j)];
             }
         }
+    }
+
+    for (std::size_t k = 0; k < dofs.port_is_fixed.size(); ++k) {
+        if (!dofs.port_is_fixed[k]) continue;
+        const int row = dofs.port_index[k];
+        p.col_index[static_cast<std::size_t>(cursor[static_cast<std::size_t>(row)]++)] = row;
     }
 
     // Pass 3: sort and unique each row in place, compacting as we go. The

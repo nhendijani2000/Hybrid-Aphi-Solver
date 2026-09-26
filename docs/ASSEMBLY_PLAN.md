@@ -408,6 +408,27 @@ use a 1-point rule for the quadratic terms; drop the volume factor; skip the
 `jω` on the F3 PhiA scatter; forget to scale the port rows under F1; forget
 to divide a prescribed voltage by `jω` under F2; swap `r` and `c`.
 
+**Run 25 Sept.** Eight of the nine bite. Recorded because two of them found
+live bugs and one turned out to be untestable:
+
+| control | outcome |
+|---|---|
+| drop the global edge sign | caught (`test_dof_map`) |
+| transpose the (A,A) block | **vacuous** -- that block is symmetric, asserted at `test_element_matrix.cpp:154`, so `p*6+q` and `q*6+p` are the same number. Not a detectable error; the meaningful transpose is on the coupling block, below. |
+| transpose the (A,Phi) block | caught, 6 checks |
+| 1-point rule / no volume factor | caught earlier, at the kernel level |
+| skip the `jw` on the (Phi,A) scatter | caught, 5 checks |
+| forget the row scale on a current port | caught |
+| do not divide a prescribed Phi by `c` | caught -- **and this was a real bug**, see Sec. 10 |
+| do not divide the port constraint by `c` | caught -- also real |
+| swap `r` and `c` | caught |
+| never impose a voltage port at all | caught, 11 checks -- **the larger real bug**, Sec. 10 |
+
+The last three only became *possible* to catch once the cube test began
+prescribing a non-zero, phase-shifted voltage. With `V = 0` every wrong
+treatment of a prescribed potential gives the right answer, which is exactly
+why both bugs survived the first green run of the whole suite.
+
 ---
 
 ## 8. Implementation order
@@ -419,12 +440,13 @@ to divide a prescribed voltage by `jω` under F2; swap `r` and `c`.
    the mass part.
 4. **`kernel_PhiPhi`**, **`kernel_APhi`**. **Done 25 Sept.**
 5. **`SparsityPattern` + `Sparse<T>::from_pattern`**, tested on a small mesh
-   against the triplet path.
+   against the triplet path. **Done 25 Sept.**
 6. **The scatter and RHS**, including prescribed-DOF elimination, in the
-   unsymmetric mode first.
+   unsymmetric mode first. **Done 25 Sept.**
 7. **F1 and F2**, which are two scalars and their consequences (§2),
    each checked against F3 by the exact row/column-scaling identity in
-   §7.3, plus the port round trip.
+   §7.3, plus the port round trip. **Done 25 Sept**, except the port round
+   trip, which needs a solver.
 8. **Time it**, then decide about threading with a number in hand.
 
 ---
@@ -469,3 +491,72 @@ to divide a prescribed voltage by `jω` under F2; swap `r` and `c`.
    is what `CONDITIONING.md` says to do and what `recommend_strategy`
    already takes measured arguments for.* Getting one correct answer out
    first has been the right call at every previous fork here.
+
+---
+
+## 10. How a voltage port is imposed (added 25 Sept, after a bug)
+
+Assembly's first green run was wrong in two related ways, both found by the
+§7.5 controls rather than by the tests:
+
+1. `DofMap::port_is_fixed` and `port_value` were populated by the DOF map and
+   read by **nothing**. A prescribed voltage never entered the system at all.
+   Measured consequence on the DC cube: `M · (0 on a, 1 on Phi and the
+   ports)` came out at `1.0e-7` against a largest entry of `1.9e8` — a
+   constant potential cost nothing, so there was no potential reference and
+   the matrix was **singular**.
+2. Under F2 a prescribed value was multiplied by the column scale `c`
+   instead of divided by it, an error of `(jω)²` in the right-hand side.
+
+Both were invisible because every test prescribed `0 V`.
+
+### What it does now
+
+A voltage port's terminal potential is **known**, so it is a prescribed Phi
+like any other: `local_dofs` gives those nodes no column and carries
+`port_value` in `phi_fixed`, and the column is eliminated into the
+right-hand side. Nothing is then scattered into the port's own row, so
+assembly writes the constraint there instead:
+
+    row k:   1 · V'_k = V_given / c
+
+The row and the column of `k` are otherwise empty, so this keeps the matrix
+square **and preserves the symmetry** of F1 and F2 — which a one-sided
+treatment (identity row, live column) would have broken. `build_sparsity`
+reserves that one diagonal slot, since the tet loop no longer produces it.
+
+A prescribed value reaching the right-hand side is always
+`Phi_given / c` — the value of the *scaled* unknown. Multiplying it by that
+column's coefficient, which already carries `c`, cancels the two, so a
+prescribed potential lands on the right-hand side unscaled. The row scales
+are then: `1` for an A row, `r` for a Phi row or a current port's row, and
+`1/c` for a voltage port's constraint row, which is not a physical equation.
+One test asserts exactly that table.
+
+### Two prices, both deliberate
+
+- **The port current is no longer a residual of that row.** The comment in
+  `dof_map.cpp` that chose one unknown per voltage port wanted the row kept
+  as the terminal's current balance; the constraint has displaced it.
+  Extraction must re-form that balance — accumulate the terminal's Phi
+  equations over its tets — rather than reading `I` off the solved system.
+  Cheap, but it is work the extraction step now owns.
+- **The constraint diagonal is `1`, next to a Phi block of order `1e8`.**
+  That is one badly scaled row. `equilibration.hpp` already exists for this,
+  and the right diagonal is a measurement once a solver can report a
+  condition number — not a guess now.
+
+### The better long-term form
+
+The textbook symmetric treatment gives a voltage port **two** unknowns, its
+terminal potential `V_k` and its current `I_k`, with two equations: the
+terminal's current balance `A_{k·} x − I_k = 0`, and the constraint
+`−V_k = −V_given` (negated to make the coupling symmetric rather than
+antisymmetric). That is a saddle-point block, it keeps the current balance
+*and* returns `I` directly from the solve with no post-processing, and it
+stays symmetric.
+
+It was not done now because it changes the number of unknowns per port,
+which reaches back into `DofMap`'s layout, `build_sparsity` and their tests.
+Worth doing before floating ports, which need a second unknown per port
+anyway — the two changes are the same change.

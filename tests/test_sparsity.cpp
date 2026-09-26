@@ -102,6 +102,13 @@ std::set<std::pair<int, int>> brute_force(const DofMap& d, const BoundProblem& b
             for (int j : live) out.insert({i, j});
         }
     }
+    // A voltage port's row gets nothing from the tets -- its terminal is a
+    // prescribed Phi, so the port has no column. Assembly writes the
+    // constraint `V = V_given` there, so the pattern must hold that
+    // diagonal.
+    for (std::size_t k = 0; k < d.port_is_fixed.size(); ++k) {
+        if (d.port_is_fixed[k]) out.insert({d.port_index[k], d.port_index[k]});
+    }
     return out;
 }
 

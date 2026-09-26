@@ -237,12 +237,22 @@ void test_local_dof_map() {
             const int p2 = d.edge_p2(e);
             const DofEntry& entry = td.phi[static_cast<std::size_t>(4 + le)];
             const PhiDof state = d.phi_state[static_cast<std::size_t>(p2)];
-            const int expected = state == PhiDof::Free
-                                     ? d.phi_index[static_cast<std::size_t>(p2)]
-                                     : (state == PhiDof::Port
-                                            ? d.port_index[static_cast<std::size_t>(
-                                                  d.phi_port[static_cast<std::size_t>(p2)])]
-                                            : -1);
+            int expected = -1;
+            if (state == PhiDof::Free) {
+                expected = d.phi_index[static_cast<std::size_t>(p2)];
+            } else if (state == PhiDof::Port) {
+                // A current port's terminal is an unknown; a voltage
+                // port's is a prescribed Phi, so it has no column and
+                // carries its value instead.
+                const std::size_t k =
+                    static_cast<std::size_t>(d.phi_port[static_cast<std::size_t>(p2)]);
+                if (d.port_is_fixed[k]) {
+                    check(td.phi_fixed[static_cast<std::size_t>(4 + le)] == d.port_value[k],
+                          "a voltage port's terminal node carries its prescribed potential");
+                } else {
+                    expected = d.port_index[k];
+                }
+            }
             check(entry.index == expected,
                   "local Phi node 4+le is the midpoint of local edge le, mapped consistently");
         }

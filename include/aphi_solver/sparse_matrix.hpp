@@ -141,6 +141,60 @@ public:
         compressed_ = true;
     }
 
+    /// Builds an already-compressed matrix with a given structure and all
+    /// values zero, ready to be filled in place.
+    ///
+    /// This is the assembly path, and it is the opposite way round from
+    /// `add()` + `compress()`: the structure is known first (from
+    /// `build_sparsity`, which reads the DOF map) and only the numbers are
+    /// missing. That buys two things the triplet path cannot give. It never
+    /// holds every contribution in memory at once -- on the cylinder that
+    /// would be ~2.2 M triplets against 941 665 nonzeros -- and it is
+    /// **reusable**: the structure depends on connectivity while the values
+    /// depend on materials and frequency, so a 41-point sweep builds this
+    /// once and refills `mutable_values()` 41 times.
+    ///
+    /// `row_ptr` must have `rows + 1` entries and be non-decreasing, and
+    /// each row's slice of `col_index` must be strictly ascending and in
+    /// range -- which is what `find_slot` and the CSR operations here
+    /// assume. Throws std::invalid_argument otherwise, because a malformed
+    /// structure would otherwise surface as a wrong answer rather than a
+    /// failure.
+    static Sparse<T> from_pattern(int rows, int cols, std::vector<int> row_ptr,
+                                  std::vector<int> col_index) {
+        if (static_cast<int>(row_ptr.size()) != rows + 1) {
+            throw std::invalid_argument("Sparse::from_pattern: row_ptr must have rows + 1 entries");
+        }
+        if (row_ptr.front() != 0 || row_ptr.back() != static_cast<int>(col_index.size())) {
+            throw std::invalid_argument(
+                "Sparse::from_pattern: row_ptr must run from 0 to col_index.size()");
+        }
+        for (int r = 0; r < rows; ++r) {
+            const int begin = row_ptr[static_cast<std::size_t>(r)];
+            const int end = row_ptr[static_cast<std::size_t>(r) + 1];
+            if (end < begin) {
+                throw std::invalid_argument("Sparse::from_pattern: row_ptr is not non-decreasing");
+            }
+            for (int k = begin; k < end; ++k) {
+                const int c = col_index[static_cast<std::size_t>(k)];
+                if (c < 0 || c >= cols) {
+                    throw std::invalid_argument("Sparse::from_pattern: a column index is out of range");
+                }
+                if (k > begin && c <= col_index[static_cast<std::size_t>(k - 1)]) {
+                    throw std::invalid_argument(
+                        "Sparse::from_pattern: each row's columns must be strictly ascending");
+                }
+            }
+        }
+
+        Sparse<T> m(rows, cols);
+        m.row_ptr_ = std::move(row_ptr);
+        m.col_index_ = std::move(col_index);
+        m.values_.assign(m.col_index_.size(), T{});
+        m.compressed_ = true;
+        return m;
+    }
+
     // ------------------------------------------------------------ CSR access
 
     const std::vector<int>& row_ptr() const {

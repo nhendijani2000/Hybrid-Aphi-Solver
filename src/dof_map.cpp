@@ -149,17 +149,37 @@ TetDofs DofMap::local_dofs(int tet, const Mesh& mesh, const BoundProblem& bound)
             case PhiDof::Free:
                 out.phi[l] = {phi_index[i], 1.0};
                 break;
-            case PhiDof::Port:
-                out.phi[l] = {port_index[static_cast<std::size_t>(phi_port[i])], 1.0};
+            case PhiDof::Port: {
+                // A voltage port's potential is KNOWN, so its terminal is a
+                // prescribed Phi like any other -- there is no column for
+                // it, and the value moves to the right-hand side. Only a
+                // current-driven port's terminal potential is an unknown.
+                const std::size_t k = static_cast<std::size_t>(phi_port[i]);
+                if (port_is_fixed[k]) {
+                    out.phi_fixed[l] = port_value[k];
+                } else {
+                    out.phi[l] = {port_index[k], 1.0};
+                }
                 break;
+            }
             case PhiDof::Cut: {
                 // The side decides: the plus side reads the port's unknown,
                 // the grounded minus side reads a prescribed zero. This is
                 // the one mapping that depends on the tet and not only on
                 // the node, which is why the map is built per tet.
-                const BoundPort& port = bound.ports[static_cast<std::size_t>(phi_port[i])];
+                const std::size_t k = static_cast<std::size_t>(phi_port[i]);
+                const BoundPort& port = bound.ports[k];
                 if (port.side_of_tet(tet) > 0) {
-                    out.phi[l] = {port_index[static_cast<std::size_t>(phi_port[i])], 1.0};
+                    // Same split as PhiDof::Port above: prescribed for a
+                    // voltage port (Phi1 - Phi2 = V with Phi2 grounded
+                    // leaves Phi1 = V), an unknown for a current port. The
+                    // minus side reads the grounded zero either way, which
+                    // is `out.phi[l]`'s default of index -1, value 0.
+                    if (port_is_fixed[k]) {
+                        out.phi_fixed[l] = port_value[k];
+                    } else {
+                        out.phi[l] = {port_index[k], 1.0};
+                    }
                 }
                 break;
             }
