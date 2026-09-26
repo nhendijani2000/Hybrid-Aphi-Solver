@@ -341,6 +341,74 @@ int main() {
         check(threw, "build_tree_cotree: throws on a mask of the wrong length");
     }
 
+    // --- Completeness on the two shipped meshes, in global terms ----------
+    //
+    // The gauge is complete exactly when the tree spans every node that
+    // belongs to a tet:
+    //
+    //     tree edges == (nodes in tets) - (components among them)
+    //
+    // One edge short leaves a gradient in the null space and a singular
+    // curl-curl block; one too many would have eliminated a real unknown.
+    // Every other check in this file is about HOW the tree is built; this is
+    // the one that says it did enough.
+    //
+    // The loop mesh is here because it is a TORUS, the case where a gauge can
+    // legitimately be incomplete: on a region with first Betti number b1 > 0,
+    // ker(curl) exceeds the nodal gradients by b1 and a spanning tree cannot
+    // reach that part. It does not bite here, because A lives on the whole
+    // BOX, which is contractible -- the cuts-for-multiply-connected problem
+    // belongs to formulations that confine the potential to the air with the
+    // conductor as a hole. Asserting it rather than arguing it.
+    //
+    // It also pins something that looks alarming and is not: loop_cut.msh
+    // carries one node belonging to no tet (a point gmsh inserted and did not
+    // use), so `num_reference_groups` comes out 2 rather than 1. That node has
+    // no edges and no DOFs, so the tree over the real component is exactly the
+    // right size, which is what this measures.
+#ifdef APHI_MESH_DIR
+    for (const char* name : {"cylinder_box.msh", "loop_cut.msh"}) {
+        const Mesh m = aphi_solver::read_gmsh_msh(std::string(APHI_MESH_DIR) + "/" + name);
+        const auto mask = boundary_edge_mask(m);
+        const TreeCotreeResult r = build_tree_cotree(m, mask);
+        check_invariants(r, m, std::string(name) + ", whole boundary");
+
+        std::vector<char> used(static_cast<std::size_t>(m.num_nodes()), 0);
+        for (const auto& t : m.tets) {
+            for (int v : t) used[static_cast<std::size_t>(v)] = 1;
+        }
+        int used_nodes = 0;
+        for (int i = 0; i < m.num_nodes(); ++i) used_nodes += used[static_cast<std::size_t>(i)];
+
+        // Components of the node graph, over tet edges, counting only those
+        // that contain a tet.
+        UnionFind uf(m.num_nodes());
+        for (const auto& t : m.tets) {
+            for (int a = 0; a < 4; ++a) {
+                for (int b = a + 1; b < 4; ++b) {
+                    uf.unite(t[static_cast<std::size_t>(a)], t[static_cast<std::size_t>(b)]);
+                }
+            }
+        }
+        int used_components = 0;
+        for (int i = 0; i < m.num_nodes(); ++i) {
+            if (uf.find(i) == i && used[static_cast<std::size_t>(i)]) ++used_components;
+        }
+
+        int tree_edges = 0;
+        for (int e = 0; e < m.num_edges(); ++e) {
+            if (r.is_tree_edge[static_cast<std::size_t>(e)]) ++tree_edges;
+        }
+
+        check(used_components == 1, std::string(name) + ": the tets form one connected piece");
+        check(tree_edges == used_nodes - used_components,
+              std::string(name) + ": the tree spans every tet node -- " +
+                  std::to_string(tree_edges) + " edges for " + std::to_string(used_nodes) +
+                  " nodes in " + std::to_string(used_components) + " piece(s), so the gauge is "
+                  "complete and the curl-curl block has no gradient left in its null space");
+    }
+#endif
+
     // --- The coaxial via -------------------------------------------------
     // n x A = 0 on the whole outer boundary. The boundary is a closed genus-0
     // surface of 1,710 triangles, so it has 2,565 edges and 857 nodes; the

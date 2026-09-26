@@ -28,6 +28,31 @@ namespace {
 
 using namespace aphi_solver;
 
+/// A node belonging to no tet becomes its own reference group, so the root
+/// count exceeds the number of connected pieces and the gauge looks
+/// incomplete when it is not. Such a node has no edges and no Phi, so it
+/// contributes nothing to the matrix -- but saying nothing about it leaves a
+/// reader to wonder, which is how an hour got spent on exactly this.
+std::string orphan_note(const Mesh& mesh, const BoundProblem& b) {
+    std::vector<char> used(static_cast<std::size_t>(mesh.num_nodes()), 0);
+    for (const TetVerts& t : mesh.tets) {
+        for (int v : t) used[static_cast<std::size_t>(v)] = 1;
+    }
+    int orphans = 0;
+    for (int i = 0; i < mesh.num_nodes(); ++i) {
+        if (!used[static_cast<std::size_t>(i)]) ++orphans;
+    }
+    if (orphans == 0) return {};
+    std::ostringstream out;
+    out << "              " << orphans << " mesh node" << (orphans == 1 ? " belongs" : "s belong")
+        << " to no tet, so " << (orphans == 1 ? "it counts as an extra root" : "they count as extra roots")
+        << ";\n"
+        << "              " << (orphans == 1 ? "it has" : "they have")
+        << " no edges and no Phi, so the gauge over the real mesh is complete\n";
+    (void)b;
+    return out.str();
+}
+
 const char* unit_name(LengthUnit u) {
     switch (u) {
         case LengthUnit::Metre: return "m";
@@ -197,6 +222,7 @@ void print_summary(const std::string& path, const ParseResult& r, const Mesh& me
               << "              " << dirichlet << " Dirichlet edges, "
               << b.gauge.num_dirichlet_components << " surface(s), "
               << b.gauge.num_reference_groups << " root(s)\n"
+              << orphan_note(mesh, b)
               << "              " << free_a << " free A unknowns of " << mesh.num_edges()
               << " edges\n";
 
