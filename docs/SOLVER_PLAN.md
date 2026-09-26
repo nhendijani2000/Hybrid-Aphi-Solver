@@ -594,3 +594,85 @@ removed, because nothing asserted a fill figure. So `mean_row < 1500` is now
 pinned on both meshes — correct RCM gives 1027 and 1049, plain CM gives 2071 and
 2017, and the threshold sits between with about 1.4× margin either side. A
 measured threshold, with what it separates written beside it.
+
+---
+
+## 15. Step 3 done, 26 Sept: AMD, and the direct ceiling
+
+`approximate_minimum_degree` in `src/ordering.cpp`, after Amestoy, Davis & Duff
+(1996; Algorithm 837, TOMS 2004). Quotient graph with element absorption and
+AMD's approximate external degree, selected through degree buckets.
+
+**Deliberately left out**, per Stage 1's correctness-over-speed brief:
+supervariables (indistinguishable-vertex detection by hashing), aggressive
+absorption, and the paper's packed integer workspace with garbage collection —
+replaced by per-vertex vectors, which cost memory and locality and are far
+easier to be sure of. All three are speed, not quality.
+
+**Why AMD was safe to write at this stage:** an ordering cannot be *wrong*, only
+worse. Any permutation gives a correct factorization, so a defect shows up as
+fill — and step 2 measures fill exactly. That is a rare luxury and it is why
+this piece came before the numeric factorization rather than after.
+
+### §3's table, complete
+
+| ordering | cylinder `nnz(L)` | per row | loop `nnz(L)` | per row |
+|---|---|---|---|---|
+| natural | 202862505 — 3869 MB | 7539 | 146936275 — 2802 MB | 6036 |
+| RCM | 27635653 — 527 MB | 1027 | 25525947 — 486 MB | 1049 |
+| **AMD** | **12672169 — 241 MB** | **471** | **8668644 — 165 MB** | **356** |
+
+**AMD is 16× better than no ordering and 2.2–2.9× better than RCM**, and it
+orders in 230 ms / 161 ms. Quality is confirmed against an **exact** minimum
+degree computed independently in the tests: worst `nnz(L)` ratio **1.02** over
+25 random patterns, i.e. within 2 % of exact MD despite the approximate degree.
+
+### The direct ceiling — the number this step existed to produce
+
+At 27000 unknowns AMD needs **241 MB** and about 470 nonzeros per row of `L`.
+Fill per row grows with problem size, so the following is an **estimate, not a
+measurement**, and it is the first thing to re-measure on a bigger mesh:
+
+| unknowns | estimated per row | estimated factor |
+|---|---|---|
+| 27 k (measured) | 471 | 241 MB |
+| 100 k | ~700 | ~1.4 GB |
+| 200 k | ~900 | ~3.6 GB |
+| 500 k | ~1200 | ~12 GB |
+
+So **the in-house direct solver should reach roughly 200–500 k unknowns** on a
+workstation. Two consequences:
+
+- **EDA-scale work is covered in-house.** If the problems of interest sit under
+  a few hundred thousand unknowns, Stage 1 plus AMD is the whole answer and the
+  §12 backend is not needed for them.
+- **The THz case is not close.** 15–25 M DOFs is two orders beyond this, and no
+  direct solver — MUMPS included — changes that. §11's iterative path is the
+  only route there, which is what §12 already says.
+
+### Controls: four run, and two of them were about the code, not the tests
+
+| control | outcome |
+|---|---|
+| drop AMD's approximate degree, keep only the growth bound | **caught** — fill 12.7 M → 60.3 M, *worse than RCM* |
+| elements never absorbed | **caught, by a time guard** — see below |
+| neighbour lists not pruned of the new element's members | **caught, by a pinned figure** — see below |
+| `min_degree` not reset after pruning | **not a defect** — the line was redundant and has been removed |
+
+**Element absorption is worth 112× in time and nothing at all in fill.** Without
+it, `nnz(L)` comes out *bit-identical* and the ordering takes **25567 ms instead
+of 228**. That is exactly what the paper says absorption is for, and it means no
+fill-based check can ever see it. So there is now a generous time bound —
+under 5 s, against 230 ms measured and 26 s broken.
+
+**Not pruning a neighbour's variable list costs 11 % of fill** — 471 → 523 per
+row, about 27 MB here — and on small random patterns the same defect costs only
+3 %, so the exact-MD ratio test does not see it either. Pinned at
+`mean_row < 500` on both meshes, the same way RCM's figure is pinned in §14.
+
+**`min_degree = 0` after the update loop was dead code I wrote.** Removing it
+changed neither the fill nor the time, because the `std::min` inside the loop is
+already the only place the minimum can fall — a variable not adjacent to the
+pivot keeps its degree, and the scan had already established nothing was lower.
+The control did not expose a missing test; it exposed a redundant line, which is
+now gone with the reasoning in a comment.

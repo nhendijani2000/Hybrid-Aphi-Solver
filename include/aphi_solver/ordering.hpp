@@ -29,8 +29,7 @@ enum class Ordering {
 
     /// Approximate minimum degree (Amestoy, Davis & Duff 1996, 2004). The
     /// standard fill-reducing ordering and the one to use.
-    /// **Not implemented yet** -- step 3 of `SOLVER_PLAN.md` §9.
-    ApproximateMinimumDegree
+        ApproximateMinimumDegree
 };
 
 /// The input-file keyword for an ordering, and back. `from` returns false for
@@ -101,9 +100,6 @@ struct Permutation {
 /// (`docs/ASSEMBLY_PLAN.md` §10), so the adjacency graph really does have
 /// isolated vertices, and more than one connected component is normal.
 ///
-/// Throws std::invalid_argument for `ApproximateMinimumDegree` until step 3 of
-/// `SOLVER_PLAN.md` §9 implements it, rather than silently falling back to
-/// another ordering and reporting a fill figure that belongs to something else.
 Permutation compute_ordering(const SparsityPattern& pattern, Ordering ordering);
 
 /// `P A Pᵀ`: the same nonzeros, at permuted positions. Entry `(i, j)` of the

@@ -12,6 +12,7 @@
 // fill), tridiagonal (no fill), and dense (complete fill).
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <numeric>
 #include <random>
@@ -176,6 +177,106 @@ void test_against_the_dense_reference() {
           "nnz(L) matches an independent dense symbolic elimination on every random pattern (" +
               std::to_string(agreed) + " of " + std::to_string(cases) + ", worst relative "
               "disagreement " + std::to_string(worst_ratio) + ")");
+}
+
+/// EXACT minimum degree, by brute force: at each step pick the remaining vertex
+/// of least true degree in the elimination graph, then make its neighbours a
+/// clique. O(n^3)-ish with explicit sets, which is why AMD exists -- but it is
+/// obviously correct, and it is the reference AMD's *quality* is judged against.
+///
+/// AMD may legitimately differ from this, because its degree is an upper bound
+/// rather than the true one. What it must not do is produce substantially more
+/// fill.
+std::vector<int> exact_minimum_degree(const SparsityPattern& p) {
+    const int n = p.rows;
+    std::vector<std::set<int>> adj(static_cast<std::size_t>(n));
+    for (int r = 0; r < n; ++r) {
+        for (int k = p.row_ptr[static_cast<std::size_t>(r)];
+             k < p.row_ptr[static_cast<std::size_t>(r) + 1]; ++k) {
+            const int c = p.col_index[static_cast<std::size_t>(k)];
+            if (c == r) continue;
+            adj[static_cast<std::size_t>(r)].insert(c);
+            adj[static_cast<std::size_t>(c)].insert(r);
+        }
+    }
+    std::vector<char> gone(static_cast<std::size_t>(n), 0);
+    std::vector<int> order;
+    order.reserve(static_cast<std::size_t>(n));
+    for (int step = 0; step < n; ++step) {
+        int best = -1;
+        std::size_t best_degree = 0;
+        for (int i = 0; i < n; ++i) {
+            if (gone[static_cast<std::size_t>(i)]) continue;
+            const std::size_t d = adj[static_cast<std::size_t>(i)].size();
+            if (best < 0 || d < best_degree) {
+                best = i;
+                best_degree = d;
+            }
+        }
+        order.push_back(best);
+        gone[static_cast<std::size_t>(best)] = 1;
+        const std::vector<int> nbrs(adj[static_cast<std::size_t>(best)].begin(),
+                                    adj[static_cast<std::size_t>(best)].end());
+        for (std::size_t a = 0; a < nbrs.size(); ++a) {
+            adj[static_cast<std::size_t>(nbrs[a])].erase(best);
+            for (std::size_t b = a + 1; b < nbrs.size(); ++b) {
+                adj[static_cast<std::size_t>(nbrs[a])].insert(nbrs[b]);
+                adj[static_cast<std::size_t>(nbrs[b])].insert(nbrs[a]);
+            }
+        }
+        adj[static_cast<std::size_t>(best)].clear();
+    }
+    return order;
+}
+
+Permutation permutation_from_order(const std::vector<int>& order) {
+    Permutation p;
+    p.perm = order;
+    p.iperm.assign(order.size(), 0);
+    for (int i = 0; i < static_cast<int>(order.size()); ++i) {
+        p.iperm[static_cast<std::size_t>(order[static_cast<std::size_t>(i)])] = i;
+    }
+    return p;
+}
+
+// AMD's quality, against an exact minimum degree computed independently.
+void test_amd_against_exact_minimum_degree() {
+    std::mt19937 rng(987654321);
+    double worst_ratio = 0.0;
+    int beat_natural = 0, cases = 0;
+
+    for (int trial = 0; trial < 25; ++trial) {
+        const int n = 20 + static_cast<int>(rng() % 30);
+        const double density = 0.04 + 0.10 * (static_cast<double>(rng() % 100) / 100.0);
+        std::vector<std::pair<int, int>> edges;
+        for (int i = 0; i < n; ++i) {
+            for (int j = i + 1; j < n; ++j) {
+                if (static_cast<double>(rng() % 10000) / 10000.0 < density) edges.push_back({i, j});
+            }
+        }
+        const SparsityPattern p = pattern_from_edges(n, edges);
+
+        const FactorSize amd =
+            predict_factor_size(p, compute_ordering(p, Ordering::ApproximateMinimumDegree));
+        const FactorSize md = predict_factor_size(p, permutation_from_order(exact_minimum_degree(p)));
+        const FactorSize nat = predict_factor_size(p, Permutation::identity(n));
+
+        ++cases;
+        if (amd.nnz <= nat.nnz) ++beat_natural;
+        if (md.nnz > 0) {
+            worst_ratio = std::max(worst_ratio,
+                                   static_cast<double>(amd.nnz) / static_cast<double>(md.nnz));
+        }
+    }
+    std::cout << "  AMD vs exact minimum degree: worst nnz(L) ratio " << worst_ratio << " over "
+              << cases << " random patterns\n";
+    check(worst_ratio < 1.10,
+          "AMD stays within 10 % of an exact minimum degree's fill (worst " +
+              std::to_string(worst_ratio) + ") -- its degree is an upper bound, so it may order "
+              "differently, but not much worse");
+    check(beat_natural == cases,
+          "and it never does worse than no ordering at all (" + std::to_string(beat_natural) +
+              " of " + std::to_string(cases) + ")");
 }
 
 void test_tree_and_pattern_invariants() {
@@ -381,6 +482,11 @@ void test_ordering_table_on_real_meshes() {
             predict_factor_size(pattern, compute_ordering(pattern, Ordering::Natural));
         const FactorSize rcm =
             predict_factor_size(pattern, compute_ordering(pattern, Ordering::ReverseCuthillMcKee));
+        const auto amd_start = std::chrono::steady_clock::now();
+        const Permutation amd_perm =
+            compute_ordering(pattern, Ordering::ApproximateMinimumDegree);
+        const auto amd_done = std::chrono::steady_clock::now();
+        const FactorSize amd = predict_factor_size(pattern, amd_perm);
 
         std::cout << "  " << name << ": " << pattern.rows << " unknowns, " << pattern.nnz()
                   << " nonzeros in A\n";
@@ -389,6 +495,14 @@ void test_ordering_table_on_real_meshes() {
         std::cout << "      rcm      nnz(L) = " << rcm.nnz << "  (" << rcm.mean_row
                   << " per row, " << rcm.bytes(pattern.rows) / 1048576 << " MB)   "
                   << static_cast<double>(nat.nnz) / static_cast<double>(rcm.nnz) << "x less fill\n";
+        std::cout << "      amd      nnz(L) = " << amd.nnz << "  (" << amd.mean_row
+                  << " per row, " << amd.bytes(pattern.rows) / 1048576 << " MB)   "
+                  << static_cast<double>(nat.nnz) / static_cast<double>(amd.nnz)
+                  << "x less than natural, "
+                  << static_cast<double>(rcm.nnz) / static_cast<double>(amd.nnz)
+                  << "x less than rcm   [ordering "
+                  << std::chrono::duration<double, std::milli>(amd_done - amd_start).count()
+                  << " ms]\n";
 
         check(nat.num_roots == rcm.num_roots,
               std::string(name) + ": both orderings see the same number of components");
@@ -410,6 +524,36 @@ void test_ordering_table_on_real_meshes() {
         // pattern (SOLVER_PLAN Sec. 13 has the reason), so nnz(L) is the only
         // place it can be caught, and 2x of fill is far too much to leave
         // uncovered.
+        // Absorbing an element does not change the ORDERING at all -- fill comes
+        // out bit-identical without it -- but it changes the cost of computing
+        // one by two orders of magnitude, because every later neighbourhood scan
+        // walks the absorbed lists. Measured: 228 ms with absorption, 25567 ms
+        // without, on this mesh. So the guard here is on time, generously, since
+        // nothing else can see that mistake.
+        const double amd_ms =
+            std::chrono::duration<double, std::milli>(amd_done - amd_start).count();
+        check(amd_ms < 5000.0,
+              std::string(name) + ": AMD orders in under 5 s (took " + std::to_string(amd_ms) +
+                  " ms; without element absorption it takes about 25 s)");
+
+        check(amd.nnz < rcm.nnz,
+              std::string(name) + ": AMD produces less fill than RCM (" +
+                  std::to_string(amd.nnz) + " vs " + std::to_string(rcm.nnz) +
+                  ") -- the reason it is the default");
+        // Pinned, like RCM's below. AMD is deterministic and these meshes are
+        // fixed, so the figure is reproducible exactly: 471 per row on the
+        // cylinder, 356 on the loop. Failing to prune a neighbour's variable
+        // list of the new element's members gives 523 and 379 -- 11 % more fill,
+        // about 27 MB here -- and no other check sees it, because on small
+        // random patterns the same defect costs only 3 %.
+        check(amd.mean_row < 500.0,
+              std::string(name) + ": AMD's factor averages under 500 nonzeros per row (got " +
+                  std::to_string(amd.mean_row) +
+                  "); un-pruned neighbour lists give about 525");
+
+        check(amd.num_roots == rcm.num_roots,
+              std::string(name) + ": and sees the same components");
+
         check(rcm.mean_row < 1500.0,
               std::string(name) + ": RCM's factor averages under 1500 nonzeros per row "
                                   "(got " + std::to_string(rcm.mean_row) +
@@ -423,6 +567,7 @@ void test_ordering_table_on_real_meshes() {
 int main() {
     test_hand_computed_factors();
     test_against_the_dense_reference();
+    test_amd_against_exact_minimum_degree();
     test_tree_and_pattern_invariants();
     test_upper_only_pattern_gives_the_same_answer();
     test_budget_is_checked_before_allocating();

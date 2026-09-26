@@ -128,17 +128,36 @@ void test_natural_is_the_identity() {
           "and permuting by it changes nothing at all");
 }
 
-void test_amd_is_refused_until_implemented() {
-    const SparsityPattern p = pattern_from_edges(4, {{0, 1}, {1, 2}, {2, 3}});
-    bool refused = false;
-    try {
-        compute_ordering(p, Ordering::ApproximateMinimumDegree);
-    } catch (const std::invalid_argument&) {
-        refused = true;
-    }
-    check(refused,
-          "AMD is refused while unimplemented, rather than falling back to another ordering and "
-          "reporting its fill as AMD's");
+// AMD cannot be checked against a reference ordering, because there is no such
+// thing: ANY permutation gives a correct factorization, so an ordering is never
+// wrong, only worse. What can be checked is that it is a permutation at all,
+// that it is deterministic, and -- in test_symbolic -- how much fill it causes.
+void test_amd_is_a_valid_ordering() {
+    const int n = 120;
+    std::vector<std::pair<int, int>> edges;
+    for (int i = 0; i + 1 < n; ++i) edges.push_back({i, i + 1});
+    for (int i = 0; i + 11 < n; ++i) edges.push_back({i, i + 11});
+    const SparsityPattern p = pattern_from_edges(n, edges);
+
+    const Permutation q = compute_ordering(p, Ordering::ApproximateMinimumDegree);
+    check(q.is_valid(), "AMD returns a valid permutation");
+    check(q.size() == n, "of every unknown");
+    check(permute_pattern(p, q).nnz() == p.nnz(), "and permuting preserves the nonzeros");
+
+    const Permutation again = compute_ordering(p, Ordering::ApproximateMinimumDegree);
+    check(again.perm == q.perm,
+          "AMD is deterministic -- required, since a factorization built on it is compared "
+          "bitwise");
+
+    // Isolated vertices and several components, as the real matrices have.
+    const SparsityPattern odd = pattern_from_edges(7, {{0, 1}, {1, 2}, {5, 6}});
+    const Permutation r = compute_ordering(odd, Ordering::ApproximateMinimumDegree);
+    check(r.is_valid() && r.size() == 7,
+          "AMD handles an isolated unknown and several components");
+
+    check(compute_ordering(pattern_from_edges(0, {}), Ordering::ApproximateMinimumDegree)
+                  .size() == 0,
+          "and an empty pattern");
 }
 
 // The test that says whether RCM works at all.
@@ -354,7 +373,7 @@ int main() {
     test_keywords();
     test_permutation_invariants();
     test_natural_is_the_identity();
-    test_amd_is_refused_until_implemented();
+    test_amd_is_a_valid_ordering();
     test_shuffled_chain();
     test_permute_preserves_structure();
     test_isolated_and_disconnected();
