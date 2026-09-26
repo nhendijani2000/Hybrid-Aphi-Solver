@@ -319,9 +319,19 @@ void assemble_all(const Problem& p, const Mesh& mesh, const BoundProblem& bound,
               << (symmetric ? half.matrix.nnz() : full.matrix.nnz())
               << " complex values once for the whole sweep   [" << ms(a0, a1) << " ms]\n\n";
 
+    // `max |M_ij|` and `max |b_i|`, NOT anything about the A field -- an
+    // earlier version of this table called the first column "largest |a|",
+    // which reads as the vector potential, since `a` is what the A unknowns
+    // are called everywhere else in this project.
+    //
+    // Neither is a correctness check. They are the cheapest signals that the
+    // assembly produced something and that its scaling is what the
+    // conditioning predicts: under row_scaled the port row's entry comes out
+    // as 1/omega, and under scaled_phi the largest coefficient grows with
+    // omega. A column of zeros would mean nothing was scattered at all.
     std::cout << std::right;
-    std::cout << "  " << std::setw(12) << "frequency" << std::setw(12) << "largest |a|"
-              << std::setw(12) << "|rhs|_inf" << std::setw(10) << "ms\n";
+    std::cout << "  " << std::setw(12) << "frequency" << std::setw(14) << "max |M_ij|"
+              << std::setw(14) << "max |b_i|" << std::setw(10) << "ms\n";
     double total_ms = 0.0;
     for (double omega : omegas) {
         auto r0 = Clock::now();
@@ -346,8 +356,8 @@ void assemble_all(const Problem& p, const Mesh& mesh, const BoundProblem& bound,
         } else {
             label << std::setprecision(4) << omega / (2.0 * M_PI) << " Hz";
         }
-        std::cout << "  " << std::setw(12) << label.str() << std::setw(12) << worst
-                  << std::setw(12) << worst_rhs << std::setw(10) << ms(r0, r1) << "\n";
+        std::cout << "  " << std::setw(12) << label.str() << std::setw(14) << worst
+                  << std::setw(14) << worst_rhs << std::setw(10) << ms(r0, r1) << "\n";
     }
 
     std::cout << "\n  " << omegas.size() << " assembl" << (omegas.size() == 1 ? "y" : "ies")
