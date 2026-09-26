@@ -677,3 +677,30 @@ no — the cost is memory, and no amount of arithmetic tidying touches it.
   Together with A that is ~42 ms off a repeat assembly, taking it to ~34 ms.
 - **Threading is still last.** The two items above are bigger, simpler and
   carry no write-conflict risk.
+
+### What a sweep actually reuses, measured
+
+"Reuse the matrix across a sweep" is easy to read as "do not reassemble",
+which would be wrong. On the cylinder, across 1 kHz / 1 MHz / 10 GHz:
+
+| | across the three frequencies |
+|---|---|
+| `row_ptr`, `col_index` | **identical** |
+| the values | **1557013 of 1557522 differ**, worst relative change 3.1e6 |
+
+The numeric assembly runs at **every** frequency: `nu`, `alpha`, `beta` and
+the scales `r` and `c` all depend on omega. What is reusable is only the
+answer to *where entry (i,j) goes in the value array*, which is a function
+of the mesh and the DOF map alone -- `build_dof_map` and `build_sparsity`
+take no frequency argument at all.
+
+So A saves `locate`'s bookkeeping, and hoisting `from_pattern` saves an
+allocation and a copy. Neither skips the kernels or the scatter. A repeat
+assembly goes 76.5 -> ~34.6 ms, and that remainder is real per-frequency
+work: 1.3 ms geometry and DOF lookup, 11 ms kernels, ~22 ms accumulate.
+
+**DC is not a sweep point.** `phi_on_conductors_only` is true at DC, so Phi
+is absent from the air and the structure genuinely differs: 26907 unknowns
+and 939575 nonzeros, against 37368 and 1557522 for the same mesh at AC. A DC
+run and an AC sweep each need their own DOF map and pattern; only the
+frequencies *within* one AC `Problem` share them.
