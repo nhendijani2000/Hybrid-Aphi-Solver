@@ -977,3 +977,37 @@ same expression as the thing it checks is not a check.
 
 1468 -> 1476 checks. Four controls on the packing, all caught, two of them by
 a check rather than a crash.
+
+### The `if (i > j)` question
+
+The conventional way to scatter a symmetric matrix is to test the global
+indices in the element loop -- `if (i >= j) append`. This does the same thing,
+but the comparison is not written that way, and the difference is worth
+recording because it looks like it might be a different rule:
+
+    inline int tet_block_index(int n, bool packed, int row_at, int col_at) {
+        if (!packed) return row_at * n + col_at;
+        if (col_at < row_at) return -1;          // <- the test
+        ...
+    }
+
+`row_at` and `col_at` are **positions in the tet's sorted live list**, not
+global DOF indices. The test means the usual `col >= row` on global indices
+*only because that list is sorted ascending*, which `gather_live` guarantees.
+
+That equivalence is load-bearing and is now asserted in global terms: an entry
+is stored exactly when its global column is at or after its global row.
+Measured over the cylinder's 3581663 (tet, row, col) triples -- 1910040 stored,
+1671623 skipped -- zero disagreements in either direction. A control that
+removes the `std::sort` from `gather_live` breaks it.
+
+Two deliberate differences from the conventional form:
+
+- **It is `col >= row`, the upper triangle**, where the solver this was
+  compared against used the lower. Either works; `SparseSymmetric::find_slot`
+  normalises the pair so no caller has to know which.
+- **The test runs once per (tet, pair) at map-build time, not in the innermost
+  accumulate loop.** With a `ScatterMap` the answer is already a stored -1 by
+  the time `refill` runs, so a frequency sweep pays for the comparison once
+  rather than at every frequency. The unmapped path still evaluates it per
+  tet, as the conventional form does.

@@ -589,6 +589,7 @@ void test_scatter_map_is_consistent() {
 
     int checked = 0;
     bool counts_sane = true, positions_sane = true, slots_right = true, live_ascending = true;
+    bool triangle_is_global = true;
     for (int t = 0; t < m.num_tets(); ++t) {
         const TetDofs td = d.local_dofs(t, m, b);
         const int n = map.live_count(t);
@@ -634,6 +635,21 @@ void test_scatter_map_is_consistent() {
         for (int r = 0; r < n; ++r) {
             for (int c = 0; c < n; ++c) {
                 const int got = map.slot_of(t, r, c);
+                const int global_row = live[static_cast<std::size_t>(r)];
+                const int global_col = live[static_cast<std::size_t>(c)];
+
+                // The triangle test is written as `col_at < row_at` on
+                // POSITIONS in the tet's live list, but it has to mean the
+                // usual `col >= row` on GLOBAL indices -- the condition any
+                // symmetric assembly checks before appending an entry. The two
+                // agree only because the live list is sorted, so assert the
+                // equivalence instead of trusting it, and assert it in the
+                // direction that matters: what is stored, and what is not.
+                if (packed) {
+                    const bool stored = got >= 0;
+                    if (stored != (global_col >= global_row)) triangle_is_global = false;
+                }
+
                 // A packed block does not hold the lower triangle at all, and
                 // must report that rather than its mirror's index: the scatter
                 // visits both orders, so one shared slot would double-count.
@@ -661,6 +677,8 @@ void test_scatter_map_is_consistent() {
     check(live_ascending, "the live list is strictly ascending -- what lets the sweep resume");
     check(slots_right, "every one of the " + std::to_string(checked) +
                            " slots is the one find_slot returns");
+    check(triangle_is_global,
+          "an entry is stored exactly when its GLOBAL column is at or after its global row");
     }
 
     // The two layouts are not interchangeable: a block packed one way and
