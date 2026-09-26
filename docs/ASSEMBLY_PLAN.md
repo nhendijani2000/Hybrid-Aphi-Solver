@@ -599,8 +599,11 @@ assembly, 225 per tet.
 last one stopped.** Taking a row's columns in ascending order makes each
 search start from the previous hit instead of the row's beginning.
 **34 ms in place of 76 — 2.2x on that part, 1.6x overall, and it costs no
-memory at all.** It also speeds up `build_sparsity`, which searches the same
-way, and the first assembly, which A does not.
+memory at all.** It also helps the first assembly, which A does not.
+
+(An earlier draft of this section also claimed B speeds up `build_sparsity`.
+It does not: that function fills by cursor and sorts each row, and never
+searches for a column at all. Only `assemble` searches.)
 
 **A. Precompute every slot** (the optimisation §5 deferred). 13.7 MB for the
 cylinder, against 23.8 MB for the matrix values themselves — 58 % more
@@ -611,7 +614,8 @@ no faster. For a frequency sweep the whole numeric pass falls to roughly
 
 ### Recommendation, in order
 
-1. **B first.** Free, no memory, helps `build_sparsity` and every assembly.
+1. **B first.** Free, no memory, and it helps every assembly including the
+   first.
 2. **A only for a sweep**, behind a flag, built *using* B so the build is
    34 ms rather than 77 ms. Memory scales with tets, so at 1 M tets it is
    ~0.9 GB and must stay optional.
@@ -624,3 +628,52 @@ One more thing the split showed: `from_pattern` allocates and copies
 `row_ptr`, `col_index` and 23.8 MB of values on every `assemble` call. For a
 sweep that belongs outside the loop — refill the values of one matrix
 instead of building a new one per frequency.
+
+---
+
+## 12. B implemented, 25 Sept: 1.40x, not the 1.6x predicted
+
+`TetSlots` + `locate()` in `src/assembly.cpp`. Per tet: gather the live global
+DOFs, sort and unique them, then sweep each of those rows in **ascending
+column order** so every `lower_bound` resumes at the previous hit. All ~225
+entries of the tet then index a 16x16 table of value positions. `add_at`
+survives only for the handful of entries that do not come from a tet (the
+voltage-port constraint diagonal).
+
+**107.0 ms -> 76.5 ms, a 1.40x.** §11 predicted 1.6x from the candidate
+probe, which measured the sweep without the local-to-position lookups or the
+table writes. Prediction 1.6, measured 1.40 — the gap is that overhead.
+
+The suite stayed green throughout, including the triplet-path test, which
+compares the assembled matrix entry for entry against a reference built the
+old way. That is what makes this a refactor and not a rewrite.
+
+### Where the remaining 76.5 ms goes
+
+| part | time | share |
+|---|---|---|
+| geometry + `local_dofs` | 1.3 ms | 2 % |
+| `locate` | 32.8 ms | 43 % |
+| `from_pattern` (allocate + zero 23.8 MB, copy 5.9 MB) | 9.1 ms | 12 % |
+| the three kernels | 11 ms | 14 % |
+| the scatter's accumulate | ~22 ms | 29 % |
+
+### One thing tried and reverted
+
+Hoisting the loop-invariant complex products out of the inner loops --
+`r * c` was being recomputed a hundred times per tet in the (Phi,Phi) block,
+so ~3.6 M complex multiplies looked removable. **Measured 77.4 -> 76.1 ms,
+inside the noise, and it was reverted.** The compiler was already hoisting
+them; the scatter's ~22 ms is random writes into a 24 MB array, not
+arithmetic. Recorded because the reasoning was sound and the answer was still
+no — the cost is memory, and no amount of arithmetic tidying touches it.
+
+### What that leaves
+
+- **A is still worth it for a sweep.** It removes `locate`'s 32.8 ms, the
+  largest single part, on every assembly after the first.
+- **`from_pattern`'s 9.1 ms is pure waste in a sweep** and needs no new
+  structure to fix: build one matrix, refill its values per frequency.
+  Together with A that is ~42 ms off a repeat assembly, taking it to ~34 ms.
+- **Threading is still last.** The two items above are bigger, simpler and
+  carry no write-conflict risk.
