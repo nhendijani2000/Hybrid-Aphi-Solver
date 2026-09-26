@@ -23,7 +23,7 @@ type        = frequency
 sweep       = log
 f_start     = 1e4                          # Hz
 f_stop      = 1e8
-f_points    = 5
+f_points    = 2
 formulation = full_wave
 
 [boundary]
@@ -75,3 +75,7 @@ conditioning = row_scaled                  # natural | row_scaled | scaled_phi
 # wall -- a topological cut of the whole domain rather than a cross-section of
 # the conductor. That is a different model, not a better mesh.
 # ---------------------------------------------------------------------------
+
+# f_points is deliberately small. At Stage 1's scalar speed a factorization of
+# this mesh takes about 48 s (docs/SOLVER_PLAN.md Sec. 17), so a 41-point sweep
+# would run for half an hour. Raise it once the solver is faster.

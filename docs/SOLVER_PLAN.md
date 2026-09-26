@@ -759,3 +759,80 @@ any of it worked**, and that is step 5.
 probe for now; step 5 turns it into a committed tool, since every step from here
 needs it. Scalar and unblocked is Stage 1's brief, and §10 already names
 supernodal blocking as the 5–20× that answers it.
+
+---
+
+## 17. Step 5 done, 26 Sept: the first solve, and it is not good enough
+
+`solve_in_place`, `solve`, `relative_residual` in `factorization.cpp`, and
+`tools/solve_mesh.cpp` — a committed tool, because the suite cannot factorize a
+real mesh in reasonable time and every step from here needs somewhere to watch
+these numbers move.
+
+Three sweeps: forward through `L` (unit lower, nothing to divide by), then `D`,
+then backward through **`Lᵀ`** — the transpose, never the conjugate transpose.
+The permutation is applied with `perm` **in both directions**: `b̃[i] = b[perm[i]]`
+going in, `x[perm[i]] = x̃[i]` coming out, because the factorization is of
+`P A Pᵀ`.
+
+### Verification: three independent routes
+
+1. **The residual** `‖Ax − b‖/‖b‖` on the original system.
+2. **Three orderings must agree.** The solution cannot depend on the order the
+   unknowns were eliminated in, so natural, RCM and AMD must produce the same
+   `x`. This is what catches a `perm`/`iperm` confusion, which otherwise gives a
+   self-consistent-looking field that solves nothing.
+3. **Against `solve_dense`**, which shares no code with any of this.
+
+Plus solves known without a solver (a diagonal, and `[[2,3],[3,5]]x = [5,8] →
+[1,1]`), and a check of `Ax = b` against `A`'s **own entries** rather than through
+`matvec`, so no shared code could absorb a conjugation on both sides.
+
+**The residual is itself checked for being a real measurement**: perturbing one
+entry of a correct solution by 0.01 must make it jump, and `x = 0` must give
+exactly 1. A residual that cannot report a bad answer proves nothing.
+
+All five controls caught:
+
+| control | residual it produced |
+|---|---|
+| conjugate in the backward sweep (`Lᴴ` not `Lᵀ`) | 0.017 |
+| permute the right-hand side with `iperm` | 0.50 |
+| un-permute the solution with `iperm` | 0.38 |
+| skip the division by `D` | 99.1 |
+| backward sweep runs forwards | 2.8e-4 |
+
+### The real mesh: it solves, and the answer is wrong
+
+`examples/loop_sweep.aphi`, `row_scaled`, 37064 unknowns, AMD:
+
+| frequency | factor | solve | **residual** | min \|D\| | max \|D\| |
+|---|---|---|---|---|---|
+| 10 kHz | 48153 ms | 97 ms | **1.8e-08** | 8.1e-16 | 1.08e11 |
+| 100 MHz | 47394 ms | 92 ms | **0.069** | 8.1e-16 | 1.98e12 |
+
+**At 100 MHz the solution is 6.9 % wrong. That is not an answer.** At 10 kHz,
+1.8e-08 is eight orders worse than the 1e-16 the same code achieves on a
+well-scaled test matrix.
+
+This is the single most useful measurement so far, for three reasons.
+
+**It vindicates reporting the residual on every solve** (§5). The factorization
+returned `ok`, filled exactly the predicted nonzeros, and produced a smooth
+field. Nothing but the residual distinguishes that from a correct answer.
+
+**It confirms the conditioning problem is real and quantitative**, not a
+theoretical worry: the pivot range spans 8.1e-16 to 1.98e12, a ratio of 2.4e27,
+against the ~1e16 double precision carries. §16 saw this in the pivots; step 5
+shows what it costs in the answer.
+
+**It sets the acceptance criterion for steps 6 and 7.** They are no longer
+speculative hardening — equilibration and static pivoting with refinement have a
+number to move, and this table is what they have to beat. If they do not bring
+the residual to ~1e-12 or better across the sweep, they have not worked.
+
+Two things this does **not** show. The 45–48 s factorization is Stage 1's
+declared scalar cost, not a surprise, and §10 names the fix. And nothing is
+extracted from these solutions yet — no currents, no `R`, no `L` — so the
+physics remains unvalidated. That is step 9, and it cannot usefully run until the
+residual is small.

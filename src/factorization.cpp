@@ -249,4 +249,82 @@ SparseMatrixZ reconstruct(const SymmetricFactor& f) {
     return out;
 }
 
+
+void solve_in_place(const SymmetricFactor& f, std::vector<Complex>& y) {
+    const int n = f.rows;
+    if (static_cast<int>(y.size()) != n) {
+        throw std::invalid_argument("solve_in_place: the right-hand side has " +
+                                    std::to_string(y.size()) + " entries for a factor of " +
+                                    std::to_string(n) + " rows");
+    }
+
+    // L z = y. L is UNIT lower triangular, so there is nothing to divide by;
+    // column-oriented because that is how L is stored.
+    for (int j = 0; j < n; ++j) {
+        const Complex yj = y[static_cast<std::size_t>(j)];
+        for (int t = f.col_ptr[static_cast<std::size_t>(j)];
+             t < f.col_ptr[static_cast<std::size_t>(j) + 1]; ++t) {
+            y[static_cast<std::size_t>(f.row_index[static_cast<std::size_t>(t)])] -=
+                f.value[static_cast<std::size_t>(t)] * yj;
+        }
+    }
+
+    // D w = z.
+    for (int j = 0; j < n; ++j) {
+        const Complex d = f.diagonal[static_cast<std::size_t>(j)];
+        if (d == Complex(0.0, 0.0)) {
+            throw std::logic_error("solve_in_place: D[" + std::to_string(j) +
+                                   "] is zero, so this factor cannot be used. factorize_ldlt "
+                                   "returns false rather than producing one.");
+        }
+        y[static_cast<std::size_t>(j)] /= d;
+    }
+
+    // L^T x = w. The TRANSPOSE, not the conjugate transpose: A = A^T here.
+    for (int j = n - 1; j >= 0; --j) {
+        Complex acc = y[static_cast<std::size_t>(j)];
+        for (int t = f.col_ptr[static_cast<std::size_t>(j)];
+             t < f.col_ptr[static_cast<std::size_t>(j) + 1]; ++t) {
+            acc -= f.value[static_cast<std::size_t>(t)] *
+                   y[static_cast<std::size_t>(f.row_index[static_cast<std::size_t>(t)])];
+        }
+        y[static_cast<std::size_t>(j)] = acc;
+    }
+}
+
+std::vector<Complex> solve(const SymmetricFactor& f, const Permutation& p,
+                           const std::vector<Complex>& b) {
+    const int n = f.rows;
+    if (p.size() != n || static_cast<int>(b.size()) != n) {
+        throw std::invalid_argument("solve: the factor, the permutation and the right-hand side "
+                                    "must all describe the same number of unknowns");
+    }
+    std::vector<Complex> y(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        y[static_cast<std::size_t>(i)] = b[static_cast<std::size_t>(p.perm[static_cast<std::size_t>(i)])];
+    }
+    solve_in_place(f, y);
+    std::vector<Complex> x(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        x[static_cast<std::size_t>(p.perm[static_cast<std::size_t>(i)])] = y[static_cast<std::size_t>(i)];
+    }
+    return x;
+}
+
+double relative_residual(const SparseSymmetricZ& a, const std::vector<Complex>& x,
+                         const std::vector<Complex>& b) {
+    if (static_cast<int>(x.size()) != a.rows() || x.size() != b.size()) {
+        throw std::invalid_argument("relative_residual: lengths must match the matrix");
+    }
+    const std::vector<Complex> ax = a.matvec(x);
+    double numerator = 0.0, denominator = 0.0;
+    for (std::size_t i = 0; i < x.size(); ++i) {
+        numerator += std::norm(ax[i] - b[i]);
+        denominator += std::norm(b[i]);
+    }
+    numerator = std::sqrt(numerator);
+    denominator = std::sqrt(denominator);
+    return denominator > 0.0 ? numerator / denominator : numerator;
+}
+
 }  // namespace aphi_solver

@@ -50,6 +50,9 @@ target_link_libraries(aphi_solver PRIVATE aphi_core)
 add_executable(compare_gauges tools/compare_gauges.cpp)
 target_link_libraries(compare_gauges PRIVATE aphi_core)
 
+add_executable(solve_mesh tools/solve_mesh.cpp)
+target_link_libraries(solve_mesh PRIVATE aphi_core)
+
 if(APHI_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)

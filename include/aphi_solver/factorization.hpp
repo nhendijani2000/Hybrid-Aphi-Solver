@@ -73,6 +73,41 @@ SparseMatrixZ permuted_lower(const SparseSymmetricZ& a, const Permutation& p);
 bool factorize_ldlt(const SparseSymmetricZ& a, const SolverAnalysis& analysis,
                     SymmetricFactor& out, FactorStats& stats, double pivot_floor = 0.0);
 
+/// Solves `L D Lᵀ y = y` in place, in the FACTORIZED ordering.
+///
+/// Three sweeps: forward through `L` (unit lower, so no division), then by
+/// `D`, then backward through `Lᵀ`. The last uses the transpose and **not** the
+/// conjugate transpose -- these matrices are complex symmetric, and a stray
+/// conjugation here gives a wrong answer with a small-looking residual, since
+/// the residual would be computed against the same wrong operator.
+///
+/// Throws std::invalid_argument on a length mismatch, and std::logic_error if a
+/// diagonal entry is zero -- which cannot happen for a factor `factorize_ldlt`
+/// returned true for, so it means the factor came from somewhere else.
+void solve_in_place(const SymmetricFactor& f, std::vector<std::complex<double>>& y);
+
+/// Solves `A x = b` for the original, unpermuted `A`.
+///
+/// The factorization is of `P A Pᵀ`, so with `b~[i] = b[perm[i]]` and
+/// `x[perm[i]] = x~[i]`:
+///
+///     P A Pᵀ (P x) = P b
+///
+/// Both directions use **`perm`**, one on the way in and one on the way out.
+/// Using `iperm` for either, or permuting the right-hand side and forgetting the
+/// solution, gives a smooth plausible field that solves nothing -- which is why
+/// one test solves the same system under two different orderings and requires
+/// the same answer.
+std::vector<std::complex<double>> solve(const SymmetricFactor& f, const Permutation& p,
+                                       const std::vector<std::complex<double>>& b);
+
+/// `||A x - b|| / ||b||` in the 2-norm, on the ORIGINAL system: unpermuted, and
+/// unscaled by anything the solver did internally. That is what makes it a true
+/// backward error rather than a statement about the factorization's own
+/// arithmetic. Returns `||A x||` when `b` is zero.
+double relative_residual(const SparseSymmetricZ& a, const std::vector<std::complex<double>>& x,
+                         const std::vector<std::complex<double>>& b);
+
 /// `L D Lᵀ` expanded back to a full matrix, for checking. Only for tests and
 /// diagnostics -- it is quadratic in a column's length and defeats the whole
 /// point of a sparse factor.

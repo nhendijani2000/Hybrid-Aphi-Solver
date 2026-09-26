@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "aphi_solver/complex_matrix.hpp"
 #include "aphi_solver/factorization.hpp"
 
 using namespace aphi_solver;
@@ -307,6 +308,161 @@ void test_permuted_lower_is_the_matrix() {
               std::to_string(a.nnz()) + ")");
 }
 
+
+// The first end-to-end solve. Three independent ways of being sure:
+//
+//  1. the residual ||A x - b|| / ||b|| on the ORIGINAL system,
+//  2. the same system solved under three different orderings, which must agree
+//     -- this is what catches a perm/iperm confusion, since the solution cannot
+//     depend on the order the unknowns were eliminated in,
+//  3. against `solve_dense`, which shares no code with any of this.
+void test_solve_and_residual() {
+    const int n = 30;
+    std::vector<std::pair<std::pair<int, int>, Complex>> entries;
+    for (int i = 0; i < n; ++i) entries.push_back({{i, i}, Complex(80.0 + i, 3.0)});
+    for (int i = 0; i + 1 < n; ++i) entries.push_back({{i, i + 1}, Complex(2.0, -1.5)});
+    for (int i = 0; i + 4 < n; ++i) entries.push_back({{i, i + 4}, Complex(-1.0, 0.75)});
+    for (int i = 0; i + 9 < n; ++i) entries.push_back({{i, i + 9}, Complex(0.5, 0.5)});
+    const SparseSymmetricZ a = symmetric_from(n, entries);
+
+    std::vector<Complex> b(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        b[static_cast<std::size_t>(i)] = Complex(1.0 + 0.1 * i, 0.5 - 0.02 * i);
+    }
+
+    std::vector<std::vector<Complex>> solutions;
+    for (const Ordering o : {Ordering::Natural, Ordering::ReverseCuthillMcKee,
+                             Ordering::ApproximateMinimumDegree}) {
+        const SolverAnalysis an = analyze(a, o);
+        SymmetricFactor f;
+        FactorStats s;
+        check(factorize_ldlt(a, an, f, s), std::string(ordering_keyword(o)) + ": factorizes");
+        const std::vector<Complex> x = solve(f, an.permutation, b);
+        const double r = relative_residual(a, x, b);
+        check(r < 1e-13, std::string(ordering_keyword(o)) +
+                             ": the residual is at machine precision (" + std::to_string(r) + ")");
+        solutions.push_back(x);
+    }
+
+    // The solution cannot depend on the ordering. A perm/iperm confusion would
+    // still give a self-consistent-looking field, but a different one.
+    double worst = 0.0;
+    double scale = 0.0;
+    for (const Complex& v : solutions[0]) scale = std::max(scale, std::abs(v));
+    for (std::size_t k = 1; k < solutions.size(); ++k) {
+        for (int i = 0; i < n; ++i) {
+            worst = std::max(worst, std::abs(solutions[k][static_cast<std::size_t>(i)] -
+                                             solutions[0][static_cast<std::size_t>(i)]));
+        }
+    }
+    check(worst < 1e-12 * scale,
+          "all three orderings give the same solution (worst difference " +
+              std::to_string(worst) + " against entries up to " + std::to_string(scale) + ")");
+
+    // Against a dense solve, which shares no code with the sparse path.
+    ComplexMatrix dense(n, n);
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) dense(i, j) = a.entry(i, j);
+    }
+    ComplexMatrix rhs(n, 1);
+    for (int i = 0; i < n; ++i) rhs(i, 0) = b[static_cast<std::size_t>(i)];
+    const ComplexMatrix xd = solve_dense(dense, rhs);
+    double worst_vs_dense = 0.0;
+    for (int i = 0; i < n; ++i) {
+        worst_vs_dense = std::max(worst_vs_dense,
+                                  std::abs(solutions[0][static_cast<std::size_t>(i)] - xd(i, 0)));
+    }
+    check(worst_vs_dense < 1e-11 * scale,
+          "and the same solution as a dense LU (worst difference " +
+              std::to_string(worst_vs_dense) + ")");
+}
+
+// The residual must be able to report a bad answer, or it proves nothing.
+void test_residual_detects_a_wrong_answer() {
+    const SparseSymmetricZ a =
+        symmetric_from(3, {{{0, 0}, {4.0, 0.0}},
+                           {{0, 1}, {1.0, 0.0}},
+                           {{1, 1}, {3.0, 0.0}},
+                           {{1, 2}, {1.0, 0.0}},
+                           {{2, 2}, {5.0, 0.0}}});
+    const std::vector<Complex> b = {Complex(1.0, 0.0), Complex(2.0, 0.0), Complex(3.0, 0.0)};
+    const SolverAnalysis an = analyze(a, Ordering::Natural);
+    SymmetricFactor f;
+    FactorStats s;
+    check(factorize_ldlt(a, an, f, s), "factorizes");
+    const std::vector<Complex> x = solve(f, an.permutation, b);
+    check(relative_residual(a, x, b) < 1e-15, "the solution has a zero residual");
+
+    std::vector<Complex> wrong = x;
+    wrong[1] += Complex(0.01, 0.0);
+    const double bad = relative_residual(a, wrong, b);
+    check(bad > 1e-3,
+          "and perturbing one entry by 0.01 gives a residual of " + std::to_string(bad) +
+              " -- the residual is a real measurement, not a tautology");
+
+    const std::vector<Complex> zero(3, Complex(0.0, 0.0));
+    check(std::abs(relative_residual(a, zero, b) - 1.0) < 1e-15,
+          "and x = 0 gives exactly 1, since the residual is then the norm of b over itself");
+}
+
+// A solve whose answer is known without any solver.
+void test_solve_by_hand() {
+    const SparseSymmetricZ diag =
+        symmetric_from(3, {{{0, 0}, {2.0, 0.0}}, {{1, 1}, {0.0, 4.0}}, {{2, 2}, {-1.0, 0.0}}});
+    const SolverAnalysis an = analyze(diag, Ordering::Natural);
+    SymmetricFactor f;
+    FactorStats s;
+    factorize_ldlt(diag, an, f, s);
+    const std::vector<Complex> b = {Complex(4.0, 0.0), Complex(8.0, 0.0), Complex(3.0, 0.0)};
+    const std::vector<Complex> x = solve(f, an.permutation, b);
+    check(std::abs(x[0] - Complex(2.0, 0.0)) < 1e-15, "x0 = 4 / 2 = 2");
+    check(std::abs(x[1] - Complex(0.0, -2.0)) < 1e-15, "x1 = 8 / 4i = -2i");
+    check(std::abs(x[2] - Complex(-3.0, 0.0)) < 1e-15, "x2 = 3 / -1 = -3");
+
+    // [[2,3],[3,5]] x = [5,8] has the exact solution [1,1].
+    const SparseSymmetricZ two =
+        symmetric_from(2, {{{0, 0}, {2.0, 0.0}}, {{0, 1}, {3.0, 0.0}}, {{1, 1}, {5.0, 0.0}}});
+    const SolverAnalysis an2 = analyze(two, Ordering::Natural);
+    SymmetricFactor f2;
+    FactorStats s2;
+    factorize_ldlt(two, an2, f2, s2);
+    const std::vector<Complex> x2 =
+        solve(f2, an2.permutation, {Complex(5.0, 0.0), Complex(8.0, 0.0)});
+    check(std::abs(x2[0] - Complex(1.0, 0.0)) < 1e-14 &&
+              std::abs(x2[1] - Complex(1.0, 0.0)) < 1e-14,
+          "the 2x2 gives x = [1,1] exactly");
+}
+
+// A conjugation in the backward sweep would be invisible to a residual computed
+// with the same mistake, so this checks against the matrix entry by entry.
+void test_no_conjugation_in_the_solve() {
+    const SparseSymmetricZ a = symmetric_from(4, {{{0, 0}, {5.0, 1.0}},
+                                                  {{0, 1}, {1.0, 2.0}},
+                                                  {{0, 3}, {0.5, -1.0}},
+                                                  {{1, 1}, {6.0, -2.0}},
+                                                  {{1, 2}, {2.0, 3.0}},
+                                                  {{2, 2}, {7.0, 0.5}},
+                                                  {{2, 3}, {-1.0, 1.5}},
+                                                  {{3, 3}, {8.0, -1.0}}});
+    const std::vector<Complex> b = {Complex(1.0, 1.0), Complex(2.0, -1.0), Complex(-1.0, 0.5),
+                                    Complex(0.25, 2.0)};
+    const SolverAnalysis an = analyze(a, Ordering::ApproximateMinimumDegree);
+    SymmetricFactor f;
+    FactorStats s;
+    check(factorize_ldlt(a, an, f, s), "a fully complex symmetric system factorizes");
+    const std::vector<Complex> x = solve(f, an.permutation, b);
+
+    double worst = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        Complex row(0.0, 0.0);
+        for (int j = 0; j < 4; ++j) row += a.entry(i, j) * x[static_cast<std::size_t>(j)];
+        worst = std::max(worst, std::abs(row - b[static_cast<std::size_t>(i)]));
+    }
+    check(worst < 1e-13,
+          "and A x = b holds against A's own entries (worst " + std::to_string(worst) +
+              ") -- a conjugation in the backward sweep would show here");
+}
+
 }  // namespace
 
 int main() {
@@ -316,6 +472,10 @@ int main() {
     test_factor_fills_exactly_what_was_reserved();
     test_zero_pivot_is_reported();
     test_permuted_lower_is_the_matrix();
+    test_solve_and_residual();
+    test_residual_detects_a_wrong_answer();
+    test_solve_by_hand();
+    test_no_conjugation_in_the_solve();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
