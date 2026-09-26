@@ -105,6 +105,15 @@ void print_summary(const std::string& path, const ParseResult& r, const Mesh& me
     std::cout << "          Phi lives on "
               << (phi_on_conductors_only(p) ? "conductors only (sigma > 0)" : "the whole domain")
               << "\n";
+    std::cout << "solver    conditioning " << conditioning_keyword(p.conditioning);
+    if (p.conditioning == Conditioning::Natural) {
+        std::cout << "      unsymmetric matrix; defined at every frequency\n";
+    } else {
+        std::cout << "   symmetric matrix"
+                  << (p.conditioning == Conditioning::ScaledPhi ? "; the unknown is Phi/(j*omega)"
+                                                                : "")
+                  << "\n";
+    }
     std::cout << "boundary  flux_tangential   n x A = 0 on the outer boundary, Phi free\n";
 
     std::cout << "\nbodies (" << b.bodies.size() << ")\n";

@@ -118,6 +118,7 @@ private:
     void read_mesh(const Section& s);
     void read_analysis(const Section& s);
     void read_boundary(const Section& s);
+    void read_solver(const Section& s);
     void read_body(const Section& s);
     void read_port(const Section& s);
 
@@ -144,6 +145,7 @@ private:
     bool saw_mesh_ = false;
     bool saw_analysis_ = false;
     int analysis_line_ = 0;
+    int conditioning_line_ = 0;  ///< where [solver] conditioning was set, for the DC check
 };
 
 // ---------------------------------------------------------------------------
@@ -438,6 +440,19 @@ void Parser::read_boundary(const Section& s) {
     }
 }
 
+void Parser::read_solver(const Section& s) {
+    reject_unknown_keys(s, {"conditioning"});
+    if (const Entry* e = find(s, "conditioning")) {
+        const std::string word = as_keyword(*e, {"natural", "row_scaled", "scaled_phi"});
+        Conditioning picked = Conditioning::Natural;
+        if (!conditioning_from_keyword(word, picked)) {
+            fail(e->line, "'conditioning = " + word + "' is not one I know");
+        }
+        result_.problem.conditioning = picked;
+        conditioning_line_ = e->line;
+    }
+}
+
 void Parser::read_body(const Section& s) {
     if (s.name.empty()) fail(s.line, "a [Body] section needs a name, as in '[Body B1]'");
     reject_unknown_keys(s, {"volume", "sigma", "eps_r", "mu_r"});
@@ -554,6 +569,18 @@ void Parser::check_whole_problem(const std::vector<Section>& sections) {
     if (p.bodies.empty()) fail(0, "no [Body ...] section: the model has no material anywhere");
     if (p.ports.empty()) fail(0, "no [port ...] section: nothing would drive the problem");
 
+    // Both symmetric forms divide by j*omega -- RowScaled in the Phi rows,
+    // ScaledPhi in any prescribed potential -- so neither exists at DC. That
+    // is caught here, with the line the user wrote, rather than left to throw
+    // from inside assembly with no idea where it came from.
+    if (p.type == AnalysisType::DC && conditioning_needs_ac(p.conditioning)) {
+        fail(conditioning_line_,
+             std::string("conditioning = ") + conditioning_keyword(p.conditioning) +
+                 " needs a non-zero frequency: it scales the Phi equations by 1/(j*omega), which "
+                 "is undefined at DC. At DC the system decouples and there is no coupling block "
+                 "to symmetrise, so use conditioning = natural");
+    }
+
     // A potential reference is needed or Phi is fixed only up to a constant
     // and the matrix is singular. A voltage port supplies one directly; an
     // internal port supplies one too, since it holds its minus side at 0 V.
@@ -627,11 +654,13 @@ ParseResult Parser::run() {
             read_body(s);
         } else if (s.kind == "port") {
             read_port(s);
-        } else if (s.kind == "solver" || s.kind == "output") {
+        } else if (s.kind == "solver") {
+            read_solver(s);
+        } else if (s.kind == "output") {
             fail(s.line, "[" + s.kind + "] is reserved but not supported yet");
         } else {
             fail(s.line, "unknown section '[" + s.kind + "]'; valid sections are mesh, analysis, "
-                         "boundary, Body, port");
+                         "boundary, solver, Body, port");
         }
     }
 

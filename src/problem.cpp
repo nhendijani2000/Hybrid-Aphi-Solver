@@ -71,6 +71,30 @@ Vec3 resolve_cut_direction(const Vec3& hint, const Vec3& normal, double min_alig
     return alignment > 0.0 ? n : n * -1.0;
 }
 
+const char* conditioning_keyword(Conditioning c) {
+    switch (c) {
+        case Conditioning::Natural: return "natural";
+        case Conditioning::RowScaled: return "row_scaled";
+        case Conditioning::ScaledPhi: return "scaled_phi";
+    }
+    return "natural";
+}
+
+bool conditioning_from_keyword(const std::string& word, Conditioning& out) {
+    if (word == "natural") {
+        out = Conditioning::Natural;
+    } else if (word == "row_scaled") {
+        out = Conditioning::RowScaled;
+    } else if (word == "scaled_phi") {
+        out = Conditioning::ScaledPhi;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool conditioning_needs_ac(Conditioning c) { return c != Conditioning::Natural; }
+
 bool phi_on_conductors_only(const Problem& problem) {
     return problem.type == AnalysisType::DC || problem.formulation == Formulation::Reduced;
 }

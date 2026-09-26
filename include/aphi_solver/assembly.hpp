@@ -13,10 +13,8 @@ namespace aphi_solver {
 
 /// Global assembly: the numeric pass. See `docs/ASSEMBLY_PLAN.md` §4.
 
-/// Which of the three conditioning formulations to assemble
-/// (`docs/CONDITIONING.md`). They differ only in a row scale `r` applied to
-/// every Phi-row contribution and a column scale `c` from the substitution
-/// `Phi = c * Phi'`:
+/// `Conditioning` (declared in problem.hpp, so the input file can name it)
+/// selects among three scalings of the same system:
 ///
 /// | | r | c | (A,Phi) | (Phi,A) | symmetric |
 /// |---|---|---|---|---|---|
@@ -27,11 +25,6 @@ namespace aphi_solver {
 /// Both symmetric cases work because `alpha = j*w*beta`: RowScaled divides
 /// the `j*w` out of the Phi row, ScaledPhi supplies it to the Phi column
 /// instead. The condition is exactly `c == r * j*w`.
-enum class Formulation3 {
-    Natural,    ///< as assembled; needs a general (LU) solver
-    RowScaled,  ///< CONDITIONING.md Formulation 1
-    ScaledPhi   ///< CONDITIONING.md Formulation 2; the unknown becomes Phi'
-};
 
 /// The scales for one formulation at one frequency.
 struct FormulationScales {
@@ -47,7 +40,7 @@ struct FormulationScales {
 /// both need a division by `j*omega` somewhere (the row here, a prescribed
 /// value in ScaledPhi's case), and at DC the system decouples anyway so
 /// there is no coupling block to symmetrise.
-FormulationScales formulation_scales(Formulation3 f, double omega);
+FormulationScales formulation_scales(Conditioning f, double omega);
 
 /// Every tet's scatter positions, computed once and reused at every
 /// frequency -- candidate A of `docs/ASSEMBLY_PLAN.md` Sec. 11.
@@ -146,11 +139,11 @@ AssembledSystem make_system(const SparsityPattern& pattern, int num_unknowns);
 /// dropping the term instead would give a quietly wrong matrix.
 void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh,
             const DofMap& dofs, const SparsityPattern& pattern, double omega,
-            Formulation3 formulation, const ScatterMap* scatter = nullptr);
+            Conditioning formulation, const ScatterMap* scatter = nullptr);
 
 /// `make_system` then `refill`, for a single solve. A sweep should call the
 /// two separately and keep the system between frequencies.
 AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofMap& dofs,
-                         const SparsityPattern& pattern, double omega, Formulation3 formulation);
+                         const SparsityPattern& pattern, double omega, Conditioning formulation);
 
 }  // namespace aphi_solver

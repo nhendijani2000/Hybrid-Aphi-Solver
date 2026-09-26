@@ -55,3 +55,16 @@ current     = 1.0                          # A, peak
 type        = boundary_voltage
 surface     = wire_top
 voltage     = 0.0                          # the 0 V reference
+
+[solver]
+# Which of the three scalings of the same system to assemble
+# (docs/CONDITIONING.md). All three have the same solution.
+#
+#   natural      r = 1,          c = 1          unsymmetric
+#   row_scaled   r = 1/(j*w),    c = 1          symmetric
+#   scaled_phi   r = 1,          c = j*w        symmetric, unknown is Phi'
+#
+# This is NOT `formulation` in [analysis], which decides where Phi lives.
+# The two symmetric forms divide by j*omega, so they do not exist at DC --
+# with `type = dc` only natural is accepted.
+conditioning = natural

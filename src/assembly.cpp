@@ -9,16 +9,16 @@ namespace aphi_solver {
 
 using Complex = std::complex<double>;
 
-FormulationScales formulation_scales(Formulation3 f, double omega) {
+FormulationScales formulation_scales(Conditioning f, double omega) {
     const Complex jw(0.0, omega);
     FormulationScales s;
     switch (f) {
-        case Formulation3::Natural:
+        case Conditioning::Natural:
             s.row = Complex(1.0, 0.0);
             s.column = Complex(1.0, 0.0);
             s.symmetric = false;
             return s;
-        case Formulation3::RowScaled:
+        case Conditioning::RowScaled:
             if (omega == 0.0) {
                 throw std::invalid_argument(
                     "formulation_scales: the row-scaled formulation divides the Phi rows by "
@@ -29,7 +29,7 @@ FormulationScales formulation_scales(Formulation3 f, double omega) {
             s.column = Complex(1.0, 0.0);
             s.symmetric = true;
             return s;
-        case Formulation3::ScaledPhi:
+        case Conditioning::ScaledPhi:
             if (omega == 0.0) {
                 throw std::invalid_argument(
                     "formulation_scales: the scaled-potential formulation substitutes "
@@ -224,7 +224,7 @@ AssembledSystem make_system(const SparsityPattern& pattern, int num_unknowns) {
 
 void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh,
             const DofMap& dofs, const SparsityPattern& pattern, double omega,
-            Formulation3 formulation, const ScatterMap* scatter) {
+            Conditioning formulation, const ScatterMap* scatter) {
     const FormulationScales scales = formulation_scales(formulation, omega);
     const Complex jw(0.0, omega);
 
@@ -395,7 +395,7 @@ void refill(AssembledSystem& system, const BoundProblem& bound, const Mesh& mesh
 }
 
 AssembledSystem assemble(const BoundProblem& bound, const Mesh& mesh, const DofMap& dofs,
-                         const SparsityPattern& pattern, double omega, Formulation3 formulation) {
+                         const SparsityPattern& pattern, double omega, Conditioning formulation) {
     AssembledSystem out = make_system(pattern, dofs.num_total);
     refill(out, bound, mesh, dofs, pattern, omega, formulation);
     return out;

@@ -19,6 +19,7 @@
 #include "aphi_solver/input_file.hpp"
 
 using aphi_solver::AnalysisType;
+using aphi_solver::Conditioning;
 using aphi_solver::Formulation;
 using aphi_solver::InputError;
 using aphi_solver::LengthUnit;
@@ -26,6 +27,8 @@ using aphi_solver::ParseResult;
 using aphi_solver::PortType;
 using aphi_solver::Problem;
 using aphi_solver::Vec3;
+using aphi_solver::conditioning_from_keyword;
+using aphi_solver::conditioning_keyword;
 
 namespace {
 
@@ -226,7 +229,6 @@ void test_syntax_errors() {
     expect_error("[mesh]\nfile =\n", 2, "missing value");
     expect_error("[mesh]\nfile = a\nfile = b\n", 3, "duplicate key reports the second one");
     expect_error("[wrong]\nx = 1\n", 1, "unknown section");
-    expect_error("[solver]\nx = 1\n", 1, "reserved [solver] section");
     expect_error("[output]\nx = 1\n", 1, "reserved [output] section");
 }
 
@@ -503,6 +505,78 @@ void test_boundary_section() {
     expect_error(head + "[boundary shield]\nouter = pec\n" + tail, 6, "named [boundary] section");
 }
 
+// The [solver] section: which of the three conditioning scalings to assemble.
+//
+// This is NOT `formulation` in [analysis], which decides where Phi lives.
+// Two keys that both used to be called "formulation" is exactly the kind of
+// thing a test should nail down.
+void test_solver_section() {
+    const std::string head = "[mesh]\nfile = m.msh\nlength_unit = mm\n[analysis]\ntype = dc\n";
+    const std::string ac =
+        "[mesh]\nfile = m.msh\nlength_unit = mm\n[analysis]\ntype = frequency\nfrequencies = 1e6\n";
+    const std::string tail =
+        "[Body B1]\nvolume = w\nsigma = 1\n"
+        "[port P1]\ntype = boundary_voltage\nsurface = s\nvoltage = 0\n";
+
+    // The default, which is what a file with no [solver] section gets.
+    const ParseResult none = expect_ok(head + tail, "a file with no [solver] section parses");
+    check(none.problem.conditioning == Conditioning::Natural,
+          "and its conditioning is natural");
+
+    const ParseResult nat =
+        expect_ok(head + "[solver]\nconditioning = natural\n" + tail, "natural parses");
+    check(nat.problem.conditioning == Conditioning::Natural, "natural reads back as natural");
+
+    // Both symmetric forms, at a frequency where they are defined.
+    const ParseResult rs = expect_ok(ac + "[solver]\nconditioning = row_scaled\n" + tail,
+                                     "row_scaled parses at a real frequency");
+    check(rs.problem.conditioning == Conditioning::RowScaled, "row_scaled reads back as itself");
+    const ParseResult sp = expect_ok(ac + "[solver]\nconditioning = scaled_phi\n" + tail,
+                                     "scaled_phi parses at a real frequency");
+    check(sp.problem.conditioning == Conditioning::ScaledPhi, "scaled_phi reads back as itself");
+
+    // The keyword round-trips, so the message a user sees names what they wrote.
+    check(std::string(conditioning_keyword(Conditioning::Natural)) == "natural" &&
+              std::string(conditioning_keyword(Conditioning::RowScaled)) == "row_scaled" &&
+              std::string(conditioning_keyword(Conditioning::ScaledPhi)) == "scaled_phi",
+          "every conditioning has its input-file keyword");
+    Conditioning parsed = Conditioning::Natural;
+    check(conditioning_from_keyword("scaled_phi", parsed) && parsed == Conditioning::ScaledPhi,
+          "and the keyword maps back");
+    check(!conditioning_from_keyword("symmetric", parsed),
+          "an unknown keyword is refused rather than guessed at");
+
+    // Both symmetric forms divide by j*omega, so neither exists at DC. The
+    // complaint must arrive at parse time with the user's own line number,
+    // not from inside assembly later where nothing knows the line.
+    const std::string row_at_dc =
+        expect_error(head + "[solver]\nconditioning = row_scaled\n" + tail, 7,
+                     "row_scaled is refused at DC");
+    check(row_at_dc.find("natural") != std::string::npos,
+          "and the message says what to use instead");
+    expect_error(head + "[solver]\nconditioning = scaled_phi\n" + tail, 7,
+                 "scaled_phi is refused at DC too");
+
+    // The control for those two: identical files with only the analysis type
+    // changed must parse, or the rejection could be about anything.
+    expect_ok(ac + "[solver]\nconditioning = row_scaled\n" + tail,
+              "control: the same file at 1 MHz is accepted");
+
+    expect_error(head + "[solver]\nconditioning = nonsense\n" + tail, 7,
+                 "an unknown conditioning value");
+    expect_error(head + "[solver]\nx = 1\n" + tail, 7, "an unknown key in [solver]");
+
+    // The two settings are independent. `formulation` decides where Phi
+    // lives; `conditioning` decides how the Phi equations are scaled.
+    const ParseResult both =
+        expect_ok(ac + "formulation = reduced\n[solver]\nconditioning = scaled_phi\n" + tail,
+                  "formulation and conditioning can both be set");
+    check(both.problem.formulation == Formulation::Reduced &&
+              both.problem.conditioning == Conditioning::ScaledPhi,
+          "and they do not collide -- one is where Phi lives, the other how it is scaled");
+}
+
+
 }  // namespace
 
 int main() {
@@ -519,6 +593,7 @@ int main() {
     test_frequency_rules();
     test_sweep_expansion();
     test_boundary_section();
+    test_solver_section();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

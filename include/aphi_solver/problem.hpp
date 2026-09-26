@@ -44,6 +44,31 @@ enum class Formulation {
     Reduced    ///< eps -> 0; the eddy-current variant, Phi on conductors.
 };
 
+/// How the assembled system is scaled, from `docs/CONDITIONING.md`. This is
+/// **not** `Formulation` above, which decides where Phi lives; this decides
+/// only how the Phi rows and columns are scaled, and therefore whether the
+/// matrix comes out symmetric. The two were both called "formulation" in
+/// earlier drafts, which is exactly the confusion this comment exists to
+/// prevent.
+///
+/// All three describe the same problem and have the same solution. They
+/// differ in a row scale `r` on every Phi row and a column scale `c` from
+/// the substitution `Phi = c * Phi'`; the matrix is symmetric exactly when
+/// `c == r * j*omega`.
+enum class Conditioning {
+    Natural,    ///< r = 1, c = 1. Unsymmetric; needs a general (LU) solver.
+    RowScaled,  ///< r = 1/(j*omega), c = 1. Symmetric. CONDITIONING.md F1.
+    ScaledPhi   ///< r = 1, c = j*omega. Symmetric, and the unknown is Phi'.
+};
+
+/// The input-file keyword for one conditioning choice, and back. `name_to`
+/// returns false for anything else rather than guessing.
+const char* conditioning_keyword(Conditioning c);
+bool conditioning_from_keyword(const std::string& word, Conditioning& out);
+
+/// True for the two that need `j*omega` and so cannot be used at DC.
+bool conditioning_needs_ac(Conditioning c);
+
 /// Treatment of the outer domain boundary. Only one value today; the enum
 /// exists so adding PEC and ABC later is a new enumerator rather than a
 /// change of representation.
@@ -147,6 +172,11 @@ struct Problem {
 
     Formulation formulation = Formulation::FullWave;
     OuterBoundary outer = OuterBoundary::FluxTangential;
+
+    /// Defaults to Natural: it is the only one defined at every frequency,
+    /// and choosing between the three is a measurement nobody can make until
+    /// a solver reports a condition number (ASSEMBLY_PLAN Sec. 9 item 5).
+    Conditioning conditioning = Conditioning::Natural;
 
     std::vector<Body> bodies;
     std::vector<Port> ports;

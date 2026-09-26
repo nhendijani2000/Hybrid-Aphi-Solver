@@ -191,7 +191,7 @@ void test_agrees_with_the_triplet_path() {
     const BoundProblem b = bind_cube(m, 0.0);
     const DofMap d = build_dof_map(b, m);
     const SparsityPattern sp = build_sparsity(d, b, m);
-    const AssembledSystem sys = assemble(b, m, d, sp, 0.0, Formulation3::Natural);
+    const AssembledSystem sys = assemble(b, m, d, sp, 0.0, Conditioning::Natural);
 
     // The same assembly, by hand, into a triplet matrix.
     SparseMatrixZ ref(d.num_total, d.num_total);
@@ -260,7 +260,7 @@ void test_dc_structure() {
     const BoundProblem b = bind_cube(m, 0.0);
     const DofMap d = build_dof_map(b, m);
     const SparsityPattern sp = build_sparsity(d, b, m);
-    const AssembledSystem sys = assemble(b, m, d, sp, 0.0, Formulation3::Natural);
+    const AssembledSystem sys = assemble(b, m, d, sp, 0.0, Conditioning::Natural);
 
     check(sys.matrix.rows() == d.num_total, "the matrix is num_total square");
     check(sys.rhs.size() == static_cast<std::size_t>(d.num_total), "the RHS has one entry per DOF");
@@ -295,7 +295,7 @@ void test_dc_structure() {
     const BoundProblem b0 = bind_cube(m0, 0.0, 0.0);
     const DofMap d0 = build_dof_map(b0, m0);
     const SparsityPattern sp0 = build_sparsity(d0, b0, m0);
-    const AssembledSystem quiet = assemble(b0, m0, d0, sp0, 0.0, Formulation3::Natural);
+    const AssembledSystem quiet = assemble(b0, m0, d0, sp0, 0.0, Conditioning::Natural);
 
     double worst_elsewhere = 0.0;
     for (int i = 0; i < d.num_total; ++i) {
@@ -354,10 +354,10 @@ void test_formulations_are_row_and_column_scalings() {
     const DofMap d = build_dof_map(b, m);
     const SparsityPattern sp = build_sparsity(d, b, m);
 
-    const AssembledSystem natural = assemble(b, m, d, sp, omega, Formulation3::Natural);
+    const AssembledSystem natural = assemble(b, m, d, sp, omega, Conditioning::Natural);
     const auto is_phi_row = [&](int i) { return i >= d.num_a; };
 
-    for (const Formulation3 which : {Formulation3::RowScaled, Formulation3::ScaledPhi}) {
+    for (const Conditioning which : {Conditioning::RowScaled, Conditioning::ScaledPhi}) {
         const FormulationScales s = formulation_scales(which, omega);
         const AssembledSystem scaled = assemble(b, m, d, sp, omega, which);
 
@@ -429,9 +429,9 @@ void test_symmetry() {
         return worst;
     };
 
-    const AssembledSystem natural = assemble(b, m, d, sp, omega, Formulation3::Natural);
-    const AssembledSystem rows = assemble(b, m, d, sp, omega, Formulation3::RowScaled);
-    const AssembledSystem cols = assemble(b, m, d, sp, omega, Formulation3::ScaledPhi);
+    const AssembledSystem natural = assemble(b, m, d, sp, omega, Conditioning::Natural);
+    const AssembledSystem rows = assemble(b, m, d, sp, omega, Conditioning::RowScaled);
+    const AssembledSystem cols = assemble(b, m, d, sp, omega, Conditioning::ScaledPhi);
 
     const double scale = max_abs(natural.matrix);
     check(worst_asymmetry(rows) < 1e-9 * max_abs(rows.matrix),
@@ -445,7 +445,7 @@ void test_symmetry() {
 }
 
 void test_dc_refuses_the_scaled_formulations() {
-    const auto refuses = [](Formulation3 f) {
+    const auto refuses = [](Conditioning f) {
         try {
             formulation_scales(f, 0.0);
         } catch (const std::invalid_argument&) {
@@ -455,12 +455,12 @@ void test_dc_refuses_the_scaled_formulations() {
         }
         return false;
     };
-    check(refuses(Formulation3::RowScaled), "row scaling refuses DC rather than dividing by zero");
-    check(refuses(Formulation3::ScaledPhi), "the scaled potential refuses DC too");
+    check(refuses(Conditioning::RowScaled), "row scaling refuses DC rather than dividing by zero");
+    check(refuses(Conditioning::ScaledPhi), "the scaled potential refuses DC too");
 
     bool natural_ok = true;
     try {
-        formulation_scales(Formulation3::Natural, 0.0);
+        formulation_scales(Conditioning::Natural, 0.0);
     } catch (...) {
         natural_ok = false;
     }
@@ -469,13 +469,13 @@ void test_dc_refuses_the_scaled_formulations() {
     // The symmetry condition, asserted rather than claimed.
     const double omega = 12345.0;
     const Complex jw(0.0, omega);
-    for (const Formulation3 f : {Formulation3::RowScaled, Formulation3::ScaledPhi}) {
+    for (const Conditioning f : {Conditioning::RowScaled, Conditioning::ScaledPhi}) {
         const FormulationScales s = formulation_scales(f, omega);
         check(std::abs(s.column - s.row * jw) < 1e-9 * std::abs(s.column),
               "c == r * j*omega for a symmetric formulation");
         check(s.symmetric, "and it says so");
     }
-    const FormulationScales n = formulation_scales(Formulation3::Natural, omega);
+    const FormulationScales n = formulation_scales(Conditioning::Natural, omega);
     check(std::abs(n.column - n.row * jw) > 1.0, "and NOT for the natural one");
     check(!n.symmetric, "which it also says");
 }
@@ -524,7 +524,7 @@ void test_cylinder() {
     const BoundProblem b = bind_to_mesh(p, m);
     const DofMap d = build_dof_map(b, m);
     const SparsityPattern sp = build_sparsity(d, b, m);
-    const AssembledSystem sys = assemble(b, m, d, sp, 0.0, Formulation3::Natural);
+    const AssembledSystem sys = assemble(b, m, d, sp, 0.0, Conditioning::Natural);
 
     check(sys.matrix.nnz() == sp.nnz(), "the assembled matrix uses every slot the pattern gave");
     check(max_abs(sys.matrix) > 0.0, "and it is not all zeros");
@@ -658,7 +658,7 @@ void test_refill_and_scatter_map() {
     const DofMap d = build_dof_map(b, m);
     const SparsityPattern sp = build_sparsity(d, b, m);
 
-    const AssembledSystem once = assemble(b, m, d, sp, omega, Formulation3::Natural);
+    const AssembledSystem once = assemble(b, m, d, sp, omega, Conditioning::Natural);
 
     // --- make_system on its own -----------------------------------------
     AssembledSystem sys = make_system(sp, d.num_total);
@@ -673,7 +673,7 @@ void test_refill_and_scatter_map() {
           "with one zero RHS entry per unknown");
 
     // --- refill reproduces assemble --------------------------------------
-    refill(sys, b, m, d, sp, omega, Formulation3::Natural);
+    refill(sys, b, m, d, sp, omega, Conditioning::Natural);
     check(same_values(sys, once), "make_system + refill equals assemble exactly");
 
     // --- refill CLEARS ----------------------------------------------------
@@ -681,14 +681,14 @@ void test_refill_and_scatter_map() {
     // every value. The result would still be symmetric, still have the right
     // pattern, and still scale correctly between formulations -- it would
     // look right to every other test here.
-    refill(sys, b, m, d, sp, omega, Formulation3::Natural);
+    refill(sys, b, m, d, sp, omega, Conditioning::Natural);
     check(same_values(sys, once), "a second refill at the same omega gives the same system, "
                                   "not twice it -- it clears first");
 
     // --- a sweep: no residue from the previous frequency -------------------
     const double other = 2.0 * M_PI * 1e9;
-    refill(sys, b, m, d, sp, other, Formulation3::Natural);
-    const AssembledSystem fresh = assemble(b, m, d, sp, other, Formulation3::Natural);
+    refill(sys, b, m, d, sp, other, Conditioning::Natural);
+    const AssembledSystem fresh = assemble(b, m, d, sp, other, Conditioning::Natural);
     check(same_values(sys, fresh),
           "refilling at 1 GHz after 1 MHz equals a fresh assembly at 1 GHz");
     check(!same_values(sys, once),
@@ -700,13 +700,13 @@ void test_refill_and_scatter_map() {
     check(map.bytes() > 0, "and holds something");
 
     AssembledSystem mapped = make_system(sp, d.num_total);
-    refill(mapped, b, m, d, sp, omega, Formulation3::Natural, &map);
+    refill(mapped, b, m, d, sp, omega, Conditioning::Natural, &map);
     check(bitwise_equal(mapped, once),
           "the ScatterMap path is BITWISE identical to working the slots out per tet -- "
           "same slots, same order, same arithmetic");
 
     // Across all three formulations, since the map is shared between them.
-    for (const Formulation3 f : {Formulation3::RowScaled, Formulation3::ScaledPhi}) {
+    for (const Conditioning f : {Conditioning::RowScaled, Conditioning::ScaledPhi}) {
         AssembledSystem a = assemble(b, m, d, sp, omega, f);
         AssembledSystem c = make_system(sp, d.num_total);
         refill(c, b, m, d, sp, omega, f, &map);
@@ -717,7 +717,7 @@ void test_refill_and_scatter_map() {
     // Rebuilding it is not a function of omega at all; assert that using one
     // built before any assembly still works at a different frequency.
     AssembledSystem swept = make_system(sp, d.num_total);
-    refill(swept, b, m, d, sp, other, Formulation3::Natural, &map);
+    refill(swept, b, m, d, sp, other, Conditioning::Natural, &map);
     check(bitwise_equal(swept, fresh), "and one map serves every frequency");
 
     // --- the guards -------------------------------------------------------
@@ -738,7 +738,7 @@ void test_refill_and_scatter_map() {
     bool refused_system = false;
     try {
         AssembledSystem wrong = make_system(tiny, 3);
-        refill(wrong, b, m, d, sp, omega, Formulation3::Natural);
+        refill(wrong, b, m, d, sp, omega, Conditioning::Natural);
     } catch (const std::invalid_argument&) {
         refused_system = true;
     }
@@ -747,7 +747,7 @@ void test_refill_and_scatter_map() {
     bool refused_rhs = false;
     try {
         AssembledSystem short_rhs = make_system(sp, d.num_total - 1);
-        refill(short_rhs, b, m, d, sp, omega, Formulation3::Natural);
+        refill(short_rhs, b, m, d, sp, omega, Conditioning::Natural);
     } catch (const std::invalid_argument&) {
         refused_rhs = true;
     }
@@ -759,7 +759,7 @@ void test_refill_and_scatter_map() {
         Mesh bigger = make_cube();
         bigger.tets.push_back(bigger.tets.front());  // one more tet, nothing else
         bigger.build_topology();
-        refill(sys, b, bigger, d, sp, omega, Formulation3::Natural, &wrong_map);
+        refill(sys, b, bigger, d, sp, omega, Conditioning::Natural, &wrong_map);
     } catch (const std::invalid_argument&) {
         refused_map = true;
     }
@@ -768,7 +768,7 @@ void test_refill_and_scatter_map() {
     bool accepted_matching = true;
     try {
         AssembledSystem right = make_system(sp, d.num_total);
-        refill(right, b, m, d, sp, omega, Formulation3::Natural);
+        refill(right, b, m, d, sp, omega, Conditioning::Natural);
     } catch (...) {
         accepted_matching = false;
     }
