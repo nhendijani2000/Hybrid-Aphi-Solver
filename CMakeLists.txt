@@ -28,6 +28,7 @@ add_library(aphi_core
     src/element_matrix.cpp
     src/sparsity.cpp
     src/assembly.cpp
+    src/ordering.cpp
     src/gmsh_reader.cpp
     src/incidence.cpp
     src/basis_functions.cpp

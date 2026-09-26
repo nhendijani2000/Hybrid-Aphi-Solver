@@ -4,7 +4,9 @@ Phase 05. The matrix exists and is cheap to rebuild (`docs/ASSEMBLY_PLAN.md`);
 nothing solves it yet, so nothing in this project has been validated
 numerically. Everything to date is structural or algebraic.
 
-**Decided 26 Sept: in-house, no third-party library.** This reverses the
+**Decided 26 Sept: in-house, no third-party library** (an optional, default-off
+backend may be added later -- Sec. 12 -- but nothing in the build will ever
+require one). This reverses the
 "link MUMPS" recommendation in `docs/LINEAR_SOLVER.md`, which is marked
 superseded there. The work is staged: **Stage 1** (§1–§9) is a correct,
 deterministic, reference-quality direct solver; **Stage 2** (§10) is the
@@ -373,3 +375,112 @@ factorization, and it cannot reuse an iterative solve either — **every value
 changes with frequency** (1557013 of 1557522 on the cylinder). What it can reuse
 is the analysis, the pattern, and a preconditioner's *structure*. Anything that
 claims to reuse more than that is wrong.
+
+---
+
+## 12. An optional MUMPS backend — possible later, never relied on
+
+Noted 26 Sept, deliberately *not* part of Stage 1 or Stage 2. The decision in
+§0 stands: nothing in this project's build requires a third-party package. But
+having a library available as an **option** is a different thing from relying on
+one, and it may be worth adding later.
+
+**What it would be good for, and what it would not.**
+
+As a *correctness* reference it would add little. `solve_dense` is already exact
+on small systems, already present, and needs no dependency — and on a small
+problem it is a stronger check than a library, because there is nothing to
+configure wrongly. The `LDLᵀ`-vs-`LU`, three-conditioning and DC-milestone
+checks in §8 are also all in-house.
+
+As a *performance yardstick* and a *large-problem path* it would add real value:
+it is how you find out whether Stage 2's supernodal work is worth doing, and it
+would give a fast solve before Stage 2 exists.
+
+**What it would cost.** MUMPS needs a Fortran toolchain plus BLAS/LAPACK, and
+METIS on top if nested dissection is wanted — on Windows that is a real setup
+burden. It would have to sit behind a CMake option that is **off by default**, so
+the whole test suite stays runnable on a clean checkout with nothing installed.
+That default is what separates *having* the option from *relying* on it, and it
+is not negotiable. The other risk is organisational rather than technical: a fast
+backend quietly becomes the only path anyone runs, and the in-house solver rots.
+The answer to that is §10's — the in-house solver stays the bitwise-deterministic
+reference, and Stage 2 is validated against it.
+
+**When to decide.** After step 3 of §9 produces the ordering table. That
+measurement says where the direct ceiling actually sits on these meshes, and
+therefore whether a library is needed at all. Deciding before it is deciding
+without the number.
+
+**Shape, if it happens.** A backend interface both implementations satisfy —
+`analyze` / `factorize` / `solve` with the §5 `SolveReport`, so the reporting is
+identical either way — plus a comparison harness printing residual, `nnz(L)` and
+time side by side. Stage 1 gets built first regardless, because an interface
+designed against a working implementation is a better interface than one designed
+in the abstract.
+
+---
+
+## 13. Step 1 done, 26 Sept: ordering, and what it can and cannot yet prove
+
+`include/aphi_solver/ordering.hpp`, `src/ordering.cpp`,
+`tests/test_ordering.cpp`. `Ordering`, `Permutation`, `compute_ordering`,
+`permute_pattern`, `bandwidth_stats`. AMD **throws** rather than falling back to
+another ordering, so it cannot report someone else's fill as its own.
+
+RCM is Cuthill-McKee with a George-Liu pseudo-peripheral start, neighbours in
+increasing degree with ties by index, components taken in order of their
+lowest-numbered vertex — **deterministic**, which is what lets a factorization
+built on it be compared bitwise later.
+
+| | unknowns | bandwidth | mean bandwidth |
+|---|---|---|---|
+| shuffled 200-chain | 200 | 186 → **1** | — |
+| `cylinder_box.msh` | 26907 | 26905 → 2753 | 15841 → **2112** |
+| `loop_cut.msh` | 24342 | 24341 → 2781 | 14166 → **2100** |
+
+The chain is the test that says whether it works at all: a path graph with
+scrambled labels has an optimal bandwidth of 1, and RCM finds it.
+
+Isolated unknowns and multiple components are handled rather than assumed away —
+a voltage port's constraint row holds nothing but its diagonal (§10 of
+`ASSEMBLY_PLAN`), so the adjacency graph genuinely has isolated vertices.
+
+### The controls, including two that could not bite
+
+| control | outcome |
+|---|---|
+| permute with `perm` where `iperm` belongs | **caught**, 5 checks |
+| start at vertex 0 instead of a pseudo-peripheral one | **caught** — chain bandwidth 1 → 2, profile 200 → 210 |
+| visit neighbours highest-degree first | **not an error in effect**, see below |
+| skip the reversal (plain Cuthill-McKee) | **not detectable by these metrics**, by construction |
+
+**Highest-degree-first changes almost nothing here.** Measured: mean bandwidth
+2035.7 against the correct rule's 2111.5 on the cylinder — marginally *better* —
+and 2149.5 against 2099.8 on the loop, marginally worse. ±4 % with no consistent
+sign. Cuthill-McKee's degree rule matters on some graphs; on these FEM meshes it
+does not, and asserting a direction would be fitting to noise. Recorded as a
+measurement rather than papered over with a threshold.
+
+**Skipping the reversal cannot be caught by any bandwidth or envelope metric on
+a symmetric pattern**, and this is a theorem rather than a gap in the tests. For
+a symmetric pattern the total lower envelope equals the total upper envelope —
+each is the sum over rows of the distance to the furthest stored entry on one
+side, and symmetry maps one sum onto the other — so reversal merely swaps them
+and leaves every such total unchanged. The reversal's benefit is in the
+**factor**, where elimination order is not symmetric. So it moves to step 2's
+control list, to be re-run against `nnz(L)`.
+
+That is the honest limit of step 1: it proves the permutation machinery is
+correct and that RCM reduces what RCM reduces. Whether any of it reduces **fill**
+is unmeasurable until the symbolic factorization of step 2 exists, and the
+ordering table of §3 is not a table until then.
+
+### A harness note
+
+The first run of these controls reported "permute with `perm` instead of
+`iperm`" as caught only by a crash, exit 9009. That was the control harness
+reading a stale executable, not a result — re-run, it fails 5 checks cleanly.
+Second time a harness artefact has been mistaken for a finding in this project
+(`ASSEMBLY_PLAN` §13 has the first), so: a control result that says "crash" and
+not "check" is worth re-running before it is believed.

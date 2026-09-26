@@ -89,3 +89,9 @@ target_link_libraries(aphi_tests_assembly PRIVATE aphi_core)
 target_compile_definitions(aphi_tests_assembly PRIVATE
     APHI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../meshes")
 add_test(NAME aphi_tests_assembly COMMAND aphi_tests_assembly)
+
+add_executable(aphi_tests_ordering test_ordering.cpp)
+target_link_libraries(aphi_tests_ordering PRIVATE aphi_core)
+target_compile_definitions(aphi_tests_ordering PRIVATE
+    APHI_MESH_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../meshes")
+add_test(NAME aphi_tests_ordering COMMAND aphi_tests_ordering)
