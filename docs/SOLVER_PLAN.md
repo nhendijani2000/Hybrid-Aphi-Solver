@@ -676,3 +676,86 @@ already the only place the minimum can fall — a variable not adjacent to the
 pivot keeps its degree, and the scan had already established nothing was lower.
 The control did not expose a missing test; it exposed a redundant line, which is
 now gone with the reasoning in a comment.
+
+---
+
+## 16. Step 4 done, 26 Sept: LDLᵀ, and the first measured sight of the conditioning problem
+
+`include/aphi_solver/factorization.hpp`, `src/factorization.cpp`,
+`tests/test_factorization.cpp`. `permuted_lower`, `factorize_ldlt`,
+`reconstruct`, plus `pattern_of` and `analyze`/`compute_ordering` overloads that
+take a matrix instead of a pattern. `col_count` added to `SolverAnalysis`,
+because an up-looking factorization lays out its storage by **column** while the
+symbolic pass counts by row — different distributions, both summing to
+`predicted_nnz`.
+
+Up-looking and scalar, per Davis §4.8. `P A Pᵀ = L D Lᵀ` with `L` unit lower
+triangular, its diagonal not stored. **No pivoting yet**: a pivot at or below the
+floor stops the factorization and is reported, rather than being divided by.
+
+### Verification: reconstruction
+
+The test that matters forms `L D Lᵀ` again and compares against `P A Pᵀ` entry by
+entry. **Worst relative error 1.4e-16 over 60 random cases** across two
+orderings — machine precision. Every clever part of the algorithm (the tree walk,
+the topological order, the column bookkeeping) is checked by that one number,
+and all four negative controls were caught by it:
+
+| control | worst reconstruction error |
+|---|---|
+| conjugate, as a Hermitian factorization would | 0.61 |
+| process the row pattern in reverse topological order | 0.16 |
+| `y[j]` not cleared after use | 0.63 |
+| `permuted_lower` does not normalise below the diagonal | caught, 7 checks |
+
+**One case exists solely to catch conjugation.** These matrices are complex
+*symmetric* and not Hermitian, so a conjugating implementation still produces a
+plausible `L` and `D`; only reconstruction against genuinely complex
+off-diagonals exposes it. That control's error is 0.61 — not subtle once
+measured, and completely invisible without it.
+
+Also pinned: a diagonal matrix gives `L` empty and `D` the diagonal untouched; a
+2×2 by hand (`L(1,0) = 3/2`, `D = [2, 1/2]`); the factor holds *exactly* the
+nonzeros the symbolic pass predicted; `L`'s columns ascend strictly below the
+diagonal; `permuted_lower` equals `A(perm[row], perm[col])` for every entry, with
+all of `A` accounted for; and `[[0,1],[1,0]]` — the smallest complex symmetric
+matrix that breaks an unpivoted `LDLᵀ` — is refused at column 1 rather than
+divided by.
+
+### The real matrix: it factorizes, and the pivots are alarming
+
+`meshes/loop_cut.msh` at 1 MHz, `conditioning = row_scaled`:
+
+| | |
+|---|---|
+| unknowns / stored nonzeros | 37064 / 796053 |
+| `analyze` | 975 ms, `nnz(L)` = 28070495 — 535 MB |
+| `factorize_ldlt` | **44955 ms**, all 37064 columns |
+| **smallest \|D\|** | **8.1e-16** |
+| **largest \|D\|** | **1.09e11** |
+| **ratio** | **1.3e26** |
+
+Two things to take from this.
+
+**The factorization completed** — no zero pivot, `nnz` exactly as predicted. So
+the machinery works on a real problem, not only on test fixtures.
+
+**But a pivot ratio of 1.3e26 is ten orders beyond what double precision can
+carry.** This is the first *measured* sight of the ill-conditioning that
+`docs/CONDITIONING.md` and the whole formulation discussion were about, and it
+arrives exactly where predicted: the `A` block sits near 1e11 while `RowScaled`
+divides the Φ block by `jω` down to order 1, so the two blocks differ by eleven
+orders and elimination lands on the difference. Note the loop has **no voltage
+port**, so this is not the unit-diagonal constraint row of §10 — it is the
+formulation's own scaling.
+
+That is what steps 6 and 7 exist for, and the order is now clearly right:
+equilibration first (`diag(d) A diag(d)`, which exists already and is exactly
+aimed at this), then static pivoting with a floor, then refinement to recover
+what the perturbation costs. **A residual is the only thing that can say whether
+any of it worked**, and that is step 5.
+
+**45 s is too slow for the test suite**, so the real-mesh factorization stays a
+probe for now; step 5 turns it into a committed tool, since every step from here
+needs it. Scalar and unblocked is Stage 1's brief, and §10 already names
+supernodal blocking as the 5–20× that answers it.

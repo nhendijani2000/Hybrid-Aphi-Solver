@@ -30,6 +30,7 @@ add_library(aphi_core
     src/assembly.cpp
     src/ordering.cpp
     src/symbolic.cpp
+    src/factorization.cpp
     src/gmsh_reader.cpp
     src/incidence.cpp
     src/basis_functions.cpp

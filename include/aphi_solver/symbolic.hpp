@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "aphi_solver/ordering.hpp"
+#include "aphi_solver/sparse_symmetric.hpp"
 #include "aphi_solver/sparsity.hpp"
 
 namespace aphi_solver {
@@ -75,6 +76,13 @@ struct SolverAnalysis {
     std::vector<int> parent;     ///< elimination tree of `permuted`
     std::vector<int> row_count;  ///< nonzeros per row of L, diagonal included
 
+    /// Nonzeros per COLUMN of L, diagonal included. Different from
+    /// `row_count` -- row k of L holds columns j <= k, column j holds rows
+    /// i >= j -- and it is the one an up-looking factorization needs, because
+    /// that is what lays out its column storage before any value is known.
+    /// Both sum to `predicted_nnz`, which is a check on each.
+    std::vector<int> col_count;
+
     /// `L`'s pattern, **lower** triangular, in permuted indices. Each row
     /// ascending, so a numeric factorization can binary-search it.
     SparsityPattern factor;
@@ -95,5 +103,23 @@ struct SolverAnalysis {
 /// `SOLVER_PLAN.md` §14.
 SolverAnalysis analyze(const SparsityPattern& pattern, Ordering ordering,
                        std::size_t max_factor_nnz = 0);
+
+/// A matrix's own pattern, so a caller does not have to reconstruct one.
+SparsityPattern pattern_of(const SparseSymmetricZ& a);
+SparsityPattern pattern_of(const SparseMatrixZ& a);
+
+/// Convenience: analyse a matrix directly. Equivalent to analysing its
+/// pattern, and the form every caller actually wants.
+inline SolverAnalysis analyze(const SparseSymmetricZ& a, Ordering ordering,
+                             std::size_t max_factor_nnz = 0) {
+    return analyze(pattern_of(a), ordering, max_factor_nnz);
+}
+inline SolverAnalysis analyze(const SparseMatrixZ& a, Ordering ordering,
+                             std::size_t max_factor_nnz = 0) {
+    return analyze(pattern_of(a), ordering, max_factor_nnz);
+}
+inline Permutation compute_ordering(const SparseSymmetricZ& a, Ordering ordering) {
+    return compute_ordering(pattern_of(a), ordering);
+}
 
 }  // namespace aphi_solver

@@ -186,7 +186,31 @@ SolverAnalysis analyze(const SparsityPattern& pattern, Ordering ordering,
         std::copy(row.begin(), row.end(),
                   a.factor.col_index.begin() + a.factor.row_ptr[static_cast<std::size_t>(k)]);
     }
+
+    // Column counts, by transposing what was just built. An up-looking
+    // factorization appends to columns as it walks rows, so it needs these to
+    // lay out its storage before the first value exists.
+    a.col_count.assign(static_cast<std::size_t>(n), 0);
+    for (int j : a.factor.col_index) ++a.col_count[static_cast<std::size_t>(j)];
     return a;
 }
+
+namespace {
+
+template <typename Matrix>
+SparsityPattern pattern_from(const Matrix& a, bool upper_only) {
+    SparsityPattern p;
+    p.rows = a.rows();
+    p.cols = a.cols();
+    p.upper_only = upper_only;
+    p.row_ptr = a.row_ptr();
+    p.col_index = a.col_index();
+    return p;
+}
+
+}  // namespace
+
+SparsityPattern pattern_of(const SparseSymmetricZ& a) { return pattern_from(a, true); }
+SparsityPattern pattern_of(const SparseMatrixZ& a) { return pattern_from(a, false); }
 
 }  // namespace aphi_solver
