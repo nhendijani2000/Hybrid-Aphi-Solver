@@ -38,6 +38,28 @@ enum class Ordering {
 const char* ordering_keyword(Ordering ordering);
 bool ordering_from_keyword(const std::string& word, Ordering& out);
 
+/// Undirected adjacency of a pattern's symmetric structure, with the diagonal
+/// dropped -- a self-loop is not a connection to anywhere and would distort
+/// every degree by one.
+///
+/// Built by treating every stored entry `(i, j)` as an edge both ways, so a
+/// full pattern, an upper triangle and an unsymmetric pattern all give the
+/// adjacency of the symmetric structure -- for the unsymmetric case that is
+/// `A + Aᵀ`, which is what both the ordering and an unsymmetric factorization
+/// want. Shared by `compute_ordering` and the symbolic pass so there is one
+/// definition of what "the graph of the matrix" means.
+struct SymmetricAdjacency {
+    std::vector<int> offset;    ///< rows + 1
+    std::vector<int> neighbor;  ///< ascending within each row, no self-loops
+
+    int rows() const { return static_cast<int>(offset.size()) - 1; }
+    int degree(int i) const {
+        return offset[static_cast<std::size_t>(i) + 1] - offset[static_cast<std::size_t>(i)];
+    }
+
+    static SymmetricAdjacency build(const SparsityPattern& pattern);
+};
+
 /// A permutation of the unknowns, kept in both directions because both are
 /// needed and confusing them is the classic error in this area: the matrix is
 /// permuted with one and the right-hand side with the other.

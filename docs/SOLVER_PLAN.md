@@ -378,9 +378,30 @@ claims to reuse more than that is wrong.
 
 ---
 
-## 12. An optional MUMPS backend — possible later, never relied on
+## 12. A third-party backend — planned, after Stage 1, never relied on
 
-Noted 26 Sept, deliberately *not* part of Stage 1 or Stage 2. The decision in
+**Committed 26 Sept: a library backend will be added once the in-house solver
+works.** Not instead of it, and not as a dependency: behind a CMake option that
+is **off by default**, so the whole suite stays runnable on a clean checkout
+with nothing installed. That default is what separates *having* the option from
+*relying* on one, and it is not negotiable.
+
+**The choice: MUMPS.** It is the only strong candidate that supports
+**complex symmetric indefinite** systems natively, which is exactly what
+`RowScaled` and `ScaledPhi` produce, and it brings AMD plus METIS nested
+dissection and Bunch-Kaufman pivoting -- the whole of Stage 2 (§10), already
+written and tested by people who do this full time. Licensing is CeCILL-C,
+which permits linking into closed-source software; the review is in
+`LINEAR_SOLVER.md` and still stands. The alternatives and why not:
+
+| | why not |
+|---|---|
+| SuiteSparse CHOLMOD / UMFPACK | the supernodal modules are GPL, which forces a choice between open-sourcing this solver and legal exposure |
+| PARDISO | technically fine, but its commercial terms have changed hands; verify before relying, do not assume |
+| SuperLU / SuperLU_DIST | BSD and its static pivoting matches §5's choice, but it has no symmetric-indefinite mode, so the half-memory benefit of `SparseSymmetric` is lost |
+| Eigen | MPL2, header-only, no Fortran -- by far the easiest to vendor, and the fallback if MUMPS's Fortran/BLAS toolchain proves painful on Windows. But `SimplicialLDLT` does not pivot, so it adds no robustness over Stage 1 |
+
+Deliberately *not* part of Stage 1 or Stage 2. The decision in
 §0 stands: nothing in this project's build requires a third-party package. But
 having a library available as an **option** is a different thing from relying on
 one, and it may be worth adding later.
@@ -484,3 +505,77 @@ reading a stale executable, not a result — re-run, it fails 5 checks cleanly.
 Second time a harness artefact has been mistaken for a finding in this project
 (`ASSEMBLY_PLAN` §13 has the first), so: a control result that says "crash" and
 not "check" is worth re-running before it is believed.
+
+---
+
+## 14. Step 2 done, 26 Sept: the ordering table is a table
+
+`include/aphi_solver/symbolic.hpp`, `src/symbolic.cpp`,
+`tests/test_symbolic.cpp`. `elimination_tree`, `factor_row_counts`,
+`predict_factor_size`, `analyze`. `SymmetricAdjacency` moved out of
+`ordering.cpp` into `ordering.hpp`, so the ordering and the symbolic pass share
+one definition of "the graph of the matrix" instead of two.
+
+### §3's table, finally with numbers
+
+| mesh | unknowns | nnz(A) | natural `nnz(L)` | RCM `nnz(L)` | |
+|---|---|---|---|---|---|
+| `cylinder_box.msh` | 26907 | 939575 | 202862505 — **3869 MB** | 27635653 — 527 MB | **7.34× less** |
+| `loop_cut.msh` | 24342 | 763812 | 146936275 — 2802 MB | 25525947 — 486 MB | **5.76× less** |
+
+**The natural ordering would ask for 3.9 GB of complex factor on a 27000-unknown
+problem.** That is the entire case for reordering, and it is why the budget is
+checked from the counts before the pattern is allocated — `predict_factor_size`
+is O(n) memory whatever the fill, so it can report a ruinous ordering rather than
+attempt it.
+
+**What the table says about the direct ceiling.** RCM needs 527 MB at 27000
+unknowns and about 1030 nonzeros per row of `L`. Fill per row grows with problem
+size, so a straight-line reading is optimistic, but even so RCM runs out of a
+workstation somewhere around 50–100 k unknowns. AMD typically improves on RCM by
+2–5× on 3D problems, which would put the ceiling nearer 100–200 k. **That is the
+number step 3 exists to produce**, and it is also the number that decides whether
+the §12 backend is needed for EDA-scale work or only for the THz case.
+
+### Verification
+
+The strongest check is an **independent dense reference**: a naive symbolic
+elimination that simulates fill by explicit set union in O(n³), sharing no code
+with the elimination tree or the reachable-set walk. On 80 random patterns across
+both orderings it agrees with `predict_factor_size` on `nnz(L)` **exactly, 80 of
+80**. Everything clever in the real implementation — path compression, the
+reachable-set walk, the marking — is a chance to be subtly wrong while still
+producing a plausible number, and this is what closes that off.
+
+Alongside it, three factors known by hand: diagonal (`nnz(L) = n`, n roots),
+tridiagonal (`nnz(L) = 2n − 1`, tree a path), dense (`nnz(L) = n(n+1)/2`). Plus:
+`parent[j] > j` or −1; `predicted_nnz == factor.nnz()` from two independent
+passes; `L` lower triangular, each row ascending, diagonal last; `L` contains
+`tril(A)`; an upper-triangle pattern gives the **same** tree and the same
+`nnz(L)` as the full one.
+
+### Controls, and the one step 1 could not test
+
+| control | outcome |
+|---|---|
+| `row_reach` forgets to mark, so nodes are revisited | caught, 4 checks |
+| the diagonal is not counted | caught, 7 checks |
+| elimination tree without path compression | caught, 9 checks |
+| **skip RCM's reversal** (plain Cuthill-McKee) | **caught — see below** |
+
+§13 deferred the reversal control here because no bandwidth or envelope measure
+can see it on a symmetric pattern. `nnz(L)` sees it clearly:
+
+| | cylinder `nnz(L)` | per row | loop `nnz(L)` | per row |
+|---|---|---|---|---|
+| RCM, with the reversal | 27635653 | 1027 | 25525947 | 1049 |
+| plain Cuthill-McKee | 55722203 | 2071 | 49098486 | 2017 |
+
+**The reversal is worth 2.02× in fill** — about 535 MB on the cylinder. George's
+reversal is not a cosmetic detail.
+
+And the suite did **not** catch it at first: 67 checks passed with the reversal
+removed, because nothing asserted a fill figure. So `mean_row < 1500` is now
+pinned on both meshes — correct RCM gives 1027 and 1049, plain CM gives 2071 and
+2017, and the threshold sits between with about 1.4× margin either side. A
+measured threshold, with what it separates written beside it.

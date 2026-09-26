@@ -51,27 +51,9 @@ Permutation Permutation::identity(int n) {
     return p;
 }
 
-namespace {
-
-/// Undirected adjacency, no self-loops, each neighbour list ascending.
-///
-/// Built from whatever the pattern stores by treating `(i, j)` as an edge both
-/// ways, so a full pattern, an upper triangle, and an unsymmetric pattern all
-/// give the adjacency of the symmetric structure. The diagonal is dropped: a
-/// self-loop is not a connection to anywhere and would distort every degree by
-/// one.
-struct Adjacency {
-    std::vector<int> offset;    ///< rows + 1
-    std::vector<int> neighbor;  ///< ascending within each row
-
-    int degree(int i) const {
-        return offset[static_cast<std::size_t>(i) + 1] - offset[static_cast<std::size_t>(i)];
-    }
-};
-
-Adjacency build_adjacency(const SparsityPattern& pattern) {
+SymmetricAdjacency SymmetricAdjacency::build(const SparsityPattern& pattern) {
     const int n = pattern.rows;
-    Adjacency adj;
+    SymmetricAdjacency adj;
     adj.offset.assign(static_cast<std::size_t>(n) + 1, 0);
 
     // Count both directions.
@@ -119,6 +101,8 @@ Adjacency build_adjacency(const SparsityPattern& pattern) {
     return adj;
 }
 
+namespace {
+
 /// One BFS over the component containing `root`, returning the visiting order
 /// and the number of levels (the rooted level structure's depth).
 ///
@@ -126,7 +110,7 @@ Adjacency build_adjacency(const SparsityPattern& pattern) {
 /// deterministic -- which matters because this project compares results
 /// bitwise elsewhere and a nondeterministic ordering would make a factorization
 /// nondeterministic too.
-int bfs_component(const Adjacency& adj, int root, std::vector<char>& seen,
+int bfs_component(const SymmetricAdjacency& adj, int root, std::vector<char>& seen,
                   std::vector<int>& order, std::vector<int>& level) {
     const std::size_t first = order.size();
     seen[static_cast<std::size_t>(root)] = 1;
@@ -166,7 +150,7 @@ int bfs_component(const Adjacency& adj, int root, std::vector<char>& seen,
 /// RCM's quality depends materially on where it starts, and a minimum-degree
 /// start can be much worse than this. Capped at a few passes because the
 /// heuristic can otherwise oscillate.
-int pseudo_peripheral(const Adjacency& adj, int start, std::vector<char>& scratch_seen,
+int pseudo_peripheral(const SymmetricAdjacency& adj, int start, std::vector<char>& scratch_seen,
                       std::vector<int>& scratch_order, std::vector<int>& scratch_level) {
     int best = start;
     int best_depth = -1;
@@ -194,7 +178,7 @@ int pseudo_peripheral(const Adjacency& adj, int start, std::vector<char>& scratc
     return best;
 }
 
-std::vector<int> reverse_cuthill_mckee(const Adjacency& adj, int n) {
+std::vector<int> reverse_cuthill_mckee(const SymmetricAdjacency& adj, int n) {
     std::vector<char> seen(static_cast<std::size_t>(n), 0);
     std::vector<int> level(static_cast<std::size_t>(n), 0);
     std::vector<int> order;
@@ -235,7 +219,7 @@ Permutation compute_ordering(const SparsityPattern& pattern, Ordering ordering) 
             "ordering, which would report a fill figure belonging to something else.");
     }
 
-    const Adjacency adj = build_adjacency(pattern);
+    const SymmetricAdjacency adj = SymmetricAdjacency::build(pattern);
     Permutation p;
     p.perm = reverse_cuthill_mckee(adj, pattern.rows);
     p.iperm.assign(p.perm.size(), 0);
