@@ -56,6 +56,22 @@ FormulationScales formulation_scales(Conditioning f, double omega);
 /// `bytes()` reports the real figure. Pass it to `refill` for a sweep; leave
 /// it out for a single solve, where building it would cost more than it
 /// saves.
+/// Where (row_at, col_at) sits inside one tet's block of slots, and how big
+/// that block is. One definition, used by the scatter, by `ScatterMap` and by
+/// the tests, so the packing cannot be written one way and read another.
+///
+/// A packed block holds only `col_at >= row_at`, for an upper-triangle
+/// pattern. A pair below the diagonal returns -1: **not** its mirror's index.
+/// The scatter visits both (i,j) and (j,i), so folding them onto one slot
+/// would add the same contribution twice.
+inline int tet_block_index(int n, bool packed, int row_at, int col_at) {
+    if (!packed) return row_at * n + col_at;
+    if (col_at < row_at) return -1;
+    return row_at * n - row_at * (row_at - 1) / 2 + (col_at - row_at);
+}
+
+inline int tet_block_size(int n, bool packed) { return packed ? n * (n + 1) / 2 : n * n; }
+
 class ScatterMap {
 public:
     /// Builds the map for every tet of the mesh. The bodies partition the
@@ -79,17 +95,31 @@ public:
     const int* edge_at(int tet) const { return &pos_[static_cast<std::size_t>(tet) * 16]; }
     const int* phi_at(int tet) const { return &pos_[static_cast<std::size_t>(tet) * 16 + 6]; }
 
-    /// This tet's `live_count` x `live_count` block of value-array indices,
-    /// row-major.
+    /// True when each tet's block holds only the upper triangle, which it does
+    /// exactly when the pattern it was built from did. `refill` checks this
+    /// against its own pattern: a map of the wrong shape would send every
+    /// entry to the wrong place.
+    bool packed() const { return packed_; }
+
+    /// This tet's block of value-array indices, laid out per
+    /// `tet_block_index(live_count(tet), packed(), ., .)`.
     const int* slots(int tet) const {
         return slot_.data() + offset_[static_cast<std::size_t>(tet)];
     }
 
+    /// One slot, or -1 if the pair is not stored. The readable form of
+    /// `slots`, for tests and for anything not in the inner loop.
+    int slot_of(int tet, int row_at, int col_at) const {
+        const int at = tet_block_index(live_count(tet), packed_, row_at, col_at);
+        return at < 0 ? -1 : slots(tet)[at];
+    }
+
 private:
-    std::vector<int> live_;          ///< per tet: distinct live DOFs
-    std::vector<int> pos_;           ///< per tet: 6 edge positions then 10 Phi
+    bool packed_ = false;
+    std::vector<int> live_;            ///< per tet: distinct live DOFs
+    std::vector<int> pos_;             ///< per tet: 6 edge positions then 10 Phi
     std::vector<std::size_t> offset_;  ///< per tet + 1: its block's start in slot_
-    std::vector<int> slot_;          ///< sum over tets of live^2
+    std::vector<int> slot_;            ///< sum of tet_block_size over the tets
 };
 
 /// What one assembly produced, with both triangles stored. Works for any

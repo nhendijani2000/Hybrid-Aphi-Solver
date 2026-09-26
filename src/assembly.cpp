@@ -121,9 +121,11 @@ void locate(const SparsityPattern& pattern, const TetLive& s, int* out,
     // mismatch between this and whoever sized the buffer into an exception
     // instead of a write past the end -- which in a `ScatterMap` means heap
     // corruption during construction, before any test can look at it.
-    if (static_cast<std::size_t>(s.n) * static_cast<std::size_t>(s.n) > capacity) {
+    const bool packed = pattern.upper_only;
+    const int needed = tet_block_size(s.n, packed);
+    if (static_cast<std::size_t>(needed) > capacity) {
         throw std::logic_error("locate: a tet with " + std::to_string(s.n) +
-                               " live DOFs needs " + std::to_string(s.n * s.n) +
+                               " live DOFs needs " + std::to_string(needed) +
                                " slots but was given " + std::to_string(capacity) + ".");
     }
     for (int r = 0; r < s.n; ++r) {
@@ -132,14 +134,10 @@ void locate(const SparsityPattern& pattern, const TetLive& s, int* out,
         const auto end =
             pattern.col_index.begin() + pattern.row_ptr[static_cast<std::size_t>(row) + 1];
         // An upper-triangle pattern holds nothing before the diagonal, and
-        // `live` is sorted, so those columns are exactly `col < r`. They get
-        // -1, which the scatter reads as "fold onto the mirror, which another
-        // iteration writes" rather than as a missing slot.
-        for (int col = 0; col < s.n; ++col) {
-            if (pattern.upper_only && col < r) {
-                out[r * s.n + col] = -1;
-                continue;
-            }
+        // `live` is sorted, so those columns are exactly `col < r`. They are
+        // not stored at all -- `tet_block_index` returns -1 for them, and the
+        // scatter skips it because the mirror is written by another iteration.
+        for (int col = packed ? r : 0; col < s.n; ++col) {
             const int want = s.live[static_cast<std::size_t>(col)];
             it = std::lower_bound(it, end, want);
             if (it == end || *it != want) {
@@ -149,7 +147,20 @@ void locate(const SparsityPattern& pattern, const TetLive& s, int* out,
                     "). The sparsity pattern and the scatter disagree about the matrix's "
                     "shape; dropping the term would give a quietly wrong matrix.");
             }
-            out[r * s.n + col] = static_cast<int>(it - pattern.col_index.begin());
+            // Bound-checked against the block it was given, not against
+            // `tet_block_size`. Checking only the latter cannot catch an
+            // index formula and a size formula that are wrong TOGETHER --
+            // which is what a negative control on the packed layout did,
+            // corrupting the heap instead of reporting anything.
+            const int at = tet_block_index(s.n, packed, r, col);
+            if (at < 0 || static_cast<std::size_t>(at) >= capacity) {
+                throw std::logic_error(
+                    "locate: slot (" + std::to_string(r) + ", " + std::to_string(col) +
+                    ") of a " + std::to_string(s.n) + "-DOF tet lands at " +
+                    std::to_string(at) + " in a block of " + std::to_string(capacity) +
+                    ". The block's layout and its size disagree.");
+            }
+            out[at] = static_cast<int>(it - pattern.col_index.begin());
         }
     }
 }
@@ -159,11 +170,15 @@ void locate(const SparsityPattern& pattern, const TetLive& s, int* out,
 /// against this.
 struct TetScatter {
     int n = 0;
+    bool packed = false;
     const int* edge_at = nullptr;
     const int* phi_at = nullptr;
-    const int* slot = nullptr;  ///< n x n, row-major
+    const int* slot = nullptr;  ///< laid out per `tet_block_index`
 
-    int of(int row_at, int col_at) const { return slot[row_at * n + col_at]; }
+    int of(int row_at, int col_at) const {
+        const int at = tet_block_index(n, packed, row_at, col_at);
+        return at < 0 ? -1 : slot[at];
+    }
 };
 
 /// The prescribed value of local Phi node `q` expressed in the SCALED
@@ -182,6 +197,7 @@ ScatterMap ScatterMap::build(const SparsityPattern& pattern, const DofMap& dofs,
                              const BoundProblem& bound) {
     const int num_tets = mesh.num_tets();
     ScatterMap m;
+    m.packed_ = pattern.upper_only;
     m.live_.assign(static_cast<std::size_t>(num_tets), 0);
     m.pos_.assign(static_cast<std::size_t>(num_tets) * 16, -1);
     m.offset_.assign(static_cast<std::size_t>(num_tets) + 1, 0);
@@ -195,7 +211,7 @@ ScatterMap ScatterMap::build(const SparsityPattern& pattern, const DofMap& dofs,
         gather_live(dofs.local_dofs(t, mesh, bound), live[u]);
         m.live_[u] = live[u].n;
         m.offset_[u + 1] =
-            m.offset_[u] + static_cast<std::size_t>(live[u].n) * static_cast<std::size_t>(live[u].n);
+            m.offset_[u] + static_cast<std::size_t>(tet_block_size(live[u].n, m.packed_));
     }
     m.slot_.assign(m.offset_[static_cast<std::size_t>(num_tets)], -1);
 
@@ -267,12 +283,13 @@ void scatter_into(std::vector<Complex>& values, std::vector<Complex>& rhs,
 
             TetScatter where;
             if (scatter != nullptr) {
-                where = {scatter->live_count(tet), scatter->edge_at(tet), scatter->phi_at(tet),
-                         scatter->slots(tet)};
+                where = {scatter->live_count(tet), scatter->packed(),  scatter->edge_at(tet),
+                         scatter->phi_at(tet),     scatter->slots(tet)};
             } else {
                 gather_live(d, live);
                 locate(pattern, live, scratch.data(), scratch.size());
-                where = {live.n, live.edge_at.data(), live.phi_at.data(), scratch.data()};
+                where = {live.n, pattern.upper_only, live.edge_at.data(), live.phi_at.data(),
+                         scratch.data()};
             }
 
             kernel_AA(g, c, aa.data());
@@ -422,6 +439,12 @@ void check_shapes(int matrix_rows, std::size_t matrix_nnz, std::size_t rhs_size,
         throw std::invalid_argument("refill: the ScatterMap was built for a different mesh (" +
                                     std::to_string(scatter->num_tets()) + " tets against " +
                                     std::to_string(mesh.num_tets()) + ").");
+    }
+    if (scatter != nullptr && scatter->packed() != pattern.upper_only) {
+        throw std::invalid_argument(
+            "refill: the ScatterMap and the pattern disagree about which half of the matrix is "
+            "stored. Their blocks are laid out differently, so every entry would go to the "
+            "wrong place.");
     }
 }
 

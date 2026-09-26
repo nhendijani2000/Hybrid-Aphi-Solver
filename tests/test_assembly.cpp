@@ -574,10 +574,18 @@ void test_scatter_map_is_consistent() {
     Mesh m = make_cube();
     const BoundProblem b = bind_cube(m, 1e6);
     const DofMap d = build_dof_map(b, m);
-    const SparsityPattern sp = build_sparsity(d, b, m);
+
+    // Both layouts. The packed one holds only the upper triangle, so a test
+    // that indexed the block as `r * n + c` would read the wrong entries --
+    // which is why everything below goes through `slot_of`.
+    for (const SparsityStorage storage :
+         {SparsityStorage::Full, SparsityStorage::UpperTriangle}) {
+    const SparsityPattern sp = build_sparsity(d, b, m, storage);
     const ScatterMap map = ScatterMap::build(sp, d, m, b);
+    const bool packed = storage == SparsityStorage::UpperTriangle;
 
     check(map.num_tets() == m.num_tets(), "the map covers every tet");
+    check(map.packed() == packed, "and says which half of the matrix it is laid out for");
 
     int checked = 0;
     bool counts_sane = true, positions_sane = true, slots_right = true, live_ascending = true;
@@ -625,7 +633,15 @@ void test_scatter_map_is_consistent() {
         // check that makes a wrong index a failure rather than a crash.
         for (int r = 0; r < n; ++r) {
             for (int c = 0; c < n; ++c) {
-                const int got = map.slots(t)[r * n + c];
+                const int got = map.slot_of(t, r, c);
+                // A packed block does not hold the lower triangle at all, and
+                // must report that rather than its mirror's index: the scatter
+                // visits both orders, so one shared slot would double-count.
+                if (packed && c < r) {
+                    if (got != -1) slots_right = false;
+                    ++checked;
+                    continue;
+                }
                 const int want = sp.find_slot(live[static_cast<std::size_t>(r)],
                                               live[static_cast<std::size_t>(c)]);
                 if (got != want || got < 0 || got >= static_cast<int>(sp.nnz())) {
@@ -645,6 +661,21 @@ void test_scatter_map_is_consistent() {
     check(live_ascending, "the live list is strictly ascending -- what lets the sweep resume");
     check(slots_right, "every one of the " + std::to_string(checked) +
                            " slots is the one find_slot returns");
+    }
+
+    // The two layouts are not interchangeable: a block packed one way and
+    // read the other sends every entry somewhere else.
+    const SparsityPattern full = build_sparsity(d, b, m);
+    const SparsityPattern upper = build_sparsity(d, b, m, SparsityStorage::UpperTriangle);
+    const ScatterMap full_map = ScatterMap::build(full, d, m, b);
+    bool refused_crossed = false;
+    try {
+        SymmetricSystem s = make_symmetric_system(upper, d.num_total);
+        refill(s, b, m, d, upper, 2.0 * M_PI * 1e6, Conditioning::RowScaled, &full_map);
+    } catch (const std::invalid_argument&) {
+        refused_crossed = true;
+    }
+    check(refused_crossed, "a full-layout ScatterMap is refused with an upper-triangle pattern");
 }
 
 // `make_system` + `refill` split, and the reusable `ScatterMap`. Together

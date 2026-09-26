@@ -870,9 +870,9 @@ Two things came out better than expected, and one worse:
 - **`build_sparsity` halves too**, 62 -> 29 ms, which I had not predicted.
   Half the pairs to count, fill and sort.
 - **`refill` is 20 % faster**, 29.6 -> 23.9 ms, from half the scatter writes.
-- **The `ScatterMap` does NOT shrink**: 14.8 MB either way. It stores `n^2`
-  slots per tet regardless, and half are now -1. Storing only the upper
-  triangle's slots would save ~7 MB. Not done; recorded as the next easy win.
+- **The `ScatterMap` did not shrink at first**: 14.8 MB either way, because it
+  stored `n^2` slots per tet regardless and half were simply -1. **Fixed in
+  Sec. 15** -- it now packs the triangle, 8.45 MB.
 
 ### One scatter, not two
 
@@ -920,3 +920,60 @@ The guard removal is caught only by the refusal check, not by a correctness
 one -- the correctness tests assemble only the symmetric conditionings. That
 is acceptable because the guard's premise is itself tested: `test_symmetry`
 asserts the Natural matrix is *visibly* not symmetric.
+
+---
+
+## 15. Packing the `ScatterMap`'s triangle too
+
+Sec. 14 shipped symmetric storage with the `ScatterMap` unchanged, so the map
+still held `n^2` slots per tet with half of them -1. Only the matrix had
+halved. Packing the map as well:
+
+| | before | after |
+|---|---|---|
+| `ScatterMap`, upper pattern | 14.83 MB | **8.45 MB** |
+| `ScatterMap`, full pattern | 14.83 MB | 14.83 MB (unchanged, correctly) |
+
+`n(n+1)/2` per tet instead of `n^2`. On top of Sec. 14's matrix saving, a
+symmetric sweep on this mesh now holds 15.35 + 8.45 = 23.8 MB where the
+unsymmetric one holds 29.85 + 14.83 = 44.7 MB.
+
+`refill` is unchanged at 22.7 ms and the sweep at 29.4 ms per frequency, so
+the packing costs nothing.
+
+### The one thing not to get wrong
+
+A pair below the diagonal must report **-1**, not its mirror's index. The
+scatter visits both (i,j) and (j,i); if both resolved to the one stored slot,
+the contribution would be added twice. One negative control does exactly that
+-- normalise instead of returning -1 -- and it fails 5 checks.
+
+`tet_block_index` and `tet_block_size` are one definition each, used by the
+scatter, by `ScatterMap` and by the tests, so the layout cannot be written one
+way and read another. `ScatterMap::slot_of` is the readable accessor; the test
+that validates the map against `find_slot` now runs over **both** layouts,
+where before it indexed the block as `r * n + c` and so only ever exercised
+the full one.
+
+A `ScatterMap` and a pattern that disagree about which half they hold are
+refused: their blocks are laid out differently, so every entry would go
+somewhere else. Removing that guard corrupts the heap, which is what the
+control shows.
+
+### A guard that a guard could not catch
+
+`locate` already checked `tet_block_size(n) <= capacity`. That did **not**
+catch a control that sized the block `n(n-1)/2` while indexing it as
+`n(n+1)/2`, because the size check and the index came from the same wrong
+formula and agreed with each other. The write is now bound-checked against the
+capacity it was actually given:
+
+    locate: slot (3, 7) of a 16-DOF tet lands at 131 in a block of 120.
+    The block's layout and its size disagree.
+
+Heap corruption became that message, and the sweep timing is unchanged, so it
+is free. The general lesson, third time in this file: a check derived from the
+same expression as the thing it checks is not a check.
+
+1468 -> 1476 checks. Four controls on the packing, all caught, two of them by
+a check rather than a crash.
