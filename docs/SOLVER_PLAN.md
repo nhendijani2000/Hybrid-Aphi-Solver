@@ -399,7 +399,22 @@ which permits linking into closed-source software; the review is in
 | SuiteSparse CHOLMOD / UMFPACK | the supernodal modules are GPL, which forces a choice between open-sourcing this solver and legal exposure |
 | PARDISO | technically fine, but its commercial terms have changed hands; verify before relying, do not assume |
 | SuperLU / SuperLU_DIST | BSD and its static pivoting matches §5's choice, but it has no symmetric-indefinite mode, so the half-memory benefit of `SparseSymmetric` is lost |
-| Eigen | MPL2, header-only, no Fortran -- by far the easiest to vendor, and the fallback if MUMPS's Fortran/BLAS toolchain proves painful on Windows. But `SimplicialLDLT` does not pivot, so it adds no robustness over Stage 1 |
+| PaStiX | a genuine alternative: complex symmetric, good performance, also CeCILL-C. Heavier build (wants Scotch) and a smaller community. The second choice if MUMPS disappoints |
+| Eigen | MPL2, header-only, no Fortran -- by far the easiest to vendor, and the fallback if MUMPS's Fortran/BLAS toolchain proves painful on Windows. But `SimplicialLDLT` does not pivot, so it adds no robustness over Stage 1, and it is simplicial rather than supernodal so it is not much faster either |
+
+**Two decisions, both involving the word MUMPS, and they are not the same one.**
+`LINEAR_SOLVER.md`'s superseded recommendation was *link MUMPS **instead of**
+writing a solver*. This section is *when a backend is added **alongside** ours,
+which library*. The first was reversed; the second is answered MUMPS.
+
+**It may turn out not to be needed at all**, which is why the decision waits for
+step 3's number. If AMD puts the direct ceiling near 100-200 k unknowns and the
+EDA problems sit under it, the in-house solver covers EDA outright. And the THz
+case at 15-25 M DOFs fits in no direct solver's memory, MUMPS included -- that
+needs §11's iterative path, which is a different choice of library or none. So
+"in-house for EDA, iterative for THz, MUMPS never needed" is a live outcome.
+Recording the choice now costs nothing; committing to the integration before
+step 3 would be deciding without the fact that decides it.
 
 Deliberately *not* part of Stage 1 or Stage 2. The decision in
 §0 stands: nothing in this project's build requires a third-party package. But
