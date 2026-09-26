@@ -448,6 +448,7 @@ why both bugs survived the first green run of the whole suite.
    §7.3, plus the port round trip. **Done 25 Sept**, except the port round
    trip, which needs a solver.
 8. **Time it**, then decide about threading with a number in hand.
+   **Done 25 Sept -- and the number says do not thread yet. Sec. 11.**
 
 ---
 
@@ -560,3 +561,66 @@ It was not done now because it changes the number of unknowns per port,
 which reaches back into `DofMap`'s layout, `build_sparsity` and their tests.
 Worth doing before floating ports, which need a second unknown per port
 anyway — the two changes are the same change.
+
+---
+
+## 11. Measured, 25 Sept: it is `find_slot`, not the kernels
+
+`cylinder_box.msh`, 16040 tets, Release, one core. The AC case, so Phi is
+present in the air too (`beta = sigma + j*omega*eps` is non-zero there) and
+there are more unknowns than the DC test prints: **37368 unknowns, 1557522
+nonzeros**.
+
+| stage | time | when |
+|---|---|---|
+| `read_gmsh_msh` | 40.2 ms | once |
+| `build_topology` | 12.1 ms | once |
+| `bind_to_mesh` | 5.4 ms | once |
+| `build_dof_map` | 0.4 ms | once |
+| `build_sparsity` | 60.6 ms | once per mesh |
+| `assemble` | **107.0 ms** | once per frequency |
+
+Inside `assemble`, by rebuilding the same loop in stages:
+
+| part | time | share |
+|---|---|---|
+| geometry + `local_dofs` | 1.3 ms | 1 % |
+| the three kernels | 10.8 ms | 10 % |
+| **`find_slot`** | **75.2 ms** | **68 %** |
+| arithmetic, accumulation, allocation | 22.9 ms | 21 % |
+
+So the kernels — the part that looked like the work — are a tenth of it, and
+two thirds goes to finding where each entry belongs. 3602145 searches per
+assembly, 225 per tet.
+
+### Two cures, both measured before recommending either
+
+**B. Sort the tet's live DOFs once, then resume each `lower_bound` where the
+last one stopped.** Taking a row's columns in ascending order makes each
+search start from the previous hit instead of the row's beginning.
+**34 ms in place of 76 — 2.2x on that part, 1.6x overall, and it costs no
+memory at all.** It also speeds up `build_sparsity`, which searches the same
+way, and the first assembly, which A does not.
+
+**A. Precompute every slot** (the optimisation §5 deferred). 13.7 MB for the
+cylinder, against 23.8 MB for the matrix values themselves — 58 % more
+memory for the assembled system. Replaying it makes the scatter **7.1 ms
+instead of 76**, but building it costs a full pass, so the first assembly is
+no faster. For a frequency sweep the whole numeric pass falls to roughly
+41 ms, a **2.6x**; for a single solve it buys nothing.
+
+### Recommendation, in order
+
+1. **B first.** Free, no memory, helps `build_sparsity` and every assembly.
+2. **A only for a sweep**, behind a flag, built *using* B so the build is
+   34 ms rather than 77 ms. Memory scales with tets, so at 1 M tets it is
+   ~0.9 GB and must stay optional.
+3. **Threading last, and measure again first.** After B and A the numeric
+   pass is ~41 ms and mostly arithmetic, and the scatter accumulate is the
+   one part with write conflicts between threads — the riskiest change for
+   what would by then be the smallest remaining win. Not yet.
+
+One more thing the split showed: `from_pattern` allocates and copies
+`row_ptr`, `col_index` and 23.8 MB of values on every `assemble` call. For a
+sweep that belongs outside the loop — refill the values of one matrix
+instead of building a new one per frequency.
