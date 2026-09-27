@@ -463,6 +463,255 @@ void test_no_conjugation_in_the_solve() {
               ") -- a conjugation in the backward sweep would show here");
 }
 
+
+// Equilibration wired into the solve -- step 6 of `docs/SOLVER_PLAN.md` §9.
+//
+// The whole risk is the un-scaling. `A~ = D A D` is solved for `y`, and the
+// physical answer is `x = D y`: a multiplication, not a division, and not the
+// identity. Get it wrong and the field comes out smooth, plausible and
+// completely wrong -- with a SMALL residual if the residual were measured
+// against the scaled system, which is why it is measured against the original.
+void test_equilibration_round_trip() {
+    // Deliberately badly scaled: rows spanning twelve orders of magnitude, like
+    // the A and Phi blocks of a real A-Phi system.
+    const int n = 24;
+    std::vector<std::pair<std::pair<int, int>, Complex>> entries;
+    for (int i = 0; i < n; ++i) {
+        const double scale = (i % 2 == 0) ? 1e11 : 1e-1;
+        entries.push_back({{i, i}, Complex(3.0 * scale, 0.2 * scale)});
+    }
+    for (int i = 0; i + 1 < n; ++i) {
+        const double scale = std::sqrt(1e11 * 1e-1);
+        entries.push_back({{i, i + 1}, Complex(0.4 * scale, -0.3 * scale)});
+    }
+    for (int i = 0; i + 5 < n; ++i) entries.push_back({{i, i + 5}, Complex(1e4, -1e4)});
+    const SparseSymmetricZ a = symmetric_from(n, entries);
+
+    std::vector<Complex> b(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        b[static_cast<std::size_t>(i)] = Complex(1.0 + 0.05 * i, -0.4 + 0.03 * i);
+    }
+
+    // With equilibration.
+    std::vector<Complex> x_scaled;
+    SolveReport scaled_report;
+    SolveOptions with;
+    with.equilibration_iterations = 10;
+    check(solve_symmetric(a, b, x_scaled, scaled_report, with), "the scaled solve succeeds");
+
+    // Without, for comparison. Same matrix, same right-hand side.
+    std::vector<Complex> x_plain;
+    SolveReport plain_report;
+    SolveOptions without;
+    without.equilibration_iterations = 0;
+    check(solve_symmetric(a, b, x_plain, plain_report, without), "and so does the unscaled one");
+
+    std::cout << "  badly scaled 24x24: residual " << plain_report.residual << " unscaled, "
+              << scaled_report.residual << " equilibrated;  d in ["
+              << scaled_report.equilibration_min << ", " << scaled_report.equilibration_max
+              << "]\n";
+
+    // The scaling really did something -- otherwise the comparison below is
+    // vacuous.
+    check(scaled_report.equilibration_max / scaled_report.equilibration_min > 1e4,
+          "the scaling spans a wide range, so it is doing real work (max/min = " +
+              std::to_string(scaled_report.equilibration_max /
+                             scaled_report.equilibration_min) + ")");
+
+    // THE round trip: both paths must reach the same physical answer. The scaled
+    // path solves a different matrix, so agreeing is only possible if `x = D y`
+    // was applied correctly.
+    double worst = 0.0, scale = 0.0;
+    for (const Complex& v : x_plain) scale = std::max(scale, std::abs(v));
+    for (int i = 0; i < n; ++i) {
+        worst = std::max(worst, std::abs(x_scaled[static_cast<std::size_t>(i)] -
+                                        x_plain[static_cast<std::size_t>(i)]));
+    }
+    check(worst < 1e-8 * scale,
+          "equilibrated and unscaled solves agree on the physical answer (worst " +
+              std::to_string(worst) + " against entries up to " + std::to_string(scale) +
+              ") -- which is only possible if x = D y was applied, and applied the right way "
+              "round");
+
+    // Measured: 5.0e-11 equilibrated against 6.3e-11 unscaled. Equilibration
+    // barely moves the residual HERE, and that is not a defect -- the relative
+    // residual is a BACKWARD error, and on a matrix spanning twelve orders it is
+    // already near what the conditioning allows either way. What equilibration
+    // buys is accuracy in x, which a backward error does not see. The threshold
+    // is therefore set from the measurement, and the real test of whether it
+    // helps is the assembled A-Phi system (SOLVER_PLAN Sec. 18).
+    check(scaled_report.residual < 1e-9,
+          "and the equilibrated residual is small (" +
+              std::to_string(scaled_report.residual) + ")");
+    check(scaled_report.residual <= plain_report.residual * 2.0,
+          "and no worse than the unscaled one (" + std::to_string(scaled_report.residual) +
+              " against " + std::to_string(plain_report.residual) + ")");
+}
+
+// The report has to be honest about what it did, since every later step reads it.
+void test_report_contents() {
+    const int n = 12;
+    std::vector<std::pair<std::pair<int, int>, Complex>> entries;
+    for (int i = 0; i < n; ++i) entries.push_back({{i, i}, Complex(20.0 + i, 1.0)});
+    for (int i = 0; i + 1 < n; ++i) entries.push_back({{i, i + 1}, Complex(1.0, 0.5)});
+    const SparseSymmetricZ a = symmetric_from(n, entries);
+    const std::vector<Complex> b(static_cast<std::size_t>(n), Complex(1.0, 0.0));
+
+    std::vector<Complex> x;
+    SolveReport r;
+    check(solve_symmetric(a, b, x, r), "solves");
+    check(r.ok, "and says so");
+    check(r.columns_done == n, "having done every column");
+    check(r.factor_nnz > 0 && r.factor_nnz >= static_cast<std::size_t>(n),
+          "with a factor of at least n entries");
+    check(r.smallest_pivot > 0.0 && r.largest_pivot >= r.smallest_pivot,
+          "and a sensible pivot range");
+    check(r.analyze_ms >= 0.0 && r.factorize_ms >= 0.0 && r.solve_ms >= 0.0,
+          "and timings for each phase");
+
+    // With scaling off, d is exactly 1 and the report says so rather than
+    // reporting a range it did not use.
+    SolveOptions off;
+    off.equilibration_iterations = 0;
+    SolveReport r2;
+    solve_symmetric(a, b, x, r2, off);
+    check(r2.equilibration_min == 1.0 && r2.equilibration_max == 1.0,
+          "with equilibration disabled the reported scaling is exactly 1");
+}
+
+// Equilibration must not break the symmetry it relies on.
+void test_equilibration_preserves_symmetry() {
+    const int n = 16;
+    std::vector<std::pair<std::pair<int, int>, Complex>> entries;
+    for (int i = 0; i < n; ++i) {
+        entries.push_back({{i, i}, Complex(1e6 * (i + 1), 1e5)});
+    }
+    for (int i = 0; i + 3 < n; ++i) entries.push_back({{i, i + 3}, Complex(17.0, -5.0)});
+    const SparseSymmetricZ a = symmetric_from(n, entries);
+    const std::vector<double> d = compute_symmetric_equilibration(a, 10);
+    const SparseSymmetricZ scaled = apply_symmetric_equilibration(a, d);
+
+    bool positive = true;
+    for (double v : d) {
+        if (!(v > 0.0)) positive = false;
+    }
+    check(positive, "the scaling is strictly positive, so it is invertible");
+    check(scaled.nnz() == a.nnz(), "scaling changes no structure");
+
+    // diag(d) A diag(d) is still symmetric because diag(d) is its own transpose;
+    // that is the whole reason the scaling is symmetric rather than row/column.
+    double worst = 0.0;
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            worst = std::max(worst, std::abs(scaled.entry(i, j) - scaled.entry(j, i)));
+        }
+    }
+    check(worst == 0.0, "and the result is still symmetric, exactly");
+
+    // The largest magnitude per row should now be near 1 -- that is what Ruiz
+    // iteration is for, and it is the point of the whole exercise.
+    double worst_row = 0.0;
+    for (int i = 0; i < n; ++i) {
+        double row_max = 0.0;
+        for (int j = 0; j < n; ++j) row_max = std::max(row_max, std::abs(scaled.entry(i, j)));
+        worst_row = std::max(worst_row, std::abs(row_max - 1.0));
+    }
+    check(worst_row < 0.5,
+          "every row's largest entry is now within 0.5 of 1 (worst deviation " +
+              std::to_string(worst_row) + "), from a matrix spanning six orders");
+}
+
+// The scaling cannot be computed from the stored triangle as if it were a general
+// matrix: row i's largest entry includes the mirrors of entries held in earlier
+// rows. This checks the symmetric overload against the full-storage one, which
+// sees both triangles and so cannot make that mistake.
+void test_symmetric_overload_matches_full_storage() {
+    const int n = 20;
+    std::vector<std::pair<std::pair<int, int>, Complex>> entries;
+    for (int i = 0; i < n; ++i) entries.push_back({{i, i}, Complex(2.0 + i, 0.5)});
+    for (int i = 0; i + 1 < n; ++i) entries.push_back({{i, i + 1}, Complex(100.0 * (i + 1), -3.0)});
+    for (int i = 0; i + 7 < n; ++i) entries.push_back({{i, i + 7}, Complex(0.01, 0.02)});
+    const SparseSymmetricZ upper = symmetric_from(n, entries);
+    const SparseMatrixZ full = upper.to_full();
+
+    const std::vector<double> from_upper = compute_symmetric_equilibration(upper, 10);
+    const std::vector<double> from_full = compute_symmetric_equilibration(full, 10);
+    double worst = 0.0;
+    for (int i = 0; i < n; ++i) {
+        worst = std::max(worst, std::abs(from_upper[static_cast<std::size_t>(i)] -
+                                        from_full[static_cast<std::size_t>(i)]));
+    }
+    check(worst < 1e-14,
+          "the upper-triangle scaling equals the full-storage one (worst " +
+              std::to_string(worst) + ") -- so it really counted both indices of every entry");
+}
+
+
+// The two error measures.
+//
+// `relative_residual` divides by ||b||; `backward_error` divides by
+// max|A| ||x|| + ||b||. The second is the one to judge a solve by, and the reason
+// is a MEASUREMENT on the real system rather than anything checkable here: on the
+// loop at 100 MHz under `row_scaled`, ||b|| is 1.6e-9 with exactly one nonzero
+// entry while the matrix reaches 4.4e12 and ||x|| is 57.8, so the ||b||-relative
+// residual reads 6.7 % where the backward error is 4.2e-25
+// (`docs/SOLVER_PLAN.md` Sec. 18).
+//
+// Two attempts to reproduce that in a small fixture failed and are worth
+// recording rather than hiding: large matrix entries alone do not do it, because
+// then ||x|| shrinks with ||b|| and the two measures agree; and a hand-made
+// near-singular block did not do it either. The separation needs ||x|| to stay
+// large while ||b|| is tiny, which is a property of that assembled system, not
+// something a three-line fixture arranges. So what is asserted below is the
+// relationship that always holds, plus the requirement that neither measure can
+// be fooled -- and the real evidence stays where it was measured.
+void test_the_two_error_measures() {
+    const auto build = [](int n, double diag_scale) {
+        std::vector<std::pair<std::pair<int, int>, Complex>> entries;
+        for (int i = 0; i < n; ++i) {
+            entries.push_back({{i, i}, Complex(diag_scale * (10.0 + i), diag_scale)});
+        }
+        for (int i = 0; i + 1 < n; ++i) {
+            entries.push_back({{i, i + 1}, Complex(diag_scale * 2.0, -diag_scale)});
+        }
+        return symmetric_from(n, entries);
+    };
+
+    // backward_error <= relative_residual always: same numerator, and the
+    // denominator only ever grows by max|A| ||x||. Checked across scales, because
+    // it is the invariant that makes the second measure the safe default.
+    bool ordered = true;
+    for (const double scale : {1.0, 1e6, 1e12}) {
+        const int n = 15;
+        const SparseSymmetricZ a = build(n, scale);
+        std::vector<Complex> b(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            b[static_cast<std::size_t>(i)] = Complex(5.0 + i, 1.0 - 0.1 * i);
+        }
+        std::vector<Complex> x;
+        SolveReport r;
+        check(solve_symmetric(a, b, x, r),
+              "a system scaled by " + std::to_string(scale) + " solves");
+        check(r.backward_error < 1e-14 && r.residual < 1e-12,
+              "with both measures small (" + std::to_string(r.backward_error) + ", " +
+                  std::to_string(r.residual) + ")");
+        if (!(r.backward_error <= r.residual * 1.0000001)) ordered = false;
+
+        // Neither may be fooled by a wrong answer. Without this the backward
+        // error would just be a smaller number for its own sake.
+        std::vector<Complex> wrong = x;
+        wrong[3] *= 1.5;
+        check(relative_residual(a, wrong, b) > 1e-3,
+              "and the b-relative residual condemns a wrong solution");
+        check(backward_error(a, wrong, b) > 1e-5,
+              "and so does the backward error (" +
+                  std::to_string(backward_error(a, wrong, b)) + ")");
+    }
+    check(ordered,
+          "the backward error never exceeds the b-relative residual -- same numerator, larger "
+          "denominator, so it is the safe one to threshold against");
+}
+
 }  // namespace
 
 int main() {
@@ -476,6 +725,11 @@ int main() {
     test_residual_detects_a_wrong_answer();
     test_solve_by_hand();
     test_no_conjugation_in_the_solve();
+    test_equilibration_round_trip();
+    test_report_contents();
+    test_equilibration_preserves_symmetry();
+    test_symmetric_overload_matches_full_storage();
+    test_the_two_error_measures();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

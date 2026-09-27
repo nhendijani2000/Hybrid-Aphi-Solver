@@ -184,6 +184,7 @@ bool factorize_ldlt(const SparseSymmetricZ& a, const SolverAnalysis& analysis,
             }
             out.row_index[static_cast<std::size_t>(end)] = k;
             out.value[static_cast<std::size_t>(end)] = lkj;
+            stats.largest_multiplier = std::max(stats.largest_multiplier, std::abs(lkj));
             ++filled[static_cast<std::size_t>(j)];
         }
 
@@ -325,6 +326,87 @@ double relative_residual(const SparseSymmetricZ& a, const std::vector<Complex>& 
     numerator = std::sqrt(numerator);
     denominator = std::sqrt(denominator);
     return denominator > 0.0 ? numerator / denominator : numerator;
+}
+
+
+bool solve_symmetric(const SparseSymmetricZ& a, const std::vector<Complex>& b,
+                     std::vector<Complex>& x, SolveReport& report, const SolveOptions& options) {
+    const int n = a.rows();
+    if (static_cast<int>(b.size()) != n) {
+        throw std::invalid_argument("solve_symmetric: the right-hand side has " +
+                                    std::to_string(b.size()) + " entries for a matrix of " +
+                                    std::to_string(n) + " rows");
+    }
+    report = SolveReport{};
+
+    // --- scale -----------------------------------------------------------
+    // Symmetric, so A = A^T survives it -- which is what keeps LDL^T and the
+    // upper-triangle storage applicable at all.
+    std::vector<double> d(static_cast<std::size_t>(n), 1.0);
+    if (options.equilibration_iterations > 0) {
+        d = compute_symmetric_equilibration(a, options.equilibration_iterations);
+    }
+    report.equilibration_min = d.empty() ? 1.0 : *std::min_element(d.begin(), d.end());
+    report.equilibration_max = d.empty() ? 1.0 : *std::max_element(d.begin(), d.end());
+
+    const SparseSymmetricZ scaled =
+        options.equilibration_iterations > 0 ? apply_symmetric_equilibration(a, d) : a;
+    const std::vector<Complex> scaled_rhs =
+        options.equilibration_iterations > 0 ? scale_rhs(b, d) : b;
+
+    // --- order and factorize --------------------------------------------
+    // The pattern is unchanged by scaling, so this could be hoisted across a
+    // frequency sweep; `solve_symmetric` is the one-shot convenience form.
+    auto t0 = std::chrono::steady_clock::now();
+    const SolverAnalysis analysis = analyze(scaled, options.ordering);
+    auto t1 = std::chrono::steady_clock::now();
+    report.analyze_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+
+    SymmetricFactor factor;
+    FactorStats stats;
+    const bool factored = factorize_ldlt(scaled, analysis, factor, stats, options.pivot_floor);
+    report.factorize_ms = stats.milliseconds;
+    report.smallest_pivot = stats.smallest_pivot;
+    report.largest_pivot = stats.largest_pivot;
+    report.largest_multiplier = stats.largest_multiplier;
+    report.factor_nnz = stats.nnz;
+    report.columns_done = stats.columns_done;
+    if (!factored) {
+        report.ok = false;
+        return false;
+    }
+
+    // --- solve, then UNDO the scaling ------------------------------------
+    auto s0 = std::chrono::steady_clock::now();
+    const std::vector<Complex> y = solve(factor, analysis.permutation, scaled_rhs);
+    // x = diag(d) y. A multiplication, not a division, and not the identity.
+    x = options.equilibration_iterations > 0 ? recover_equilibrated_solution(y, d) : y;
+    auto s1 = std::chrono::steady_clock::now();
+    report.solve_ms = std::chrono::duration<double, std::milli>(s1 - s0).count();
+
+    // --- measure, against the ORIGINAL system ----------------------------
+    report.residual = relative_residual(a, x, b);
+    report.backward_error = backward_error(a, x, b);
+    report.ok = true;
+    return true;
+}
+
+
+double backward_error(const SparseSymmetricZ& a, const std::vector<Complex>& x,
+                      const std::vector<Complex>& b) {
+    if (static_cast<int>(x.size()) != a.rows() || x.size() != b.size()) {
+        throw std::invalid_argument("backward_error: lengths must match the matrix");
+    }
+    const std::vector<Complex> ax = a.matvec(x);
+    double numerator = 0.0, bnorm = 0.0, xnorm = 0.0, amax = 0.0;
+    for (std::size_t i = 0; i < x.size(); ++i) {
+        numerator += std::norm(ax[i] - b[i]);
+        bnorm += std::norm(b[i]);
+        xnorm += std::norm(x[i]);
+    }
+    for (const Complex& v : a.values()) amax = std::max(amax, std::abs(v));
+    const double denominator = amax * std::sqrt(xnorm) + std::sqrt(bnorm);
+    return denominator > 0.0 ? std::sqrt(numerator) / denominator : std::sqrt(numerator);
 }
 
 }  // namespace aphi_solver

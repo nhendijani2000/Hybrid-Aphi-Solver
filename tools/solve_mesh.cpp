@@ -97,38 +97,50 @@ int main(int argc, char** argv) {
         const std::vector<double> frequencies =
             p.type == AnalysisType::DC ? std::vector<double>{0.0} : p.frequencies;
 
-        std::cout << std::right << "  " << std::setw(12) << "frequency" << std::setw(12)
-                  << "factor ms" << std::setw(12) << "solve ms" << std::setw(13) << "residual"
-                  << std::setw(13) << "min |D|" << std::setw(13) << "max |D|" << "\n";
+        // Each frequency is solved TWICE -- with equilibration and without -- so
+        // the two residuals sit side by side. A number only ever seen scaled
+        // cannot say whether the scaling helped.
+        std::cout << std::right << "  " << std::setw(12) << "frequency" << std::setw(14)
+                  << "resid plain" << std::setw(14) << "resid equil" << std::setw(14) << "backward err" << std::setw(12)
+                  << "d max/min" << std::setw(13) << "min |D|" << std::setw(13) << "max |D|"
+                  << std::setw(12) << "max |L|" << std::setw(11) << "factor ms" << "\n";
 
         int failures = 0;
         for (double f : frequencies) {
             const double omega = 2.0 * 3.14159265358979323846 * f;
             refill(system, bound, mesh, dofs, pattern, omega, p.conditioning);
 
-            SymmetricFactor factor;
-            FactorStats stats;
-            const bool ok = factorize_ldlt(system.matrix, analysis, factor, stats);
+            SolveOptions plain;
+            plain.ordering = ordering;
+            plain.equilibration_iterations = 0;
+            SolveOptions equil;
+            equil.ordering = ordering;
+            equil.equilibration_iterations = 10;
+
+            std::vector<Complex> x_plain;
+            std::vector<Complex> x_equil;
+            SolveReport rp;
+            SolveReport re;
+            const bool ok_plain = solve_symmetric(system.matrix, system.rhs, x_plain, rp, plain);
+            const bool ok_equil = solve_symmetric(system.matrix, system.rhs, x_equil, re, equil);
 
             std::ostringstream label;
             label << std::setprecision(4) << f << " Hz";
-            std::cout << "  " << std::setw(12) << label.str() << std::setw(12)
-                      << stats.milliseconds;
-            if (!ok) {
-                std::cout << "   FAILED at column " << stats.columns_done << " of "
-                          << dofs.num_total << ", pivot " << stats.smallest_pivot << "\n";
+            std::cout << "  " << std::setw(12) << label.str();
+            if (!ok_plain || !ok_equil) {
+                std::cout << "   FAILED at column "
+                          << (ok_plain ? re.columns_done : rp.columns_done) << " of "
+                          << dofs.num_total << "\n";
                 ++failures;
                 continue;
             }
-
-            auto s0 = Clock::now();
-            const std::vector<Complex> x = solve(factor, analysis.permutation, system.rhs);
-            auto s1 = Clock::now();
-            const double residual = relative_residual(system.matrix, x, system.rhs);
-
-            std::cout << std::setw(12) << ms(s0, s1) << std::setw(13) << residual << std::setw(13)
-                      << stats.smallest_pivot << std::setw(13) << stats.largest_pivot << "\n";
-            if (!(residual < 1e-6)) ++failures;
+            std::cout << std::setw(14) << rp.residual << std::setw(14) << re.residual
+                      << std::setw(14) << re.backward_error
+                      << std::setw(12) << re.equilibration_max / re.equilibration_min
+                      << std::setw(13) << re.smallest_pivot << std::setw(13) << re.largest_pivot
+                      << std::setw(12) << re.largest_multiplier << std::setw(11) << re.factorize_ms
+                      << "\n";
+            if (!(re.backward_error < 1e-12)) ++failures;
         }
 
         std::cout << "\nNothing is EXTRACTED from these solutions yet: no currents, voltages, R or\n"

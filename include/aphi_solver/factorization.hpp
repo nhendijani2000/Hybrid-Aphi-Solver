@@ -3,6 +3,7 @@
 #include <complex>
 #include <vector>
 
+#include "aphi_solver/equilibration.hpp"
 #include "aphi_solver/sparse_matrix.hpp"
 #include "aphi_solver/sparse_symmetric.hpp"
 #include "aphi_solver/symbolic.hpp"
@@ -46,6 +47,14 @@ struct FactorStats {
     int columns_done = 0;          ///< where it stopped, if it did
     double smallest_pivot = 0.0;   ///< min |D[j]| over the columns completed
     double largest_pivot = 0.0;
+
+    /// The largest |L(i,j)| produced. **This, not the pivot range, is what says
+    /// whether an unpivoted factorization was stable.** A well-scaled pivot can
+    /// still divide into a large numerator, and the resulting multiplier amplifies
+    /// every later update -- which is exactly what pivoting exists to bound.
+    /// Measured because the pivot range alone proved misleading on a real system
+    /// (docs/SOLVER_PLAN.md Sec. 18).
+    double largest_multiplier = 0.0;
     std::size_t nnz = 0;           ///< L's stored entries plus D
     double milliseconds = 0.0;
 };
@@ -107,6 +116,96 @@ std::vector<std::complex<double>> solve(const SymmetricFactor& f, const Permutat
 /// arithmetic. Returns `||A x||` when `b` is zero.
 double relative_residual(const SparseSymmetricZ& a, const std::vector<std::complex<double>>& x,
                          const std::vector<std::complex<double>>& b);
+
+/// The standard relative BACKWARD error,
+///
+///     ||A x - b|| / ( max|A_ij| * ||x|| + ||b|| )
+///
+/// and the number to judge a solve by. `relative_residual` above divides by
+/// `||b||` alone, which is fine when the right-hand side is a comparable size to
+/// the rest of the problem and badly misleading when it is not.
+///
+/// It is not here for tidiness. On the real loop system at 100 MHz under
+/// `row_scaled`, `||b||` is 1.6e-9 with exactly ONE nonzero entry -- the port
+/// row, carrying `r * I = I / (j*omega)` -- while the matrix reaches 4.4e12. The
+/// ratio is 2.8e21, so dividing by `||b||` turns pure rounding noise into a
+/// reported 6.7 %, while the backward error is 4.2e-25. One of those is a
+/// statement about the solve and the other is a statement about the
+/// normalisation. See `docs/SOLVER_PLAN.md` Sec. 18.
+///
+/// Note the dependence this exposes: `||b||` scales with the conditioning choice
+/// (`Natural` would give `I = 1` in that row, `RowScaled` gives `I/(j*omega)`),
+/// so a `||b||`-relative residual is not even comparable between formulations of
+/// the same problem. The backward error is.
+double backward_error(const SparseSymmetricZ& a, const std::vector<std::complex<double>>& x,
+                     const std::vector<std::complex<double>>& b);
+
+
+/// Options for the whole solve. `docs/SOLVER_PLAN.md` §7.
+struct SolveOptions {
+    Ordering ordering = Ordering::ApproximateMinimumDegree;
+
+    /// Ruiz iterations for `diag(d) A diag(d)`. **0 disables scaling**, which is
+    /// what the negative control for it uses.
+    int equilibration_iterations = 10;
+
+    /// A pivot at or below this, relative to the largest |D| seen so far, stops
+    /// the factorization. Steps 7 onwards perturb instead.
+    double pivot_floor = 0.0;
+};
+
+/// What one solve did, reported rather than inferred. `docs/SOLVER_PLAN.md` §5.
+struct SolveReport {
+    bool ok = false;
+
+    /// `||A x - b|| / ( max|A| ||x|| + ||b|| )` on the ORIGINAL system: the
+    /// number to judge the solve by. See `backward_error`.
+    double backward_error = 0.0;
+
+    /// `||A x - b|| / ||b||`, kept because it is what a user expects to see, and
+    /// misleading whenever `||b||` is small compared with `||A|| ||x||`.
+    double residual = 0.0;
+
+    /// The residual the same solve would have had without equilibration is not
+    /// computed here -- run it twice with `equilibration_iterations = 0` to get
+    /// that, which is what `tools/solve_mesh.cpp` does.
+    double equilibration_min = 1.0;  ///< smallest d
+    double equilibration_max = 1.0;  ///< largest d
+
+    double smallest_pivot = 0.0;
+    double largest_pivot = 0.0;
+    double largest_multiplier = 0.0;  ///< max |L(i,j)|; see FactorStats, and Sec. 18
+    std::size_t factor_nnz = 0;
+    int columns_done = 0;
+
+    double analyze_ms = 0.0;
+    double factorize_ms = 0.0;
+    double solve_ms = 0.0;
+};
+
+/// Equilibrate, order, factorize, solve, un-scale, and measure.
+///
+/// The order is **scale, then order, then factorize**: ordering is structural so
+/// scaling cannot affect it, and scaling improves pivot quality so it has to come
+/// first.
+///
+/// The substitution and its undoing, which is the step that is easy to get wrong:
+///
+///     A~ = D A D,   solve  A~ y = D b,   then  x = D y
+///
+/// Both times a **multiplication** by `d` -- not `x = y`, and not `x = D⁻¹ y`.
+/// Getting it wrong yields a smooth, plausible, completely wrong field, so one
+/// test compares against an unscaled solve of the same system and one control
+/// drops the recovery.
+///
+/// `report.residual` is always measured against the **original** `a` and `b`,
+/// never the equilibrated pair, which is what makes it a true backward error.
+///
+/// Returns false, with `report` filled in as far as it got, if the factorization
+/// hit a pivot at or below `options.pivot_floor`.
+bool solve_symmetric(const SparseSymmetricZ& a, const std::vector<std::complex<double>>& b,
+                     std::vector<std::complex<double>>& x, SolveReport& report,
+                     const SolveOptions& options = {});
 
 /// `L D Lᵀ` expanded back to a full matrix, for checking. Only for tests and
 /// diagnostics -- it is quadratic in a column's length and defeats the whole

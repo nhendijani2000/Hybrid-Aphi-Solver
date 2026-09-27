@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "aphi_solver/complex_matrix.hpp"
+#include "aphi_solver/sparse_symmetric.hpp"
 
 namespace aphi_solver {
 
@@ -47,5 +48,23 @@ std::vector<Complex> scale_rhs(const std::vector<Complex>& b, const std::vector<
 /// Recovers the physical solution x = diag(d) * y after solving the equilibrated
 /// system (diag(d) A diag(d)) y = diag(d) b.
 std::vector<Complex> recover_equilibrated_solution(const std::vector<Complex>& y, const std::vector<double>& d);
+
+// ---------------------------------------------------------------------------
+// The same three operations for a matrix stored as its upper triangle only
+// (`SparseSymmetric`). Added Sept 2026 with step 6 of `docs/SOLVER_PLAN.md`.
+//
+// The scaling vector is NOT computable from the stored triangle by treating it
+// as a general matrix: row i's largest entry includes entries held in row j at
+// column i for every j < i, which the upper triangle stores elsewhere. Every
+// stored entry therefore contributes its magnitude to BOTH of its indices, and
+// an implementation that forgot the second one would compute a scaling from
+// half the matrix -- plausible, and wrong by a factor that varies per row.
+
+std::vector<double> compute_symmetric_equilibration(const SparseSymmetricZ& A,
+                                                   int iterations = 10);
+
+/// Returns diag(d) * A * diag(d), still upper-triangle only.
+SparseSymmetricZ apply_symmetric_equilibration(const SparseSymmetricZ& A,
+                                              const std::vector<double>& d);
 
 }  // namespace aphi_solver

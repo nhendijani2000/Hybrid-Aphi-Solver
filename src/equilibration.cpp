@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 namespace aphi_solver {
 
@@ -85,6 +86,79 @@ std::vector<Complex> recover_equilibrated_solution(const std::vector<Complex>& y
     // separately because it means something different at the call site
     // (undoing the substitution x = diag(d) y, not scaling a right-hand side).
     return scale_rhs(y, d);
+}
+
+
+// --------------------------------------------------------------- upper triangle
+
+std::vector<double> compute_symmetric_equilibration(const SparseSymmetricZ& A, int iterations) {
+    const int n = A.rows();
+    std::vector<double> d(static_cast<std::size_t>(n), 1.0);
+    const auto& row_ptr = A.row_ptr();
+    const auto& col_index = A.col_index();
+    std::vector<Complex> working = A.values();
+
+    for (int iter = 0; iter < iterations; ++iter) {
+        // Every stored entry counts towards BOTH its row and its column: the
+        // matrix is symmetric, so the mirror of (i,j) is a real entry of row j
+        // even though only one copy is held.
+        std::vector<double> row_max(static_cast<std::size_t>(n), 0.0);
+        for (int i = 0; i < n; ++i) {
+            for (int k = row_ptr[static_cast<std::size_t>(i)];
+                 k < row_ptr[static_cast<std::size_t>(i) + 1]; ++k) {
+                const int j = col_index[static_cast<std::size_t>(k)];
+                const double mag = std::abs(working[static_cast<std::size_t>(k)]);
+                if (mag > row_max[static_cast<std::size_t>(i)]) {
+                    row_max[static_cast<std::size_t>(i)] = mag;
+                }
+                if (mag > row_max[static_cast<std::size_t>(j)]) {
+                    row_max[static_cast<std::size_t>(j)] = mag;
+                }
+            }
+        }
+
+        std::vector<double> factor(static_cast<std::size_t>(n), 1.0);
+        for (int i = 0; i < n; ++i) {
+            factor[static_cast<std::size_t>(i)] =
+                (row_max[static_cast<std::size_t>(i)] > 0.0)
+                    ? 1.0 / std::sqrt(row_max[static_cast<std::size_t>(i)])
+                    : 1.0;
+            d[static_cast<std::size_t>(i)] *= factor[static_cast<std::size_t>(i)];
+        }
+
+        for (int i = 0; i < n; ++i) {
+            for (int k = row_ptr[static_cast<std::size_t>(i)];
+                 k < row_ptr[static_cast<std::size_t>(i) + 1]; ++k) {
+                working[static_cast<std::size_t>(k)] *=
+                    factor[static_cast<std::size_t>(i)] *
+                    factor[static_cast<std::size_t>(col_index[static_cast<std::size_t>(k)])];
+            }
+        }
+    }
+    return d;
+}
+
+SparseSymmetricZ apply_symmetric_equilibration(const SparseSymmetricZ& A,
+                                              const std::vector<double>& d) {
+    if (static_cast<int>(d.size()) != A.rows()) {
+        throw std::invalid_argument(
+            "apply_symmetric_equilibration: the scaling has " + std::to_string(d.size()) +
+            " entries for a matrix of " + std::to_string(A.rows()) + " rows");
+    }
+    SparseSymmetricZ out = A;
+    const auto& row_ptr = out.row_ptr();
+    const auto& col_index = out.col_index();
+    std::vector<Complex>& values = out.mutable_values();
+    for (int i = 0; i < A.rows(); ++i) {
+        for (int k = row_ptr[static_cast<std::size_t>(i)];
+             k < row_ptr[static_cast<std::size_t>(i) + 1]; ++k) {
+            values[static_cast<std::size_t>(k)] *= Complex(
+                d[static_cast<std::size_t>(i)] *
+                    d[static_cast<std::size_t>(col_index[static_cast<std::size_t>(k)])],
+                0.0);
+        }
+    }
+    return out;
 }
 
 }  // namespace aphi_solver

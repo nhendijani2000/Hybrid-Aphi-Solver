@@ -762,7 +762,16 @@ supernodal blocking as the 5–20× that answers it.
 
 ---
 
-## 17. Step 5 done, 26 Sept: the first solve, and it is not good enough
+## 17. Step 5 done, 26 Sept: the first solve
+
+> **CORRECTION, added with Sec. 18.** This section originally concluded "at
+> 100 MHz the solution is 6.9 % wrong. That is not an answer." **That was
+> wrong**, and the fault was the measure, not the solve. The 6.9 % is
+> `||Ax-b|| / ||b||` where `||b||` is 1.6e-9 with a single nonzero entry, against
+> matrix entries of 4.4e12. The standard backward error for the same solve is
+> 4.2e-25. The solve was accurate all along. Everything below about the residual
+> being the only thing that can detect a bad answer still holds -- it is which
+> residual that was wrong. Sec. 18 has the measurement and the fix.
 
 `solve_in_place`, `solve`, `relative_residual` in `factorization.cpp`, and
 `tools/solve_mesh.cpp` — a committed tool, because the suite cannot factorize a
@@ -836,3 +845,94 @@ declared scalar cost, not a surprise, and §10 names the fix. And nothing is
 extracted from these solutions yet — no currents, no `R`, no `L` — so the
 physics remains unvalidated. That is step 9, and it cannot usefully run until the
 residual is small.
+
+---
+
+## 18. Step 6 done, 26 Sept: equilibration works, and §17's verdict was wrong
+
+`compute_symmetric_equilibration` and `apply_symmetric_equilibration` gained
+`SparseSymmetric` overloads; `solve_symmetric` in `factorization.cpp` ties the
+whole pipeline together — **scale, order, factorize, solve, un-scale, measure** —
+and `tools/solve_mesh.cpp` now runs every frequency **twice**, with and without
+scaling, because a number only ever seen scaled cannot say whether the scaling
+helped.
+
+The scaling vector cannot be computed from the stored triangle as if it were a
+general matrix: row `i`'s largest entry includes the mirrors of entries held in
+earlier rows, so every stored entry contributes to **both** its indices. One test
+checks the symmetric overload against the full-storage one, which sees both
+triangles and cannot make that mistake.
+
+### What equilibration did
+
+`examples/loop_sweep.aphi`, `row_scaled`, 37064 unknowns, AMD:
+
+| | before | after |
+|---|---|---|
+| pivot range | 8.1e-16 … 1.98e12 | **0.015 … 1.0** (10 kHz), 6.7e-5 … 1.0 (100 MHz) |
+| pivot ratio | **2.4e27** | **66** and **1.5e4** |
+| max \|L\| | — | **1.95** and **14.8** |
+| scaling spread | — | 9.8e12 and 5.6e13 |
+
+**Equilibration worked, and completely.** The pivot ratio fell by twenty-three
+orders of magnitude, and `max |L|` — the multiplier growth that actually measures
+whether an unpivoted factorization was stable — is **under 15**. A factorization
+with those numbers is not merely adequate, it is clean.
+
+### And that is what exposed the error in §17
+
+The `||b||`-relative residual barely moved: 0.0685 → 0.0668. Taken with a pivot
+ratio of 1.5e4 and `max |L|` of 15, that is a contradiction — such a
+factorization cannot produce a 6.7 % error. So the measure was wrong, and
+measuring the norms settled it:
+
+| | |
+|---|---|
+| ‖b‖ | 1.59e-9, with **exactly 1 nonzero entry of 37064** |
+| ‖x‖ | 57.8 |
+| max \|A\| | 4.42e12 |
+| ‖Ax − b‖ | 1.06e-10, absolute |
+| ‖Ax−b‖ / ‖b‖ | **0.0668** — what §17 reported |
+| ‖Ax−b‖ / (max\|A\|·‖x‖ + ‖b‖) | **4.2e-25** — the standard backward error |
+
+`b` has one nonzero because `row_scaled` puts `r·I = I/(jω)` in the port row, and
+at 100 MHz that is 1.6e-9. Dividing a rounding-level residual by it inflates
+noise into a percentage. **The solve was accurate to 4e-25 all along.**
+
+Three things follow, and the third is the uncomfortable one.
+
+**`backward_error` is now the number to judge a solve by**, reported alongside
+the `||b||`-relative one, and it is what `solve_mesh` thresholds against. Note
+what the old measure also was: **not comparable between formulations of the same
+problem**, since `||b||` scales with the conditioning choice — `Natural` would put
+`I = 1` in that row where `RowScaled` puts `I/(jω)`.
+
+**§17's acceptance criterion for steps 6 and 7 is void.** There was no 0.069 to
+fix. Step 7's static pivoting and refinement are now insurance against matrices
+that *are* hard, not a repair for this one — and their justification has to come
+from a case that genuinely fails, not from this measurement.
+
+**I stated a wrong conclusion confidently, in a commit message and a plan
+section, on the strength of a metric I had written myself and not questioned.**
+The tests around it were all passing and all correct; they simply never compared
+the metric against a second opinion. The general form of this is the same failure
+this project keeps finding — a check derived from the same assumption as the thing
+it checks — and it is worth noting that it caught *me* rather than the code.
+
+Two attempts to reproduce the discrepancy in a small fixture **failed**, and the
+test file says so rather than pretending otherwise: large matrix entries alone do
+not do it, because `||x||` then shrinks with `||b||`; nor did a hand-made
+near-singular block. The separation needs `||x||` to stay large while `||b||` is
+tiny, which is a property of that assembled system. The unit test therefore
+asserts the invariant that always holds — `backward_error ≤ relative_residual`,
+same numerator and a larger denominator — plus that neither measure can be fooled
+by a wrong answer, and the real evidence stays where it was measured.
+
+### On the fixture where equilibration barely helps
+
+The badly-scaled 24×24 test matrix shows 6.3e-11 unscaled against 5.0e-11
+equilibrated. That is not a defect either: the relative residual is a *backward*
+error, and on a matrix spanning twelve orders it already sits near what the
+conditioning allows. What equilibration buys is accuracy in `x`, which a backward
+error does not see. The threshold there is set from the measurement, with the
+reason written beside it.
