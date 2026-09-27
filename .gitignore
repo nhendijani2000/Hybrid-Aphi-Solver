@@ -72,3 +72,6 @@ Thumbs.db
 # element size would change. Regenerate with tools/cylinder_box.geo only if
 # that number is re-measured and the tests updated with it.
 !meshes/cylinder_box.msh
+
+# Solver output written into the working directory by tools/solve_mesh
+potential*.out

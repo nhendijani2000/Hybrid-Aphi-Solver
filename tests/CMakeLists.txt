@@ -105,3 +105,7 @@ add_test(NAME aphi_tests_symbolic COMMAND aphi_tests_symbolic)
 add_executable(aphi_tests_factorization test_factorization.cpp)
 target_link_libraries(aphi_tests_factorization PRIVATE aphi_core)
 add_test(NAME aphi_tests_factorization COMMAND aphi_tests_factorization)
+
+add_executable(aphi_tests_postprocess test_postprocess.cpp)
+target_link_libraries(aphi_tests_postprocess PRIVATE aphi_core)
+add_test(NAME aphi_tests_postprocess COMMAND aphi_tests_postprocess)

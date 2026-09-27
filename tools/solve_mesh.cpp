@@ -25,6 +25,7 @@
 #include "aphi_solver/factorization.hpp"
 #include "aphi_solver/gmsh_reader.hpp"
 #include "aphi_solver/input_file.hpp"
+#include "aphi_solver/postprocess.hpp"
 #include "aphi_solver/version.hpp"
 
 using namespace aphi_solver;
@@ -141,6 +142,22 @@ int main(int argc, char** argv) {
                       << std::setw(12) << re.largest_multiplier << std::setw(11) << re.factorize_ms
                       << "\n";
             if (!(re.backward_error < 1e-12)) ++failures;
+
+            // The potential, written for every frequency. One file when there is
+            // only one solve, numbered otherwise, so a sweep does not silently
+            // overwrite itself.
+            Solution sol;
+            sol.x = x_equil;
+            sol.conditioning = p.conditioning;
+            sol.omega = omega;
+            const NodalPotential nodal = potential_at_nodes(mesh, bound, dofs, sol);
+            std::string out_path = "potential.out";
+            if (frequencies.size() > 1) {
+                out_path = "potential_" + std::to_string(&f - frequencies.data()) + ".out";
+            }
+            const WriteStats ws = write_potential(out_path, nodal, sol);
+            std::cout << "                wrote " << out_path << "   " << ws.nodes << " nodes, "
+                      << ws.bytes / 1024 << " KB, " << ws.milliseconds << " ms\n";
         }
 
         std::cout << "\nNothing is EXTRACTED from these solutions yet: no currents, voltages, R or\n"
