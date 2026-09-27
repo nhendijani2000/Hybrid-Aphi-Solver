@@ -240,3 +240,68 @@ extraction end to end, and no single-formulation test can.
 
 Step 6 is the milestone. Everything before it is machinery; everything after it
 extends the validation to a second geometry and a second quantity.
+
+---
+
+## 7. An external reference: Ansys Maxwell, 1 A loop at 50 Hz
+
+Supplied Sept 2026. A ring driven by a 1 A current source at 50 Hz; the reported
+terminal voltage, with `I = 1 A` so `Z = V`:
+
+    V = 0.00034575462656563323623 + j 1.2395463798949440417e-5  V
+
+| | |
+|---|---|
+| **R** = Re(Z) | **345.75 µΩ** |
+| X = Im(Z) | 1.2395e-5 Ω |
+| **L** = X/ω | **39.456 nH** |
+| Q = X/R | **0.0359** |
+
+This is worth more than the analytic loop formula in §4, because it is an
+independent solver's answer to the same physics rather than a closed form with
+its own approximations.
+
+### The dimensions were lost, and are recoverable only up to σ
+
+Inverting `R = 2r/(σa²)` and `L = μ₀r[ln(8r/a) − 7/4]` — the uniform-current form,
+justified below — gives one equation short of a unique answer:
+
+| σ | major radius `r` | wire radius `a` | outer diameter |
+|---|---|---|---|
+| **5.8e7 (copper)** | **11.60 mm** | **1.075 mm** | **25.3 mm** |
+| 3.5e7 (aluminium) | 12.58 mm | 1.442 mm | 28.0 mm |
+| 1.0e7 | 15.83 mm | 3.03 mm | 37.7 mm |
+
+All three reproduce `R` and `L` to the digits given. Copper is the likeliest —
+its 25.3 mm outer diameter matches the scale bar in the supplied figure, where
+the ring sits just inside the 3 cm mark. **Confirming the material pins the
+geometry completely**, and is the one piece of information worth recovering.
+
+### Why this is a good validation case
+
+**It is effectively a DC problem.** Skin depth in copper at 50 Hz is 9.35 mm,
+**8.7× the wire radius**, so the current is essentially uniform. Nothing about
+the answer depends on resolving a skin layer — and it probes the ω → 0 limit,
+which is the regime `docs/CONDITIONING.md` exists for and the one where an A-Φ
+formulation is hardest.
+
+**The imaginary part is the demanding half.** `Q = 0.036` means the inductive
+term is 28× smaller than the resistive one, so matching `L` to a few percent
+requires `Im(V)` to be right when it is 3.6 % of `Re(V)`. A formulation can get a
+dominant quantity right by accident; it cannot do that to a term this small.
+
+### What it would take to use it
+
+- **A new fixture.** The inversion assumes a **circular** cross-section;
+  `loop_cut.msh` is an extruded annulus with a **rectangular** one, so it cannot
+  reproduce this. A revolved polygonal cross-section is needed — the same
+  two-half-annuli construction as `tools/loop_cut.geo`, with the cross-section
+  revolved rather than extruded.
+- **The material confirmed**, or the case treated as three candidate geometries.
+
+### The caveat on the recovered numbers
+
+`L = μ₀r[ln(8r/a) − 7/4]` is the thin-ring approximation and here `a/r = 0.093`,
+so it is good to roughly 1 %. That uncertainty attaches to the **dimensions**,
+not to `R` and `L`, which come straight from the reported voltage and are exact
+to the digits supplied.
