@@ -626,3 +626,19 @@ a discrepancy into it was an error made and corrected here.
 
 The `flux_tangential` outer boundary is visible directly in a vector plot of
 `B_real` on this plane: the arrows lie along the box walls, which is `n.B = 0`.
+
+### Use a LINEAR colour scale for |B|
+
+The solid-conductor signature is `|B| = 0` on the axis, a maximum at the
+conductor surface, and `1/r` outside: a blue core, a bright ring on the surface,
+then decay. It is the shape to check a magnetostatic solution against by eye,
+and it is what a commercial tool's default plot shows.
+
+A **log** colour scale destroys it. `1/r` over the 5:1 radius from the conductor
+surface to the box wall spans well under one decade, so on a log ramp the whole
+exterior lands in the top colours and reads as a nearly uniform red field with a
+small dark disc. The first cross-section produced here was plotted that way and
+looked wrong while being right; the linear version is immediately recognisable.
+
+`tools/pv_bmag.py` writes both, for exactly this comparison. Reach for log only
+when the dynamic range genuinely demands it -- and not for the check above.
