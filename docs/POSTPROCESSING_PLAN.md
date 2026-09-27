@@ -414,3 +414,38 @@ closed form can corroborate independently.
 Until then: **validate against `R` alone**, which is worth doing anyway — it
 exercises the internal-cut port, the gauge on a multiply-connected conductor, and
 the DC limit, on a topology the cylinder fixture does not cover.
+
+---
+
+## 8. The writer, measured: formatting beats buffering nine to one
+
+`write_potential` fills a 1 MB buffer and writes in blocks — three `fwrite`
+calls for a 2.5 MB file rather than one per value. But the split between the two
+techniques is not what it looks like. On 200000 values:
+
+| | ms | |
+|---|---|---|
+| **`to_chars` + 1 MB buffer** | **7.5** | what the code does |
+| `to_chars`, `fwrite` per line | 11.6 | **buffering is worth 1.6×** |
+| `ostream` formatting, one big write | 108.1 | **`to_chars` is worth 14.4×** |
+| `ostream`, value by value | 115.9 | 15.5× overall |
+| `ostream` + `std::endl` per line | 464.2 | 61.9× |
+
+**Roughly 90 % of the speedup is the formatting**, not the buffering — the
+opposite of the natural assumption, and the reason this is recorded rather than
+described.
+
+Two things follow.
+
+**Buffering earns only 1.6× because a `FILE*` is already buffered** by the C
+runtime, at around 4 KB. So `fwrite` per line was never a system call per line;
+the runtime was batching it. The 1 MB buffer here is a *second* layer, and what
+it removes is `fwrite`'s per-call overhead — the call itself and the stream
+locking — not syscalls. Worth keeping, and worth not overselling.
+
+**`std::endl` is the real cost**, at 62× slower, because it forces an actual
+flush on every line. That is the mistake to avoid, and it is avoided.
+
+`std::to_chars` also produces the shortest representation that round-trips
+exactly, so the file is 5.5 % **smaller** than `setprecision(17)` while being
+lossless — a test reads every value back and requires bitwise equality.

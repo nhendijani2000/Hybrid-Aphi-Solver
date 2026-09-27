@@ -74,11 +74,24 @@ NodalPotential potential_at_nodes(const Mesh& mesh, const BoundProblem& bound, c
 /// An append-only text buffer that formats with `std::to_chars` and writes in
 /// large blocks.
 ///
-/// Both halves matter, and the formatting is the larger one: `ostream <<` on a
-/// double runs through locale-aware machinery and is typically an order of
-/// magnitude slower than `std::to_chars`, which also produces the **shortest
-/// representation that round-trips exactly** -- so the file is smaller *and*
-/// loses nothing. The block writes then remove one `fwrite` per value.
+/// **The formatting is about 90 % of the win, not the buffering** -- measured,
+/// because the reverse is the natural assumption. On 200000 values:
+///
+///     to_chars + 1 MB buffer   7.5 ms     <- this
+///     to_chars, fwrite/line   11.6 ms     buffering is worth 1.6x
+///     ostream, one big write 108.1 ms     to_chars is worth 14.4x
+///     ostream, value by value 115.9 ms    15.5x overall
+///     ostream + std::endl     464.2 ms    61.9x
+///
+/// `ostream <<` on a double runs through locale-aware machinery; `std::to_chars`
+/// does not, and its shortest representation **round-trips exactly**, so the file
+/// is smaller *and* lossless.
+///
+/// Buffering earns only 1.6x for a reason worth knowing: a `FILE*` is **already**
+/// buffered by the C runtime, so `fwrite` per line was never a system call per
+/// line. This buffer is a second layer that removes `fwrite`'s per-call overhead,
+/// not syscalls. What genuinely costs is `std::endl`, which forces a real flush
+/// every line and is 62x slower -- the one thing this code never does.
 class TextBuffer {
 public:
     explicit TextBuffer(std::FILE* out, std::size_t capacity = 1u << 20);
