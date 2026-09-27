@@ -533,3 +533,35 @@ contributes exactly zero to `mid − average`.** The test is structurally blind 
 the one artefact it was aimed at. Recorded because the measurement is real and
 the inference from it was worthless — the cost of a control is wasted if its
 null result is trusted.
+
+### The air region, which is three orders worse
+
+The wire is 12038 of the 22499 nodes. The other 10461 are air, and under
+`full_wave` they carry a genuine Φ. Mirror symmetry gives a check that needs no
+exact solution: at **exactly** z = l/2 it forces Φ = 0.5, with no tolerance.
+
+    wire   48 nodes   mean |Re Phi - 0.5| 1.30e-07   worst 2.06e-07
+    air    87 nodes   mean |Re Phi - 0.5| 3.73e-05   worst 2.52e-04
+
+    mirror pairs, worst |Re(z) + Re(l-z) - 1|:   wire 4.12e-07   air 2.72e-03
+    outer box wall, 600 nodes, mean Re Phi:      0.500008   (exact value 0.5)
+
+Both are correct, and the gap between them is the point. In the wire the exact
+answer is linear and therefore lies **in** the P2 space, so the only error is
+round-off plus the A-coupling. In the air it does not: Φ there is genuinely
+curved, and `lc_box = 0.30 mm` against `lc_wire = 0.055 mm` is 5.5x coarser, so
+1e-4 to 3e-3 is ordinary discretisation error. Do not read the air numbers as a
+defect, and do not quote the wire's 1e-7 as the solver's accuracy — it is the
+accuracy of a case constructed so the exact answer is representable.
+
+The air's shape is worth understanding before looking at a plot of it. `z/l` is
+harmonic and satisfies `dPhi/dn = 0` on the four side walls, but **not** on the
+top and bottom faces outside the wire caps, where `d(z/l)/dz = 1/l`. So the air
+potential cannot follow `z/l`; it compresses toward 0.5, reaching 0.485 at the
+bottom far corner rather than 0. That is the natural boundary condition doing
+what it should, not the air failing to be driven.
+
+Restricting the exact-z = l/2 test to a *window* in z is worthless: a ±1 µm
+window admits ±1e-3 of `z/l` by itself, which is larger than the air error being
+measured. Written down because the windowed version was run first and reported a
+wire error of 9.5e-04 — a pure artefact of the window, 4500x the true value.
