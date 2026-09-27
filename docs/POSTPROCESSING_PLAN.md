@@ -356,3 +356,61 @@ with the boundary this close its shape is not a detail.
    tuning the geometry until it vanishes.
 3. **`Q` = 0.0359.** The ratio is a cleaner target than `L` alone, since both
    parts come from the same solve and the same geometry.
+
+### Boundary condition confirmed: flux tangential — and what that costs
+
+Maxwell used **zero flux / flux tangential**, i.e. `n·B = 0`. That is exactly
+what `outer = flux_tangential` imposes here (`n×A = 0` gives `n·B = 0`), so the
+two models agree on the boundary condition — which removes the commonest source
+of disagreement in a cross-solver comparison before it starts.
+
+It also settles the `L` question, unhelpfully.
+
+**A flux-tangential boundary close to a loop *reduces* its inductance.** `n·B = 0`
+is the condition at the surface of a perfect flux-excluding shield: the return
+flux that would have spread into free space is confined, and the effect is the
+same as an image current opposing the source. So
+
+    L_maxwell  <  L_free space
+
+and the supplied figure shows the boundary is **very** close — the air cylinder
+is about 3 cm across against the ring's 2.5 cm, leaving roughly **2.5 mm of air
+outside the ring** in the radial direction.
+
+Two consequences:
+
+- **The recovered dimensions are a lower bound on `r`.** They were obtained by
+  setting the free-space thin-ring `L` equal to the reported 39.456 nH. Since the
+  reported value is *suppressed*, the free-space `L` of the true ring is larger,
+  and so is the true `r`. `(11.60, 1.075) mm` is therefore the smallest geometry
+  consistent with the data, not the best estimate — a correction to the previous
+  section.
+- **`L` cannot be used as a validation target from this data**, because
+  reproducing it needs the air cylinder's dimensions, which are not recorded.
+
+**`R` is untouched by all of this.** `r/a² = 10027 m⁻¹` still holds exactly, and
+`R = 345.75 µΩ` remains a clean, domain-independent, skin-effect-free target.
+
+### The better use of this reference: specify a geometry and re-run
+
+Reverse-engineering a lost geometry from two numbers, one of which is
+domain-dependent, is the weakest possible form of this comparison. If Maxwell is
+still available, the strong form costs one run:
+
+1. **We specify everything** — ring major and minor radius, conductivity, the air
+   cylinder's radius and height, frequency, and flux-tangential on the outer
+   surface.
+2. **Maxwell reports `V` at 1 A.**
+3. Both solvers then have the *same* geometry, the *same* domain, and the *same*
+   boundary condition, so `R`, `L` **and** `Q` are all comparable, and a
+   discrepancy means something.
+
+A sensible geometry to ask for, close to the original so it stays representative
+and round enough to be unambiguous: **major radius 11.6 mm, wire radius 1.075 mm,
+copper at 5.8e7 S/m, air cylinder 40 mm radius by 60 mm tall, 50 Hz.** The larger
+domain also weakens the truncation effect, so the answer is closer to something a
+closed form can corroborate independently.
+
+Until then: **validate against `R` alone**, which is worth doing anyway — it
+exercises the internal-cut port, the gauge on a multiply-connected conductor, and
+the DC limit, on a topology the cylinder fixture does not cover.
