@@ -936,3 +936,42 @@ error, and on a matrix spanning twelve orders it already sits near what the
 conditioning allows. What equilibration buys is accuracy in `x`, which a backward
 error does not see. The threshold there is set from the measurement, with the
 reason written beside it.
+
+### Which case it was, and how much it matters elsewhere
+
+The misleading figure came from **the loop, `row_scaled`, symmetric** — not the
+cylinder, and not the unsymmetric matrix, which nothing has solved yet. Measured
+at 100 MHz, assembly only:
+
+| mesh | conditioning | nonzeros in `b` | ‖b‖ | max\|A\| | max\|A\|/‖b‖ |
+|---|---|---|---|---|---|
+| cylinder | natural | 1220 / 37368 | 44459 | 2.40e12 | 5.4e7 |
+| cylinder | row_scaled | 1220 / 37368 | 13436 | 2.06e12 | 1.5e8 |
+| cylinder | scaled_phi | 1220 / 37368 | 44459 | 2.79e14 | 6.3e9 |
+| **loop** | natural | **1** / 37064 | **1** | 4.84e12 | 4.8e12 |
+| **loop** | **row_scaled** | **1** / 37064 | **1.59e-9** | 4.42e12 | **2.8e21** |
+| **loop** | scaled_phi | **1** / 37064 | **1** | 1.24e14 | 1.2e14 |
+
+Two things compound in that one row:
+
+- **The loop has exactly one nonzero in `b` under every conditioning**, because it
+  has only a current port and no prescribed potential anywhere. Nothing else
+  reaches the right-hand side.
+- **`row_scaled` then divides that entry by `jω`.** `natural` and `scaled_phi`
+  leave it at `I = 1`; only `row_scaled` carries `r = 1/(jω)` into the port row.
+
+**The cylinder is far milder** — 1220 nonzeros and ‖b‖ ≈ 44459, because its
+voltage port's prescribed Φ is eliminated into the right-hand side of every row
+touching that terminal. Inflation ~1e8, not 1e21.
+
+The arithmetic closes exactly, which is the check that this is fully understood
+rather than merely plausible: `backward_error × max|A|·‖x‖/‖b‖` = 4.2e-25 ×
+1.6e23 = **0.067**, the figure §17 reported. The 1.78e-08 at 10 kHz is the same
+identity with `b = 1/(2π·10⁴)`.
+
+**A trap this sets for step 8.** Under `natural` the loop's ‖b‖ is 1 and the
+cylinder's is 44459, so the `||b||`-relative residual will read **up to nine
+orders better** for the unsymmetric path — from the normalisation alone. The
+obvious conclusion at step 8 would be "the unsymmetric solve is more accurate",
+and it would be false. Only `backward_error` is comparable across conditionings,
+and step 8 must compare on that.
