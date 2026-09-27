@@ -2,18 +2,18 @@
 
 #include <array>
 
+#include "aphi_solver/constants.hpp"
 #include "aphi_solver/quadrature.hpp"
 
 namespace aphi_solver {
 
 ElementCoefficients element_coefficients(const BoundBody& body, double omega) {
-    // mu_0 and eps_0 in SI. The mesh is in metres by the time assembly runs
-    // (scale_mesh_to_metres), so no length factor belongs here.
-    constexpr double mu0 = 4.0e-7 * 3.14159265358979323846;
-    constexpr double eps0 = 8.8541878128e-12;
-
-    const double mu = body.mu_r * mu0;
-    const double eps = body.eps_r * eps0;
+    // mu_0 and eps_0 in SI (aphi_solver/constants.hpp -- shared with
+    // post-processing, which must use the same values). The mesh is in metres
+    // by the time assembly runs (scale_mesh_to_metres), so no length factor
+    // belongs here.
+    const double mu = body.mu_r * kMu0;
+    const double eps = body.eps_r * kEps0;
 
     ElementCoefficients c;
     c.nu = 1.0 / mu;

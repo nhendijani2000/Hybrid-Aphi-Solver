@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 
+#include "aphi_solver/basis_functions.hpp"
 #include "aphi_solver/postprocess.hpp"
 
 using namespace aphi_solver;
@@ -553,6 +554,270 @@ void test_vtk_quadratic_node_order() {
     std::remove(path.c_str());
 }
 
+
+// A DOF map in which nothing is eliminated: every edge and every P2 node is a
+// free unknown, numbered [edges | P2 nodes].
+//
+// The real map always pins a spanning tree and the Dirichlet edges, so no real
+// solution can carry an arbitrary A. That makes the exact-reproduction tests
+// below impossible against it -- not because the reconstruction is wrong, but
+// because the field being asked for is not in the constrained space. Building
+// the map by hand separates the two questions: these tests ask only whether
+// compute_fields evaluates the basis correctly, which is what they can answer.
+DofMap all_free_dofs(const Mesh& m) {
+    DofMap d;
+    d.num_nodes = m.num_nodes();
+    d.num_p2_nodes = m.num_nodes() + m.num_edges();
+    d.num_a = m.num_edges();
+    d.num_phi = d.num_p2_nodes;
+    d.num_ports = 0;
+    d.num_total = d.num_a + d.num_phi;
+
+    d.edge_state.assign(static_cast<std::size_t>(m.num_edges()), EdgeDof::Free);
+    d.edge_index.resize(static_cast<std::size_t>(m.num_edges()));
+    for (int e = 0; e < m.num_edges(); ++e) d.edge_index[static_cast<std::size_t>(e)] = e;
+
+    d.phi_state.assign(static_cast<std::size_t>(d.num_p2_nodes), PhiDof::Free);
+    d.phi_index.resize(static_cast<std::size_t>(d.num_p2_nodes));
+    d.phi_port.assign(static_cast<std::size_t>(d.num_p2_nodes), -1);
+    d.phi_fixed_value.assign(static_cast<std::size_t>(d.num_p2_nodes), Complex(0.0, 0.0));
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        d.phi_index[static_cast<std::size_t>(i)] = d.num_a + i;
+    }
+    return d;
+}
+
+Vec3 p2_node_position(const Mesh& m, int p2) {
+    if (p2 < m.num_nodes()) return m.nodes[static_cast<std::size_t>(p2)];
+    const std::pair<int, int>& e = m.edges[static_cast<std::size_t>(p2 - m.num_nodes())];
+    const Vec3& a = m.nodes[static_cast<std::size_t>(e.first)];
+    const Vec3& b = m.nodes[static_cast<std::size_t>(e.second)];
+    return Vec3{0.5 * (a.x + b.x), 0.5 * (a.y + b.y), 0.5 * (a.z + b.z)};
+}
+
+// The one structural invariant the edge reconstruction rests on: the global
+// basis function is the local one times the tet's edge sign. compute_fields
+// uses the global form with the RAW unknown, while assembly uses the local form
+// and multiplies by the same sign when it scatters. If those two ever disagree,
+// every reconstructed A is negated on roughly 58 % of edges and no residual
+// would show it.
+void test_edge_sign_convention_matches_assembly() {
+    Mesh m = make_cube();
+    bool value_ok = true, curl_ok = true;
+    int flipped = 0, total = 0;
+    const std::array<double, 4> L = {0.17, 0.31, 0.29, 0.23};
+
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const TetGeometry g = compute_tet_geometry(m, t);
+        for (int le = 0; le < 6; ++le) {
+            const double s = static_cast<double>(
+                m.tet_edge_signs[static_cast<std::size_t>(t)][static_cast<std::size_t>(le)]);
+            const Vec3 vg = whitney_edge_value_global(m, t, g, le, L);
+            const Vec3 vl = whitney_edge_value(g, le, L);
+            const Vec3 cg = whitney_edge_curl_global(m, t, g, le);
+            const Vec3 cl = whitney_edge_curl(g, le);
+            if (std::abs(vg.x - s * vl.x) > 1e-12 || std::abs(vg.y - s * vl.y) > 1e-12 ||
+                std::abs(vg.z - s * vl.z) > 1e-12) {
+                value_ok = false;
+            }
+            if (std::abs(cg.x - s * cl.x) > 1e-12 || std::abs(cg.y - s * cl.y) > 1e-12 ||
+                std::abs(cg.z - s * cl.z) > 1e-12) {
+                curl_ok = false;
+            }
+            if (s < 0.0) ++flipped;
+            ++total;
+        }
+    }
+    check(value_ok, "the global Whitney value is the local one times the tet edge sign");
+    check(curl_ok, "and so is the curl");
+    check(flipped > 0, "and the sign is actually negative somewhere (" + std::to_string(flipped) +
+                           " of " + std::to_string(total) +
+                           " pairs) -- otherwise this test proves nothing");
+}
+
+// B = curl A, reproduced exactly.
+//
+// A(r) = (1/2) B x r is linear, so its edge integrals are represented exactly by
+// the Whitney space, and curl A = B exactly. Setting each unknown to the edge
+// line integral must therefore give back B in every tet, to round-off. This is
+// the end-to-end check of the edge reconstruction including the orientation.
+void test_uniform_b_is_reproduced_exactly() {
+    Mesh m = make_cube();
+    const BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = all_free_dofs(m);
+
+    const Vec3 B{0.3, -0.7, 1.1};
+    Solution s;
+    s.conditioning = Conditioning::Natural;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.assign(static_cast<std::size_t>(d.num_total), Complex(0.0, 0.0));
+
+    for (int e = 0; e < m.num_edges(); ++e) {
+        const std::pair<int, int>& ends = m.edges[static_cast<std::size_t>(e)];
+        const Vec3& p = m.nodes[static_cast<std::size_t>(ends.first)];
+        const Vec3& q = m.nodes[static_cast<std::size_t>(ends.second)];
+        const Vec3 mid{0.5 * (p.x + q.x), 0.5 * (p.y + q.y), 0.5 * (p.z + q.z)};
+        // A = (1/2) B x r, evaluated at the midpoint: exact for a linear A.
+        const Vec3 A{0.5 * (B.y * mid.z - B.z * mid.y), 0.5 * (B.z * mid.x - B.x * mid.z),
+                     0.5 * (B.x * mid.y - B.y * mid.x)};
+        const Vec3 dl{q.x - p.x, q.y - p.y, q.z - p.z};
+        s.x[static_cast<std::size_t>(e)] = Complex(A.x * dl.x + A.y * dl.y + A.z * dl.z, 0.0);
+    }
+
+    const FieldOutput f = compute_fields(m, bnd, d, s);
+    double worst = 0.0;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const Vec3C& bt = f.b_tet[static_cast<std::size_t>(t)];
+        worst = std::max(worst, std::abs(bt[0].real() - B.x));
+        worst = std::max(worst, std::abs(bt[1].real() - B.y));
+        worst = std::max(worst, std::abs(bt[2].real() - B.z));
+        worst = std::max(worst, std::abs(bt[0].imag()));
+        worst = std::max(worst, std::abs(bt[1].imag()));
+        worst = std::max(worst, std::abs(bt[2].imag()));
+    }
+    check(worst < 1e-12, "a uniform B is reproduced exactly in every tet from A = (1/2) B x r");
+
+    double worst_v = 0.0;
+    for (int v = 0; v < m.num_nodes(); ++v) {
+        const Vec3C& bv = f.b_vertex[static_cast<std::size_t>(v)];
+        worst_v = std::max(worst_v, std::abs(bv[0].real() - B.x));
+        worst_v = std::max(worst_v, std::abs(bv[2].real() - B.z));
+    }
+    check(worst_v < 1e-12, "and the volume-weighted per-vertex B agrees, since averaging a "
+                           "constant cannot change it");
+}
+
+// E = -grad(Phi), reproduced exactly for a linear Phi with A = 0.
+//
+// A linear function lies in the P2 space, so its gradient is exact. With every
+// A unknown zero, E must be exactly -grad(Phi) -- a constant. This is the check
+// that the P2 gradient reconstruction and the sign of E are right.
+void test_linear_phi_gives_exact_uniform_e() {
+    Mesh m = make_cube();
+    const BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = all_free_dofs(m);
+
+    const Vec3 c{2.5, -1.25, 0.75};
+    Solution s;
+    s.conditioning = Conditioning::Natural;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.assign(static_cast<std::size_t>(d.num_total), Complex(0.0, 0.0));
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        const Vec3 p = p2_node_position(m, i);
+        s.x[static_cast<std::size_t>(d.num_a + i)] =
+            Complex(c.x * p.x + c.y * p.y + c.z * p.z + 4.0, 0.0);
+    }
+
+    const FieldOutput f = compute_fields(m, bnd, d, s);
+    double worst = 0.0;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const Vec3C& et = f.e_tet[static_cast<std::size_t>(t)];
+        worst = std::max(worst, std::abs(et[0].real() + c.x));
+        worst = std::max(worst, std::abs(et[1].real() + c.y));
+        worst = std::max(worst, std::abs(et[2].real() + c.z));
+    }
+    check(worst < 1e-12,
+          "with A = 0 a linear Phi gives E = -grad(Phi) exactly, constant over every tet");
+
+    double worst_v = 0.0;
+    for (int v = 0; v < m.num_nodes(); ++v) {
+        worst_v =
+            std::max(worst_v, std::abs(f.e_vertex[static_cast<std::size_t>(v)][1].real() + c.y));
+    }
+    check(worst_v < 1e-12, "and at the vertices too");
+
+    // The constant offset must not appear anywhere: E depends on Phi only
+    // through its gradient.
+    double worst_b = 0.0;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        for (int i = 0; i < 3; ++i) {
+            worst_b = std::max(worst_b, std::abs(f.b_tet[static_cast<std::size_t>(t)]
+                                                        [static_cast<std::size_t>(i)]));
+        }
+    }
+    check(worst_b < 1e-14, "and B stays exactly zero, since no A unknown was set");
+}
+
+// The per-vertex averaging, checked against an independent recomputation.
+void test_vertex_averaging_is_volume_weighted() {
+    Mesh m = make_cube();
+    const BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = all_free_dofs(m);
+
+    Solution s;
+    s.conditioning = Conditioning::Natural;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.resize(static_cast<std::size_t>(d.num_total));
+    for (int i = 0; i < d.num_total; ++i) {
+        s.x[static_cast<std::size_t>(i)] = Complex(std::sin(0.7 * i + 0.3), std::cos(0.4 * i));
+    }
+    const FieldOutput f = compute_fields(m, bnd, d, s);
+
+    // Total accumulated weight must be exactly four times the mesh volume:
+    // every tet gives its volume to each of its four vertices. This catches a
+    // signed volume leaking through, which would silently cancel.
+    double total_w = 0.0, total_vol = 0.0;
+    for (int v = 0; v < m.num_nodes(); ++v) total_w += f.vertex_weight[static_cast<std::size_t>(v)];
+    for (int t = 0; t < m.num_tets(); ++t) {
+        total_vol += std::abs(compute_tet_geometry(m, t).volume);
+    }
+    check(std::abs(total_w - 4.0 * total_vol) < 1e-12 * total_vol,
+          "the accumulated vertex weight is exactly 4x the mesh volume");
+
+    // B is constant per tet, so the per-vertex value is a plain volume-weighted
+    // mean of the incident tets -- recomputed here from b_tet alone.
+    std::vector<Complex> num(static_cast<std::size_t>(m.num_nodes()), Complex(0.0, 0.0));
+    std::vector<double> den(static_cast<std::size_t>(m.num_nodes()), 0.0);
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const double vol = std::abs(compute_tet_geometry(m, t).volume);
+        for (int k = 0; k < 4; ++k) {
+            const std::size_t v = static_cast<std::size_t>(
+                m.tets[static_cast<std::size_t>(t)][static_cast<std::size_t>(k)]);
+            num[v] += vol * f.b_tet[static_cast<std::size_t>(t)][2];
+            den[v] += vol;
+        }
+    }
+    double worst = 0.0;
+    for (int v = 0; v < m.num_nodes(); ++v) {
+        const std::size_t uv = static_cast<std::size_t>(v);
+        if (den[uv] <= 0.0) continue;
+        worst = std::max(worst, std::abs(num[uv] / den[uv] - f.b_vertex[uv][2]));
+    }
+    check(worst < 1e-14, "and b_vertex is that mean, recomputed independently from b_tet");
+    check(f.num_orphan_vertices == 0, "the cube has no orphan vertices");
+}
+
+// Phi is copied, not rebuilt: compute_fields must agree with potential_at_nodes
+// exactly, or the VTK file and the field output would disagree about the same
+// quantity.
+void test_phi_matches_potential_at_nodes() {
+    Mesh m = make_cube();
+    const BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = build_dof_map(bnd, m);
+
+    Solution s;
+    s.conditioning = Conditioning::ScaledPhi;  // the one where the jw matters
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.resize(static_cast<std::size_t>(d.num_total));
+    for (int i = 0; i < d.num_total; ++i) {
+        s.x[static_cast<std::size_t>(i)] = Complex(std::cos(0.9 * i), std::sin(0.6 * i + 1.1));
+    }
+
+    const NodalPotential p = potential_at_nodes(m, bnd, d, s);
+    const FieldOutput f = compute_fields(m, bnd, d, s);
+    double worst = 0.0;
+    for (int v = 0; v < m.num_nodes(); ++v) {
+        worst = std::max(worst, std::abs(f.phi_vertex[static_cast<std::size_t>(v)] -
+                                         p.value[static_cast<std::size_t>(d.vertex_p2(v))]));
+    }
+    for (int e = 0; e < m.num_edges(); ++e) {
+        worst = std::max(worst, std::abs(f.phi_edge[static_cast<std::size_t>(e)] -
+                                         p.value[static_cast<std::size_t>(d.edge_p2(e))]));
+    }
+    check(worst == 0.0, "compute_fields reports exactly the Phi that potential_at_nodes does, "
+                        "including the ScaledPhi jw");
+}
+
 }  // namespace
 
 int main() {
@@ -563,6 +828,11 @@ int main() {
     test_buffered_writing_is_faster();
     test_buffer_handles_awkward_sizes();
     test_vtk_quadratic_node_order();
+    test_edge_sign_convention_matches_assembly();
+    test_uniform_b_is_reproduced_exactly();
+    test_linear_phi_gives_exact_uniform_e();
+    test_vertex_averaging_is_volume_weighted();
+    test_phi_matches_potential_at_nodes();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

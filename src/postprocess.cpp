@@ -1,12 +1,16 @@
 #include "aphi_solver/postprocess.hpp"
 
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <chrono>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
+#include "aphi_solver/basis_functions.hpp"
+#include "aphi_solver/constants.hpp"
 #include "aphi_solver/version.hpp"
 
 namespace aphi_solver {
@@ -199,6 +203,167 @@ char status_letter(PhiStatus s) {
 }
 
 }  // namespace
+
+
+FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const DofMap& dofs,
+                           const Solution& solution) {
+    if (static_cast<int>(solution.x.size()) != dofs.num_total) {
+        throw std::invalid_argument(
+            "compute_fields: the solution has " + std::to_string(solution.x.size()) +
+            " entries for a DOF map of " + std::to_string(dofs.num_total) +
+            ". They must describe the same problem.");
+    }
+
+    const int nt = mesh.num_tets();
+    const int nv = mesh.num_nodes();
+
+    FieldOutput out;
+    out.a_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
+    out.b_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
+    out.e_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
+    out.a_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
+    out.b_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
+    out.h_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
+    out.e_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
+    out.vertex_weight.assign(static_cast<std::size_t>(nv), 0.0);
+
+    // Phi is P2 and already exact at its nodes, so it is copied, not rebuilt.
+    const NodalPotential phi = potential_at_nodes(mesh, bound, dofs, solution);
+    out.phi_vertex.resize(static_cast<std::size_t>(nv));
+    out.phi_edge.resize(static_cast<std::size_t>(mesh.num_edges()));
+    for (int v = 0; v < nv; ++v) {
+        out.phi_vertex[static_cast<std::size_t>(v)] =
+            phi.value[static_cast<std::size_t>(dofs.vertex_p2(v))];
+    }
+    for (int e = 0; e < mesh.num_edges(); ++e) {
+        out.phi_edge[static_cast<std::size_t>(e)] =
+            phi.value[static_cast<std::size_t>(dofs.edge_p2(e))];
+    }
+
+    const Complex scale = solution.phi_scale();
+    const Complex jw(0.0, solution.omega);
+
+    // The four vertices of a tet in barycentric coordinates: evaluating A and E
+    // there rather than at the centroid keeps the linear variation that a
+    // centroid value would average away.
+    static const std::array<std::array<double, 4>, 4> kCorner = {{{{1.0, 0.0, 0.0, 0.0}},
+                                                                  {{0.0, 1.0, 0.0, 0.0}},
+                                                                  {{0.0, 0.0, 1.0, 0.0}},
+                                                                  {{0.0, 0.0, 0.0, 1.0}}}};
+    static const std::array<double, 4> kCentroid = {0.25, 0.25, 0.25, 0.25};
+
+    for (int t = 0; t < nt; ++t) {
+        const std::size_t ut = static_cast<std::size_t>(t);
+        const TetGeometry g = compute_tet_geometry(mesh, t);
+        const TetDofs td = dofs.local_dofs(t, mesh, bound);
+
+        // A's coefficients. An eliminated edge is zero whichever reason
+        // eliminated it: n x A = 0 on a Dirichlet surface, or the tree-cotree
+        // gauge. `whitney_edge_value_global` carries the orientation, so the
+        // raw global unknown is used here and the sign is NOT applied twice --
+        // assembly instead uses the local basis and multiplies by the same
+        // sign at scatter time. A test cross-checks the two against each other.
+        std::array<Complex, 6> a{};
+        for (int L = 0; L < 6; ++L) {
+            const DofEntry& d = td.edge[static_cast<std::size_t>(L)];
+            if (d.index >= 0) a[static_cast<std::size_t>(L)] = solution.x[static_cast<std::size_t>(d.index)];
+        }
+
+        // Phi's coefficients, resolved for THIS tet: a node on an internal cut
+        // reads the port's unknown or zero depending which side this tet is on,
+        // which is why local_dofs is consulted per tet rather than per node.
+        std::array<Complex, 10> ph{};
+        for (int b = 0; b < 10; ++b) {
+            const std::size_t ub = static_cast<std::size_t>(b);
+            const DofEntry& d = td.phi[ub];
+            if (d.index >= 0) {
+                ph[ub] = scale * d.coeff * solution.x[static_cast<std::size_t>(d.index)];
+            } else {
+                // A prescribed value is already physical -- it never went
+                // through the ScaledPhi substitution, so it must not come back
+                // through it either.
+                ph[ub] = td.phi_fixed[ub];
+            }
+        }
+
+        // B = curl A is constant over the tet: curl W_e is.
+        Vec3C b_const{};
+        for (int L = 0; L < 6; ++L) {
+            const Vec3 c = whitney_edge_curl_global(mesh, t, g, L);
+            const Complex ae = a[static_cast<std::size_t>(L)];
+            b_const[0] += ae * c.x;
+            b_const[1] += ae * c.y;
+            b_const[2] += ae * c.z;
+        }
+        out.b_tet[ut] = b_const;
+
+        const int body = bound.body_of_tet[ut];
+        const double mu = kMu0 * bound.bodies[static_cast<std::size_t>(body)].mu_r;
+        const double nu = 1.0 / mu;
+
+        // A and E at a point of this tet.
+        auto evaluate = [&](const std::array<double, 4>& L) {
+            Vec3C av{}, ev{};
+            for (int k = 0; k < 6; ++k) {
+                const Vec3 w = whitney_edge_value_global(mesh, t, g, k, L);
+                const Complex ae = a[static_cast<std::size_t>(k)];
+                av[0] += ae * w.x;
+                av[1] += ae * w.y;
+                av[2] += ae * w.z;
+            }
+            // E = -j*w*A - grad(Phi)
+            Vec3C gp{};
+            for (int n = 0; n < 10; ++n) {
+                const Vec3 gr = p2_nodal_gradient(g, n, L);
+                const Complex pn = ph[static_cast<std::size_t>(n)];
+                gp[0] += pn * gr.x;
+                gp[1] += pn * gr.y;
+                gp[2] += pn * gr.z;
+            }
+            for (int i = 0; i < 3; ++i) ev[static_cast<std::size_t>(i)] =
+                -jw * av[static_cast<std::size_t>(i)] - gp[static_cast<std::size_t>(i)];
+            return std::pair<Vec3C, Vec3C>(av, ev);
+        };
+
+        const std::pair<Vec3C, Vec3C> mid = evaluate(kCentroid);
+        out.a_tet[ut] = mid.first;
+        out.e_tet[ut] = mid.second;
+
+        // Volume-weighted accumulation onto the vertices.
+        const double vol = g.volume < 0.0 ? -g.volume : g.volume;
+        for (int c = 0; c < 4; ++c) {
+            const int v = mesh.tets[ut][static_cast<std::size_t>(c)];
+            const std::size_t uv = static_cast<std::size_t>(v);
+            const std::pair<Vec3C, Vec3C> at = evaluate(kCorner[static_cast<std::size_t>(c)]);
+            out.vertex_weight[uv] += vol;
+            for (int i = 0; i < 3; ++i) {
+                const std::size_t ui = static_cast<std::size_t>(i);
+                out.a_vertex[uv][ui] += vol * at.first[ui];
+                out.e_vertex[uv][ui] += vol * at.second[ui];
+                out.b_vertex[uv][ui] += vol * b_const[ui];
+                out.h_vertex[uv][ui] += vol * nu * b_const[ui];
+            }
+        }
+    }
+
+    for (int v = 0; v < nv; ++v) {
+        const std::size_t uv = static_cast<std::size_t>(v);
+        const double w = out.vertex_weight[uv];
+        if (w <= 0.0) {
+            ++out.num_orphan_vertices;
+            continue;
+        }
+        for (int i = 0; i < 3; ++i) {
+            const std::size_t ui = static_cast<std::size_t>(i);
+            out.a_vertex[uv][ui] /= w;
+            out.b_vertex[uv][ui] /= w;
+            out.h_vertex[uv][ui] /= w;
+            out.e_vertex[uv][ui] /= w;
+        }
+    }
+
+    return out;
+}
 
 WriteStats write_potential(const std::string& path, const NodalPotential& potential,
                            const Solution& solution) {
