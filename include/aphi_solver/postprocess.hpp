@@ -161,11 +161,11 @@ using Vec3C = std::array<std::complex<double>, 3>;
 /// **Each quantity is stored where it actually lives, not forced to a common
 /// grid.** `docs/POSTPROCESSING_PLAN.md` Sec. 2:
 ///
-/// - `Φ` is P2, so `phi_vertex` and `phi_edge` are **exact solved values**.
+/// - `Φ` is P2, so `phi_node` holds **exact solved values**.
 ///   Nothing is interpolated or averaged, and averaging the mid-edge values
 ///   would throw away the term that makes the space second order.
 /// - `B = curl A` is genuinely **constant per tet**, because `curl W_e` is.
-///   `b_tet` is that constant; `b_vertex` is a volume-weighted average and is
+///   `b_tet` is that constant; `b_node` is a volume-weighted average and is
 ///   *smoothing*, not refinement.
 /// - `A` and `E` are linear within a tet. They are evaluated **at each vertex
 ///   from each incident tet** and then averaged -- not evaluated once at the
@@ -177,22 +177,41 @@ using Vec3C = std::array<std::complex<double>, 3>;
 /// `Φ` here is gauge-dependent and `A` is too; `B`, `H` and `E` are not.
 /// See Sec. 9 of the plan.
 struct FieldOutput {
-    // Exact P2 values, indexed as DofMap numbers its nodes.
-    std::vector<std::complex<double>> phi_vertex;  ///< one per mesh vertex
-    std::vector<std::complex<double>> phi_edge;    ///< one per mesh edge midpoint
+    /// Exact P2 values of `Φ`, one per P2 node: `DofMap`'s numbering, so
+    /// entries `[0, num_vertices)` are the mesh vertices and the rest are edge
+    /// midpoints in mesh edge order.
+    std::vector<std::complex<double>> phi_node;
 
     // As computed: one per tet. `b_tet` is exact; `a_tet` and `e_tet` are the
     // value at the tet's centroid, which for a linear field is its mean.
     std::vector<Vec3C> a_tet, b_tet, e_tet;
 
-    // Volume-weighted averages over the incident tets, evaluated at the vertex.
-    std::vector<Vec3C> a_vertex, b_vertex, h_vertex, e_vertex;
+    /// `A`, `B`, `H` and `E` at **every P2 node**, indexed exactly like
+    /// `phi_node`, so a field and the potential can be read at the same node
+    /// index without a second convention.
+    ///
+    /// The two halves are produced differently, and the difference is the whole
+    /// point of `docs/POSTPROCESSING_PLAN.md` Sec. 2:
+    ///
+    /// - **At a vertex**: evaluated there from each incident tet, then averaged
+    ///   with the tet volumes as weights.
+    /// - **At an edge midpoint**: the mean of the two endpoint values. These
+    ///   quantities have **no mid-edge degree of freedom** -- unlike `Φ`, whose
+    ///   mid-edge value is a genuine unknown the solve determined and which is
+    ///   therefore never averaged. Averaging is right here and wrong there, and
+    ///   that asymmetry is deliberate.
+    std::vector<Vec3C> a_node, b_node, h_node, e_node;
 
-    /// Total volume of the tets that contributed to each vertex. Zero means no
-    /// tet did, which leaves that vertex's fields at zero -- an orphan node.
+    /// Total volume of the tets that contributed to each **vertex** (size
+    /// `num_vertices`, not `num_p2_nodes`). Zero means no tet did, which leaves
+    /// that vertex's fields at zero -- an orphan node.
     std::vector<double> vertex_weight;
 
+    int num_vertices = 0;  ///< entries [0, num_vertices) of the node arrays
+    int num_edges = 0;     ///< the rest, in mesh edge order
     int num_orphan_vertices = 0;
+
+    int num_nodes() const { return static_cast<int>(phi_node.size()); }
 };
 
 /// Reconstructs `A`, `B`, `H`, `E` and `Φ` over the whole mesh.
@@ -200,7 +219,7 @@ struct FieldOutput {
 /// `H = B / mu` uses the tet's own body, so it is discontinuous across a
 /// material interface exactly where `B` is continuous. The per-vertex `H` at
 /// such an interface averages across it and is therefore meaningless there;
-/// `b_vertex` is the one to look at on a boundary.
+/// `b_node` is the one to look at on a boundary.
 FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const DofMap& dofs,
                            const Solution& solution);
 

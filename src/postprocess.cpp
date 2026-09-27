@@ -217,28 +217,26 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
     const int nt = mesh.num_tets();
     const int nv = mesh.num_nodes();
 
+    const int ne = mesh.num_edges();
+    const int np = dofs.num_p2_nodes;
+
     FieldOutput out;
+    out.num_vertices = nv;
+    out.num_edges = ne;
     out.a_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
     out.b_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
     out.e_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
-    out.a_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
-    out.b_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
-    out.h_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
-    out.e_vertex.assign(static_cast<std::size_t>(nv), Vec3C{});
+    // Sized for every P2 node. The vertex part is filled by accumulation below;
+    // the mid-edge part afterwards, from the two endpoints.
+    out.a_node.assign(static_cast<std::size_t>(np), Vec3C{});
+    out.b_node.assign(static_cast<std::size_t>(np), Vec3C{});
+    out.h_node.assign(static_cast<std::size_t>(np), Vec3C{});
+    out.e_node.assign(static_cast<std::size_t>(np), Vec3C{});
     out.vertex_weight.assign(static_cast<std::size_t>(nv), 0.0);
 
     // Phi is P2 and already exact at its nodes, so it is copied, not rebuilt.
     const NodalPotential phi = potential_at_nodes(mesh, bound, dofs, solution);
-    out.phi_vertex.resize(static_cast<std::size_t>(nv));
-    out.phi_edge.resize(static_cast<std::size_t>(mesh.num_edges()));
-    for (int v = 0; v < nv; ++v) {
-        out.phi_vertex[static_cast<std::size_t>(v)] =
-            phi.value[static_cast<std::size_t>(dofs.vertex_p2(v))];
-    }
-    for (int e = 0; e < mesh.num_edges(); ++e) {
-        out.phi_edge[static_cast<std::size_t>(e)] =
-            phi.value[static_cast<std::size_t>(dofs.edge_p2(e))];
-    }
+    out.phi_node = phi.value;
 
     const Complex scale = solution.phi_scale();
     const Complex jw(0.0, solution.omega);
@@ -338,10 +336,10 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
             out.vertex_weight[uv] += vol;
             for (int i = 0; i < 3; ++i) {
                 const std::size_t ui = static_cast<std::size_t>(i);
-                out.a_vertex[uv][ui] += vol * at.first[ui];
-                out.e_vertex[uv][ui] += vol * at.second[ui];
-                out.b_vertex[uv][ui] += vol * b_const[ui];
-                out.h_vertex[uv][ui] += vol * nu * b_const[ui];
+                out.a_node[uv][ui] += vol * at.first[ui];
+                out.e_node[uv][ui] += vol * at.second[ui];
+                out.b_node[uv][ui] += vol * b_const[ui];
+                out.h_node[uv][ui] += vol * nu * b_const[ui];
             }
         }
     }
@@ -355,10 +353,34 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
         }
         for (int i = 0; i < 3; ++i) {
             const std::size_t ui = static_cast<std::size_t>(i);
-            out.a_vertex[uv][ui] /= w;
-            out.b_vertex[uv][ui] /= w;
-            out.h_vertex[uv][ui] /= w;
-            out.e_vertex[uv][ui] /= w;
+            out.a_node[uv][ui] /= w;
+            out.b_node[uv][ui] /= w;
+            out.h_node[uv][ui] /= w;
+            out.e_node[uv][ui] /= w;
+        }
+    }
+
+    // The mid-edge nodes: the mean of the two endpoint values.
+    //
+    // `A`, `B`, `H` and `E` have no mid-edge degree of freedom, so there is
+    // nothing to read there and the endpoint mean is the standard
+    // reconstruction. This is exactly what must NOT be done to `Phi`, whose
+    // mid-edge value is a genuine P2 unknown -- see `phi_node`, which is
+    // copied rather than averaged. The asymmetry is the point.
+    //
+    // An edge with an orphan endpoint inherits that endpoint's zero, which is
+    // the same silence a vertex with no incident tet already carries.
+    for (int e = 0; e < ne; ++e) {
+        const std::pair<int, int>& ends = mesh.edges[static_cast<std::size_t>(e)];
+        const std::size_t a0 = static_cast<std::size_t>(ends.first);
+        const std::size_t a1 = static_cast<std::size_t>(ends.second);
+        const std::size_t m = static_cast<std::size_t>(dofs.edge_p2(e));
+        for (int i = 0; i < 3; ++i) {
+            const std::size_t ui = static_cast<std::size_t>(i);
+            out.a_node[m][ui] = 0.5 * (out.a_node[a0][ui] + out.a_node[a1][ui]);
+            out.b_node[m][ui] = 0.5 * (out.b_node[a0][ui] + out.b_node[a1][ui]);
+            out.h_node[m][ui] = 0.5 * (out.h_node[a0][ui] + out.h_node[a1][ui]);
+            out.e_node[m][ui] = 0.5 * (out.e_node[a0][ui] + out.e_node[a1][ui]);
         }
     }
 

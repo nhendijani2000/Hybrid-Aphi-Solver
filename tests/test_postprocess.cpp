@@ -679,7 +679,7 @@ void test_uniform_b_is_reproduced_exactly() {
 
     double worst_v = 0.0;
     for (int v = 0; v < m.num_nodes(); ++v) {
-        const Vec3C& bv = f.b_vertex[static_cast<std::size_t>(v)];
+        const Vec3C& bv = f.b_node[static_cast<std::size_t>(v)];
         worst_v = std::max(worst_v, std::abs(bv[0].real() - B.x));
         worst_v = std::max(worst_v, std::abs(bv[2].real() - B.z));
     }
@@ -722,7 +722,7 @@ void test_linear_phi_gives_exact_uniform_e() {
     double worst_v = 0.0;
     for (int v = 0; v < m.num_nodes(); ++v) {
         worst_v =
-            std::max(worst_v, std::abs(f.e_vertex[static_cast<std::size_t>(v)][1].real() + c.y));
+            std::max(worst_v, std::abs(f.e_node[static_cast<std::size_t>(v)][1].real() + c.y));
     }
     check(worst_v < 1e-12, "and at the vertices too");
 
@@ -781,9 +781,9 @@ void test_vertex_averaging_is_volume_weighted() {
     for (int v = 0; v < m.num_nodes(); ++v) {
         const std::size_t uv = static_cast<std::size_t>(v);
         if (den[uv] <= 0.0) continue;
-        worst = std::max(worst, std::abs(num[uv] / den[uv] - f.b_vertex[uv][2]));
+        worst = std::max(worst, std::abs(num[uv] / den[uv] - f.b_node[uv][2]));
     }
-    check(worst < 1e-14, "and b_vertex is that mean, recomputed independently from b_tet");
+    check(worst < 1e-14, "and b_node at a vertex is that mean, recomputed independently from b_tet");
     check(f.num_orphan_vertices == 0, "the cube has no orphan vertices");
 }
 
@@ -805,17 +805,67 @@ void test_phi_matches_potential_at_nodes() {
 
     const NodalPotential p = potential_at_nodes(m, bnd, d, s);
     const FieldOutput f = compute_fields(m, bnd, d, s);
-    double worst = 0.0;
-    for (int v = 0; v < m.num_nodes(); ++v) {
-        worst = std::max(worst, std::abs(f.phi_vertex[static_cast<std::size_t>(v)] -
-                                         p.value[static_cast<std::size_t>(d.vertex_p2(v))]));
+    check(f.phi_node == p.value,
+          "compute_fields reports exactly the Phi that potential_at_nodes does, bit for bit, "
+          "including the ScaledPhi jw");
+    check(f.num_nodes() == d.num_p2_nodes && f.num_vertices == m.num_nodes() &&
+              f.num_edges == m.num_edges(),
+          "and the field arrays cover every P2 node, indexed as Phi is");
+    check(f.a_node.size() == f.phi_node.size() && f.e_node.size() == f.phi_node.size() &&
+              f.b_node.size() == f.phi_node.size() && f.h_node.size() == f.phi_node.size(),
+          "so a field and the potential can be read at the same node index");
+}
+
+// The mid-edge rule, stated as its own test because it is the one place the
+// treatment of Phi and of the fields deliberately differs.
+//
+// A, B, H, E have no mid-edge degree of freedom, so a mid-edge value is the
+// mean of the two endpoints. Phi does have one, and averaging it would replace
+// the quadratic with its linear interpolant.
+void test_mid_edge_fields_are_endpoint_means_but_phi_is_not() {
+    Mesh m = make_cube();
+    const BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = all_free_dofs(m);
+
+    // A Phi that is quadratic, so its mid-edge values are genuinely NOT the
+    // endpoint means -- otherwise this test could not tell the two rules apart.
+    Solution s;
+    s.conditioning = Conditioning::Natural;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.assign(static_cast<std::size_t>(d.num_total), Complex(0.0, 0.0));
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        const Vec3 p = p2_node_position(m, i);
+        s.x[static_cast<std::size_t>(d.num_a + i)] = Complex(p.x * p.x + 2.0 * p.y * p.z, 0.0);
     }
     for (int e = 0; e < m.num_edges(); ++e) {
-        worst = std::max(worst, std::abs(f.phi_edge[static_cast<std::size_t>(e)] -
-                                         p.value[static_cast<std::size_t>(d.edge_p2(e))]));
+        s.x[static_cast<std::size_t>(e)] = Complex(0.3 * std::sin(1.7 * e), 0.1 * std::cos(e));
     }
-    check(worst == 0.0, "compute_fields reports exactly the Phi that potential_at_nodes does, "
-                        "including the ScaledPhi jw");
+
+    const FieldOutput f = compute_fields(m, bnd, d, s);
+
+    double worst_field = 0.0, worst_phi = 0.0;
+    for (int e = 0; e < m.num_edges(); ++e) {
+        const std::pair<int, int>& ends = m.edges[static_cast<std::size_t>(e)];
+        const std::size_t a0 = static_cast<std::size_t>(ends.first);
+        const std::size_t a1 = static_cast<std::size_t>(ends.second);
+        const std::size_t mid = static_cast<std::size_t>(d.edge_p2(e));
+        for (int i = 0; i < 3; ++i) {
+            const std::size_t ui = static_cast<std::size_t>(i);
+            worst_field = std::max(
+                worst_field, std::abs(f.e_node[mid][ui] -
+                                      0.5 * (f.e_node[a0][ui] + f.e_node[a1][ui])));
+            worst_field = std::max(
+                worst_field, std::abs(f.b_node[mid][ui] -
+                                      0.5 * (f.b_node[a0][ui] + f.b_node[a1][ui])));
+        }
+        worst_phi = std::max(worst_phi, std::abs(f.phi_node[mid] -
+                                                 0.5 * (f.phi_node[a0] + f.phi_node[a1])));
+    }
+    check(worst_field < 1e-14, "a mid-edge field value is the mean of its two endpoints");
+    check(worst_phi > 1e-6,
+          "while the mid-edge Phi is NOT that mean -- it is the solved quadratic value, and "
+          "averaging it would discard the second-order term (largest difference " +
+              std::to_string(worst_phi) + ")");
 }
 
 }  // namespace
@@ -833,6 +883,7 @@ int main() {
     test_linear_phi_gives_exact_uniform_e();
     test_vertex_averaging_is_volume_weighted();
     test_phi_matches_potential_at_nodes();
+    test_mid_edge_fields_are_endpoint_means_but_phi_is_not();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
