@@ -1035,3 +1035,54 @@ missing is not the motivation but a case to build and verify them against.
 3. **Then the §12 backend.** Comparing against MUMPS on the fixtures that exist
    today would show both solvers at 1e-25 and prove nothing; on a hard mesh it
    would show whether Bunch-Kaufman buys anything our static pivoting does not.
+
+---
+
+## 20. A hard fixture — deferred, and what it has to be
+
+§19 concluded that step 7 needs a mesh that actually breaks an unpivoted
+`LDLᵀ`, and that no such mesh exists here. **Deferred, deliberately**, until the
+two easy cases are physically validated: a solver that is numerically exact on a
+problem whose answer is wrong is not worth hardening.
+
+Recorded now so the requirement does not get lost.
+
+### What makes a mesh hard for A-Φ, and what the current two lack
+
+| property | `cylinder_box` / `loop_cut` | what breaks conditioning |
+|---|---|---|
+| element aspect ratio | near 1 | hundreds to thousands |
+| length scales | one | three or more, decades apart |
+| thin gaps | none | a dielectric thinner than the conductor is wide |
+| slivers | none (gmsh reports no ill-shaped tets) | unavoidable at layer interfaces |
+| contrast across a thin gap | conductor-to-air across ~0.5 mm | metal to dielectric across ~1 µm |
+
+Both current fixtures are a uniform, well-shaped, single-scale body centred in a
+box. That is the opposite of every entry in the right-hand column, which is why
+they cannot settle anything about pivoting.
+
+### The fixture: a microstrip-like layer stack
+
+A thin conductor over a ground plane, separated by a thin dielectric — the
+canonical EDA structure, and what the EDA track needs regardless:
+
+- trace roughly 20 µm wide and 1 µm thick, so ~20:1 in-plane
+- dielectric 2 µm thick beneath it, over a ground plane
+- an air box decades larger than the layer thickness
+
+That produces element aspect ratios in the hundreds, three length scales (trace
+thickness, dielectric thickness, box), a genuine multi-scale mesh, and slivers
+where the layers meet — without contriving anything. It is also directly useful:
+it is a structure whose `R`, `L` and `C` per unit length have published
+closed-form approximations to check against.
+
+### What it is for, in order
+
+1. **Step 7's verification.** Static pivoting and refinement need a case that
+   fails without them, or their tests assert nothing. `SolveReport`'s
+   `perturbed_pivots` has to be non-zero somewhere.
+2. **The §12 backend comparison.** On today's fixtures both solvers reach 1e-25
+   and the comparison is empty. On this one it would show whether Bunch-Kaufman
+   survives what static pivoting does not.
+3. **Scale.** It is also the first fixture likely to push past 100 k unknowns,
+   which is where §15's estimated direct ceiling stops being an estimate.
