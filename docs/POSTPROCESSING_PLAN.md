@@ -449,3 +449,87 @@ flush on every line. That is the mistake to avoid, and it is avoided.
 `std::to_chars` also produces the shortest representation that round-trips
 exactly, so the file is 5.5 % **smaller** than `setprecision(17)` while being
 lossless — a test reads every value back and requires bitwise equality.
+
+
+## 9. First measured validation: the cylinder at 50 Hz
+
+`examples/cylinder_50hz.aphi` — 1 V on `wire_top`, 0 V on `wire_bottom`,
+`full_wave`, `row_scaled`, copper at σ = 5.8e7. 16040 tets, 37368 unknowns,
+nnz(L) = 29.1 M under AMD, backward error 2.56e-22, max |L| = 1.59.
+
+Skin depth at 50 Hz is 9.35 mm against a 0.2 mm radius, so there is no skin
+effect and the exact potential in the wire is **Φ = z/l**. That is linear, hence
+exactly representable in the P2 space.
+
+### What passed
+
+| check | result | nodes |
+|---|---|---|
+| worst \|Re Φ − z/l\| | **4.02e-07** (0.4 ppm of the 1 V drop) | 12038 wire |
+| mean \|Re Φ − z/l\| | 1.17e-07 | 12038 |
+| axisymmetry: mean \|Re Φ − z/l\| per 30° sector | 9.0e-08 … 1.06e-07, no sector differs | 3723 lateral |
+| terminal swap: Φ_swap + Φ_orig = 1 | **1.55e-12** real, **9.40e-16** imag | all 22499 |
+
+The swap identity is the strongest algebraic check available here and it costs
+nothing but a second solve. Swapping the two prescribed voltages maps the
+problem to itself under `(A, Φ) → (−A, 1 − Φ)`, **and `−A` satisfies the same
+tree-cotree constraint** (`A_tree = 0` implies `−A_tree = 0`), so the same gauge
+representative is selected. The identity must therefore hold pointwise to
+round-off no matter what the tree did. It does, at the level of the linear
+solve's own residual (6e-13). Run it as a control after any change to assembly,
+binding or gauging: it is sensitive to sign errors, to terminal handling, and to
+anything that treats the two ports asymmetrically.
+
+### What did NOT pass, and why it is not a bug
+
+The continuous problem is also mirror-symmetric in z, which forces
+`Re Φ(z) + Re Φ(l−z) = 1` and `Im Φ(z) = −Im Φ(l−z)`. Over 4278 exactly mirrored
+node pairs:
+
+    worst |Re(z) + Re(l-z) - 1|    4.12e-07     holds
+    worst |Im(z) + Im(l-z)|        4.76e-04     FAILS -- and peak |Im| is only 2.72e-04
+
+The Im mismatch is *twice* the signal, i.e. Im is nearly **even** where the
+physics demands odd. The mean of Im over each height IS odd (−1.8e-4 at z/l =
+0.25, +1.77e-4 at 0.75); what breaks the pointwise check is a spread at fixed
+height as large as the signal itself.
+
+**This is expected, because Φ is not an observable.** The discrete system is
+exactly gauge-invariant: under `A → A + ∇ψ`, `Φ → Φ − jωψ`, the coupling term
+becomes `αA + β∇Φ + (α − jωβ)∇ψ`, and `α = jωβ` is an identity here
+(`FORMULATION.md`), so it is unchanged, while `curl ν curl ∇ψ = 0`. The discrete
+freedom is exactly `ψ ∈ P1`: gradients of P1 hat functions lie in the Whitney
+edge space, and there are `#vertices − 1` of them modulo a constant — precisely
+the number of tree edges that tree-cotree pins. So the tree selects one
+representative, and a different tree shifts Φ by `−jωψ`, which for real ψ is
+**almost purely imaginary**.
+
+That accounts for every observation at once: `Re Φ` is clean to 4e-7 while `Im Φ`
+carries an arbitrary P1 function; the mirror symmetry fails only in Im, because
+the tree is not mirror-symmetric; and the swap identity holds exactly, because
+swapping does not change the tree.
+
+Consequences for this document:
+
+- **Do not present `Im Φ` as a result.** `write_vtk` writes `phi_imag`, and a
+  plot of it is partly a picture of the spanning tree. The `Re` part and the
+  gauge-invariant fields are what mean something.
+- `E = −jωA − ∇Φ` is the gauge-invariant object, so `compute_fields` (§6) is
+  what actually settles the imaginary part. In the wire `E_z` must be uniform
+  and equal `−(1/l)(1 + jωL/R)`; check that, not Φ.
+- Expected size, for when it is checked: `ωL/R = 314.159 × 0.387 nH / 0.1388 mΩ
+  = 8.8e-4`, and peak `|Im Φ|` measured 4.58e-4 — the right order, which is all
+  that can be claimed of a gauge-dependent quantity.
+
+### A control that looked decisive and was not
+
+To test whether the Im structure was a tree artefact I measured P2 roughness:
+for each quadratic edge, `|Φ_mid − ½(Φ_a + Φ_b)|`. Im came out smooth (median
+2.5e-07 against a spread of 8.6e-04), which I briefly read as ruling the gauge
+out.
+
+It rules nothing out. **A P1 function is linear along every edge, so it
+contributes exactly zero to `mid − average`.** The test is structurally blind to
+the one artefact it was aimed at. Recorded because the measurement is real and
+the inference from it was worthless — the cost of a control is wasted if its
+null result is trusted.

@@ -156,8 +156,12 @@ int main(int argc, char** argv) {
                 out_path = "potential_" + std::to_string(&f - frequencies.data()) + ".out";
             }
             const WriteStats ws = write_potential(out_path, nodal, sol);
+            std::string vtk_path = out_path.substr(0, out_path.size() - 4) + ".vtk";
+            const WriteStats vs = write_vtk(vtk_path, mesh, nodal, sol);
             std::cout << "                wrote " << out_path << "   " << ws.nodes << " nodes, "
                       << ws.bytes / 1024 << " KB, " << ws.milliseconds << " ms\n";
+            std::cout << "                wrote " << vtk_path << "   " << vs.bytes / 1024
+                      << " KB, " << vs.milliseconds << " ms   (ParaView)\n";
         }
 
         std::cout << "\nNothing is EXTRACTED from these solutions yet: no currents, voltages, R or\n"

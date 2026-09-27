@@ -454,6 +454,105 @@ void test_buffer_handles_awkward_sizes() {
     std::remove(path.c_str());
 }
 
+
+// The VTK node order, checked geometrically -- the only way to catch it.
+//
+// VTK's quadratic tet wants its mid-edge nodes in the order (0,1), (1,2), (0,2),
+// (0,3), (1,3), (2,3); ours are numbered (0,1), (0,2), (0,3), (1,2), (2,3),
+// (1,3). Four of six disagree. A wrong permutation still produces a file
+// ParaView opens and renders smoothly, with the quadratic nodes silently
+// attached to the wrong edges -- so this checks each slot's POSITION against the
+// midpoint VTK expects to find there.
+void test_vtk_quadratic_node_order() {
+    Mesh m = make_cube();
+    const BoundProblem b = bind_cube(m, 1e6);
+    const DofMap d = build_dof_map(b, m);
+    Solution s;
+    s.conditioning = Conditioning::Natural;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.assign(static_cast<std::size_t>(d.num_total), Complex(1.0, 0.0));
+    const NodalPotential p = potential_at_nodes(m, b, d, s);
+
+    // VTK's own definition, written out here rather than derived from ours, so
+    // the two cannot agree by construction.
+    const int vtk_pairs[6][2] = {{0, 1}, {1, 2}, {0, 2}, {0, 3}, {1, 3}, {2, 3}};
+
+    bool positions_match = true;
+    int checked = 0;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const std::size_t ut = static_cast<std::size_t>(t);
+        for (int slot = 0; slot < 6; ++slot) {
+            const int local_edge = kVtkQuadraticTetEdgeOrder[static_cast<std::size_t>(slot)];
+            const int e = m.tet_edges[ut][static_cast<std::size_t>(local_edge)];
+            const Vec3& got = p.position[static_cast<std::size_t>(m.num_nodes() + e)];
+
+            const Vec3& ca = m.nodes[static_cast<std::size_t>(
+                m.tets[ut][static_cast<std::size_t>(vtk_pairs[slot][0])])];
+            const Vec3& cb = m.nodes[static_cast<std::size_t>(
+                m.tets[ut][static_cast<std::size_t>(vtk_pairs[slot][1])])];
+            const Vec3 want{0.5 * (ca.x + cb.x), 0.5 * (ca.y + cb.y), 0.5 * (ca.z + cb.z)};
+
+            if (std::abs(got.x - want.x) > 1e-15 || std::abs(got.y - want.y) > 1e-15 ||
+                std::abs(got.z - want.z) > 1e-15) {
+                positions_match = false;
+            }
+            ++checked;
+        }
+    }
+    check(positions_match,
+          "every VTK quadratic slot holds the midpoint of the corner pair VTK expects there (" +
+              std::to_string(checked) + " slots) -- a wrong permutation renders smoothly and is "
+              "wrong");
+
+    // The permutation is a permutation: all six of our edges used, once each.
+    std::vector<int> seen(6, 0);
+    for (int slot = 0; slot < 6; ++slot) {
+        ++seen[static_cast<std::size_t>(kVtkQuadraticTetEdgeOrder[static_cast<std::size_t>(slot)])];
+    }
+    bool bijective = true;
+    for (int c : seen) {
+        if (c != 1) bijective = false;
+    }
+    check(bijective, "and it uses each of our six local edges exactly once");
+
+    // The file parses as the structure it claims.
+    const std::string path = temp_path("out.vtk");
+    const WriteStats stats = write_vtk(path, m, p, s);
+    check(stats.bytes > 0, "the VTK file is written");
+    std::ifstream in(path);
+    std::string line;
+    int points = 0, cells = 0, cell_types = 0, wrong_type = 0, wrong_count = 0;
+    while (std::getline(in, line)) {
+        std::istringstream row(line);
+        std::string word;
+        row >> word;
+        if (word == "POINTS") {
+            row >> points;
+        } else if (word == "CELLS") {
+            row >> cells;
+            for (int c = 0; c < cells; ++c) {
+                std::getline(in, line);
+                std::istringstream cell(line);
+                int n = 0;
+                cell >> n;
+                if (n != 10) ++wrong_count;
+            }
+        } else if (word == "CELL_TYPES") {
+            row >> cell_types;
+            for (int c = 0; c < cell_types; ++c) {
+                std::getline(in, line);
+                if (line != "24") ++wrong_type;
+            }
+        }
+    }
+    check(points == p.size(), "with a point for every P2 node");
+    check(cells == m.num_tets(), "a cell for every tet");
+    check(wrong_count == 0, "each cell listing ten nodes");
+    check(wrong_type == 0, "and each typed 24 (VTK_QUADRATIC_TETRA), so the mid-edge values are "
+                           "used rather than discarded");
+    std::remove(path.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -463,6 +562,7 @@ int main() {
     test_round_trip_is_lossless();
     test_buffered_writing_is_faster();
     test_buffer_handles_awkward_sizes();
+    test_vtk_quadratic_node_order();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

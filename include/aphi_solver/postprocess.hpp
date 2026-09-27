@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <complex>
 #include <cstdio>
 #include <string>
@@ -136,5 +137,45 @@ struct WriteStats {
 /// which nodes are on a cut and therefore discontinuous.
 WriteStats write_potential(const std::string& path, const NodalPotential& potential,
                            const Solution& solution);
+
+
+/// VTK's node order for a quadratic tetrahedron (`VTK_QUADRATIC_TETRA`, type
+/// 24), expressed as our local edge index for each of its six mid-edge slots.
+///
+/// VTK wants the mid-edge nodes in the order (0,1), (1,2), (0,2), (0,3), (1,3),
+/// (2,3). Ours are numbered (0,1), (0,2), (0,3), (1,2), (2,3), (1,3)
+/// (`kTetLocalEdgeVerts`). So the two disagree in four of six places, and a
+/// wrong mapping produces a mesh that still renders -- smoothly, plausibly, and
+/// with the quadratic nodes on the wrong edges. One test checks each slot's
+/// POSITION against the midpoint VTK expects there, which is the only way to
+/// catch that.
+inline constexpr std::array<int, 6> kVtkQuadraticTetEdgeOrder = {0, 3, 1, 2, 5, 4};
+
+/// Writes a legacy VTK unstructured grid for ParaView.
+///
+/// The mesh is written as **quadratic** tetrahedra, so the P2 mid-edge values go
+/// into the file as the genuine unknowns they are rather than being discarded or
+/// averaged away. ParaView interpolates them correctly.
+///
+/// Point data: `phi_real`, `phi_imag`, `phi_magnitude`, and `phi_present`.
+/// That last one is 0 where Φ does not live -- which under
+/// `formulation = reduced`, or at DC, is the whole insulating region. Writing
+/// those nodes as 0 without saying so would make the air look like it was
+/// solved and found to be at zero volts. Threshold on `phi_present` in ParaView
+/// to see only where the potential means something.
+///
+/// **`phi_imag` is gauge-dependent -- do not plot it as a result.** The discrete
+/// system is exactly gauge-invariant (`alpha = j*omega*beta`), its freedom is
+/// `psi` in P1, and the tree-cotree constraint picks one representative. A
+/// different tree shifts `Phi` by `-j*omega*psi`, which for real `psi` is almost
+/// entirely imaginary. Measured on the 50 Hz cylinder: `Re(Phi)` matches the
+/// exact `z/l` to 4.0e-07, while `Im(Phi)` violates the problem's own mirror
+/// antisymmetry by twice its own peak. `E = -j*omega*A - grad(Phi)` is the
+/// gauge-invariant object. `docs/POSTPROCESSING_PLAN.md` section 9.
+///
+/// Cell data: `body_tag`, the mesh's physical-volume tag, so conductor and
+/// insulator can be separated without consulting the input file.
+WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
+                     const Solution& solution);
 
 }  // namespace aphi_solver

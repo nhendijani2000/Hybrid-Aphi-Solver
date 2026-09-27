@@ -1,6 +1,7 @@
 #include "aphi_solver/postprocess.hpp"
 
 #include <charconv>
+#include <cmath>
 #include <chrono>
 #include <cstring>
 #include <stdexcept>
@@ -258,6 +259,126 @@ WriteStats write_potential(const std::string& path, const NodalPotential& potent
     }
     std::fclose(f);
 
+    stats.milliseconds =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+            .count();
+    return stats;
+}
+
+
+WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
+                     const Solution& solution) {
+    const auto started = std::chrono::steady_clock::now();
+    if (potential.size() != mesh.num_nodes() + mesh.num_edges()) {
+        throw std::invalid_argument(
+            "write_vtk: the potential has " + std::to_string(potential.size()) +
+            " nodes for a mesh of " + std::to_string(mesh.num_nodes()) + " vertices and " +
+            std::to_string(mesh.num_edges()) + " edges");
+    }
+
+    std::FILE* f = std::fopen(path.c_str(), "wb");
+    if (f == nullptr) {
+        throw std::runtime_error("write_vtk: could not open '" + path + "' for writing");
+    }
+
+    WriteStats stats;
+    stats.nodes = potential.size();
+    {
+        TextBuffer buf(f);
+        const int np = potential.size();
+        const int nc = mesh.num_tets();
+
+        buf.put("# vtk DataFile Version 3.0\n");
+        buf.put("A-Phi potential, conditioning ");
+        buf.put(conditioning_keyword(solution.conditioning));
+        buf.put(", omega ");
+        buf.put(solution.omega);
+        buf.put(" rad/s\n");
+        buf.put("ASCII\nDATASET UNSTRUCTURED_GRID\n");
+
+        buf.put("POINTS ");
+        buf.put(np);
+        buf.put(" double\n");
+        for (int i = 0; i < np; ++i) {
+            const Vec3& p = potential.position[static_cast<std::size_t>(i)];
+            buf.put(p.x);
+            buf.put(' ');
+            buf.put(p.y);
+            buf.put(' ');
+            buf.put(p.z);
+            buf.put('\n');
+        }
+
+        // Quadratic tets: four corners then six mid-edge nodes, in VTK's order
+        // rather than ours -- see kVtkQuadraticTetEdgeOrder.
+        buf.put("\nCELLS ");
+        buf.put(nc);
+        buf.put(' ');
+        buf.put(nc * 11);
+        buf.put('\n');
+        for (int t = 0; t < nc; ++t) {
+            const std::size_t ut = static_cast<std::size_t>(t);
+            buf.put("10");
+            for (int v = 0; v < 4; ++v) {
+                buf.put(' ');
+                buf.put(mesh.tets[ut][static_cast<std::size_t>(v)]);
+            }
+            for (int slot = 0; slot < 6; ++slot) {
+                const int local_edge = kVtkQuadraticTetEdgeOrder[static_cast<std::size_t>(slot)];
+                const int e = mesh.tet_edges[ut][static_cast<std::size_t>(local_edge)];
+                buf.put(' ');
+                buf.put(mesh.num_nodes() + e);
+            }
+            buf.put('\n');
+        }
+
+        buf.put("\nCELL_TYPES ");
+        buf.put(nc);
+        buf.put('\n');
+        for (int t = 0; t < nc; ++t) buf.put("24\n");  // VTK_QUADRATIC_TETRA
+
+        buf.put("\nCELL_DATA ");
+        buf.put(nc);
+        buf.put("\nSCALARS body_tag int 1\nLOOKUP_TABLE default\n");
+        for (int t = 0; t < nc; ++t) {
+            buf.put(t < static_cast<int>(mesh.tet_tags.size())
+                        ? mesh.tet_tags[static_cast<std::size_t>(t)]
+                        : -1);
+            buf.put('\n');
+        }
+
+        buf.put("\nPOINT_DATA ");
+        buf.put(np);
+        buf.put('\n');
+
+        buf.put("SCALARS phi_real double 1\nLOOKUP_TABLE default\n");
+        for (int i = 0; i < np; ++i) {
+            buf.put(potential.value[static_cast<std::size_t>(i)].real());
+            buf.put('\n');
+        }
+        buf.put("\nSCALARS phi_imag double 1\nLOOKUP_TABLE default\n");
+        for (int i = 0; i < np; ++i) {
+            buf.put(potential.value[static_cast<std::size_t>(i)].imag());
+            buf.put('\n');
+        }
+        buf.put("\nSCALARS phi_magnitude double 1\nLOOKUP_TABLE default\n");
+        for (int i = 0; i < np; ++i) {
+            buf.put(std::abs(potential.value[static_cast<std::size_t>(i)]));
+            buf.put('\n');
+        }
+        // Where Phi does not live, the value is zero because there is nothing to
+        // report -- not because the solve found zero volts there. Without this
+        // field a viewer cannot tell those apart.
+        buf.put("\nSCALARS phi_present int 1\nLOOKUP_TABLE default\n");
+        for (int i = 0; i < np; ++i) {
+            buf.put(potential.status[static_cast<std::size_t>(i)] == PhiStatus::Absent ? 0 : 1);
+            buf.put('\n');
+        }
+
+        buf.flush();
+        stats.bytes = buf.bytes_written();
+    }
+    std::fclose(f);
     stats.milliseconds =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
             .count();
