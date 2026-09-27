@@ -305,3 +305,54 @@ dominant quantity right by accident; it cannot do that to a term this small.
 so it is good to roughly 1 %. That uncertainty attaches to the **dimensions**,
 not to `R` and `L`, which come straight from the reported voltage and are exact
 to the digits supplied.
+
+### Copper confirmed (Sept 2026) — and what is still uncertain
+
+The material is **copper**, so:
+
+| | |
+|---|---|
+| major radius `r` | **11.60 mm** |
+| wire radius `a` | **1.075 mm** |
+| outer diameter | **25.3 mm** |
+
+The two equations are **not equally trustworthy**, and it matters which is
+leaned on:
+
+**`R` is domain-independent and exact.** `R = 2r/(σa²)` with σ = 5.8e7 and
+R = 345.75 µΩ gives
+
+    r / a² = 10027 per metre
+
+whatever the outer boundary does. Nothing about the air region, the truncation
+or the boundary condition can change a DC resistance. This is the equation to
+trust and the one a fixture must reproduce first.
+
+**`L` carries a domain caveat.** The inversion assumed the reported 39.456 nH is
+the **free-space** thin-ring value. The supplied figure shows the air region is a
+**cylinder roughly 3 cm across against the ring's 2.5 cm** — only about 1.2× the
+ring diameter. A boundary that close generally suppresses `L` relative to free
+space, so the true ring may be slightly larger than the numbers above. If the
+free-space `L` were 5 % higher, the pair moves along `r = 10027 a²` to
+r = 12.08 mm, a = 1.098 mm — 4 % and 2 %.
+
+So the honest statement of the fixture's geometry is: **`r/a² = 10027 m⁻¹`
+exactly, with `(r, a) = (11.60, 1.075) mm` as the best point estimate**, carrying
+a few percent of uncertainty that only Maxwell's domain size and boundary
+condition would remove.
+
+**The air region is a cylinder, not a box.** A fixture built to match this should
+use a cylindrical air domain rather than the square box of `loop_cut.geo`, since
+with the boundary this close its shape is not a detail.
+
+### What to compare, in order of confidence
+
+1. **`R` = 345.75 µΩ.** Domain-independent, skin-effect-free at 50 Hz
+   (δ = 9.35 mm = 8.7 a), and the DC solution is the one our formulation should
+   reproduce most accurately. **Expect agreement to a fraction of a percent**, and
+   treat a larger discrepancy as a defect rather than a modelling difference.
+2. **`L` = 39.456 nH.** Expect a few percent, limited by the domain question above
+   rather than by either solver. Worth reporting the discrepancy rather than
+   tuning the geometry until it vanishes.
+3. **`Q` = 0.0359.** The ratio is a cleaner target than `L` alone, since both
+   parts come from the same solve and the same geometry.
