@@ -565,3 +565,38 @@ Restricting the exact-z = l/2 test to a *window* in z is worthless: a ±1 µm
 window admits ±1e-3 of `z/l` by itself, which is larger than the air error being
 measured. Written down because the windowed version was run first and reported a
 wire error of 9.5e-04 — a pure artefact of the window, 4500x the true value.
+
+### The fields, and R and L, measured
+
+Once `compute_fields` existed the gauge-invariant checks became possible. `E` in
+the wire against the exact `-V/l = -1000 V/m`, per tet with no averaging:
+
+    mean Re(E_z)               -999.9993 V/m
+    worst |Re(E_z) + 1000|      8.6e-04 V/m     (0.000086 %)
+    worst transverse |E_t|      1.2e-06 V/m     (0 by axisymmetry)
+    worst |Im(E_z)|             0.99 V/m        (0.099 %, against wL/R = 0.088 %)
+
+**This settles the `Im(Φ)` question above.** `Im(E)` is small, smooth and the
+right size, where `Im(Φ)` was none of those — exactly as gauge-dependence
+predicts, since `Φ` carries the P1 gauge function and `E` does not.
+
+Integrating `J = σE` over the wire (`tools/pv_extract_rl.py`):
+
+| | measured | target | |
+|---|---|---|---|
+| wire volume | 1.242331e-10 m³ | 1.242331e-10 | the 24-gon, not `πa²` |
+| terminal current | 7205.5168 - 6.2423j A | | |
+| **R** | **1.387824e-04 Ω** | 1.387824e-04 | **4.3e-09 relative** |
+| L | 3.827066e-10 H (0.3827 nH) | 0.3870 nH | 1.12 % low |
+
+`R` is exact to eight figures, which is the check this case was built for.
+
+**`L` is 1.12 % low, outside the ~0.5 % this document claimed.** Not resolved
+here, and the disagreement could be on either side: the 0.3870 nH target is
+itself an approximation — a *square* 2 mm box treated as a coax through an
+equivalent-radius factor of 1.0787 — while the measurement uses `Im(V/I)` at a
+single frequency where the reactance is `1.2e-07 Ω` against a resistance of
+`1.4e-04`, i.e. recovered from a part in 1000 of the total. Either the formula's
+accuracy or that conditioning could account for it. Routes A and B of §4
+(`2W_m/I²` and `(1/I²)∫A·J dV`) would distinguish them, since they do not
+subtract two nearly equal quantities.
