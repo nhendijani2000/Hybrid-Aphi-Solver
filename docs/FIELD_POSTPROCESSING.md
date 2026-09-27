@@ -314,3 +314,73 @@ Stated so nobody looks for it:
   existing VTK writer is the better option. This is a deviation from the plan and
   is flagged rather than made silently.
 - **`R` and `L` extraction** (plan §4) depends on the above.
+
+---
+
+## 12. Material interfaces: where the nodal average is meaningless
+
+Added after the first field run, because the defect it describes is invisible in
+a plot and was found only by checking a number.
+
+`E`'s **normal** component genuinely jumps across a conductor/insulator
+interface -- `J_n = 0` at a free conductor surface requires it -- and `H`'s
+tangential component jumps across a change of `mu`. A vertex on such a surface
+has incident tets on **both** sides, so the volume-weighted average of §7 mixes
+two physically different fields and produces a value that is neither.
+
+Measured on the 50 Hz cylinder, `E` in the wire against the exact `-1000 V/m`:
+
+| | nodes | mean `Re(E_z)` | worst deviation | worst transverse |
+|---|---|---|---|---|
+| **per-tet** (`e_tet`, no averaging) | 7535 tets | **-999.9993** | 8.6e-04 | 1.2e-06 |
+| nodal, `material_interface = 0` | 5440 | -999.9992 | 8.7e-04 | 9.3e-07 |
+| nodal, `material_interface = 1` | 6598 | mixed | **126** | **2705** |
+
+A transverse field of 2705 V/m on an axisymmetric problem, nearly three times
+the axial field, is not a small error -- and a surface plot of `E_magnitude`
+shows it as a bright rim that looks like a skin effect. It is not one. The skin
+depth here is 9.35 mm against a 0.2 mm radius; there is no skin effect at all.
+
+`FieldOutput::on_material_interface` is 1 at every such node (a mid-edge node
+inherits it from either endpoint), and `write_vtk` emits it as
+`material_interface`. **Threshold it to 0 before reading a nodal `E` or `H`.**
+The per-tet arrays have no interface to straddle and need no such care.
+
+This is a limitation of one value per node, not a bug to be fixed in place: the
+field really is two-valued there. Resolving it properly would mean a value per
+(node, body), which is a larger change than the outputs currently justify.
+
+---
+
+## 13. What `write_vtk` writes
+
+With a `FieldOutput` supplied. The legacy format has no complex type, so each
+phasor is a pair of real `VECTORS`.
+
+**Point data**, one per P2 node, indexed as `phi_node`:
+
+| array | |
+|---|---|
+| `phi_real`, `phi_imag`, `phi_magnitude` | Φ, exact P2 values |
+| `phi_present` | 0 where Φ does not live at all |
+| `A_real`, `A_imag` | **gauge-dependent** (§9) |
+| `B_real`, `B_imag`, `B_magnitude` | |
+| `H_real`, `H_imag` | |
+| `E_real`, `E_imag`, `E_magnitude` | |
+| `material_interface` | 1 where the nodal average is meaningless (§12) |
+
+`*_magnitude` is the phasor amplitude `sqrt(|Xx|² + |Xy|² + |Xz|²)`, which is
+**not** the length of either the real or the imaginary vector: where the field
+is elliptically polarised neither of those is the physical peak.
+
+**Cell data**, one per tet, none of it averaged:
+
+| array | |
+|---|---|
+| `body_tag` | the Physical Volume tag |
+| `sigma` | the tet's body conductivity |
+| `B_cell_real`, `B_cell_imag` | the **exact** piecewise-constant `B` |
+| `J_real`, `J_imag` | `sigma * E_tet`, zero in an insulator |
+
+Carrying both `B_cell` and the nodal `B` is deliberate: the difference between
+them is the smoothing that §7 added, and nothing else makes it visible.

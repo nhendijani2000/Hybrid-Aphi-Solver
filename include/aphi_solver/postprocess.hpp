@@ -186,6 +186,11 @@ struct FieldOutput {
     // value at the tet's centroid, which for a linear field is its mean.
     std::vector<Vec3C> a_tet, b_tet, e_tet;
 
+    /// The conductivity of each tet's body, so `J = sigma E` can be formed
+    /// per tet -- which is where it is well defined. At a node on a
+    /// conductor/insulator interface it is not.
+    std::vector<double> sigma_tet;
+
     /// `A`, `B`, `H` and `E` at **every P2 node**, indexed exactly like
     /// `phi_node`, so a field and the potential can be read at the same node
     /// index without a second convention.
@@ -206,6 +211,25 @@ struct FieldOutput {
     /// `num_vertices`, not `num_p2_nodes`). Zero means no tet did, which leaves
     /// that vertex's fields at zero -- an orphan node.
     std::vector<double> vertex_weight;
+
+    /// 1 at a P2 node whose incident tets do **not** all belong to one body.
+    ///
+    /// **The nodal fields are meaningless at these nodes**, and quietly so.
+    /// `E`'s normal component genuinely jumps across a conductor/insulator
+    /// interface -- `J_n = 0` at a free conductor surface requires it -- and so
+    /// does `H`'s tangential component across a change of `mu`. Averaging over
+    /// tets on both sides produces a value that is neither.
+    ///
+    /// Measured on the 50 Hz cylinder: inside the wire the nodal `E_z` is
+    /// -999.999 V/m against an exact -1000, with a transverse component of
+    /// 9e-07 V/m; **on the surface** the same average gives a transverse
+    /// component of 2705 V/m, larger than the axial field itself.
+    ///
+    /// Threshold this to 0 before reading a nodal field, or use the per-tet
+    /// arrays, which are exact and have no interface to straddle.
+    std::vector<unsigned char> on_material_interface;
+
+    int num_interface_nodes = 0;
 
     int num_vertices = 0;  ///< entries [0, num_vertices) of the node arrays
     int num_edges = 0;     ///< the rest, in mesh edge order
@@ -248,6 +272,6 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
 /// Cell data: `body_tag`, the mesh's physical-volume tag, so conductor and
 /// insulator can be separated without consulting the input file.
 WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
-                     const Solution& solution);
+                     const Solution& solution, const FieldOutput* fields = nullptr);
 
 }  // namespace aphi_solver

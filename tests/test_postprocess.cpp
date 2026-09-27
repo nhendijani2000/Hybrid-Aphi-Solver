@@ -868,6 +868,87 @@ void test_mid_edge_fields_are_endpoint_means_but_phi_is_not() {
               std::to_string(worst_phi) + ")");
 }
 
+
+// The material-interface flag, which is what keeps a meaningless nodal average
+// from being read as a field.
+//
+// E's normal component genuinely jumps across a conductor/insulator interface,
+// so averaging over tets on both sides gives a value that is neither. Measured
+// on the 50 Hz cylinder: thresholding this flag to 0 takes the worst transverse
+// E in the wire from 2705 V/m down to 9.3e-07.
+void test_material_interface_flag() {
+    Mesh m = make_cube();
+    BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = all_free_dofs(m);
+
+    Solution s;
+    s.conditioning = Conditioning::Natural;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.assign(static_cast<std::size_t>(d.num_total), Complex(0.3, -0.2));
+
+    // One body: nothing can straddle anything.
+    const FieldOutput one = compute_fields(m, bnd, d, s);
+    bool all_clear = true;
+    for (unsigned char f : one.on_material_interface) {
+        if (f != 0) all_clear = false;
+    }
+    check(all_clear && one.num_interface_nodes == 0,
+          "with a single body no node is on a material interface");
+
+    // Split the mesh in two by fiat. The geometry is untouched, so any node the
+    // flag picks up is one whose incident tets really do span both.
+    BoundBody second = bnd.bodies[0];
+    second.name = "B2";
+    second.sigma = 0.0;
+    bnd.bodies.push_back(second);
+    const int half = m.num_tets() / 2;
+    for (int t = half; t < m.num_tets(); ++t) {
+        bnd.body_of_tet[static_cast<std::size_t>(t)] = 1;
+    }
+
+    const FieldOutput two = compute_fields(m, bnd, d, s);
+    check(two.num_interface_nodes > 0,
+          "splitting the mesh into two bodies marks " +
+              std::to_string(two.num_interface_nodes) + " nodes");
+
+    // Recomputed independently: a VERTEX is on an interface exactly when the
+    // bodies of its incident tets are not all equal.
+    std::vector<int> seen(static_cast<std::size_t>(m.num_nodes()), -1);
+    std::vector<unsigned char> want(static_cast<std::size_t>(d.num_p2_nodes), 0);
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const int b = bnd.body_of_tet[static_cast<std::size_t>(t)];
+        for (int k = 0; k < 4; ++k) {
+            const std::size_t v = static_cast<std::size_t>(
+                m.tets[static_cast<std::size_t>(t)][static_cast<std::size_t>(k)]);
+            if (seen[v] < 0) {
+                seen[v] = b;
+            } else if (seen[v] != b) {
+                want[v] = 1;
+            }
+        }
+    }
+    for (int e = 0; e < m.num_edges(); ++e) {
+        const std::pair<int, int>& ends = m.edges[static_cast<std::size_t>(e)];
+        want[static_cast<std::size_t>(d.edge_p2(e))] =
+            (want[static_cast<std::size_t>(ends.first)] != 0 ||
+             want[static_cast<std::size_t>(ends.second)] != 0)
+                ? 1
+                : 0;
+    }
+    check(two.on_material_interface == want,
+          "and the flag is exactly that set, vertices and mid-edge nodes alike");
+
+    // sigma is carried per tet, which is the only place it is single-valued.
+    bool sigma_ok = true;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const double want_s =
+            bnd.bodies[static_cast<std::size_t>(bnd.body_of_tet[static_cast<std::size_t>(t)])].sigma;
+        if (two.sigma_tet[static_cast<std::size_t>(t)] != want_s) sigma_ok = false;
+    }
+    check(sigma_ok, "and sigma_tet is each tet's own body's sigma, so J = sigma E is formed "
+                    "where sigma is single-valued");
+}
+
 }  // namespace
 
 int main() {
@@ -884,6 +965,7 @@ int main() {
     test_vertex_averaging_is_volume_weighted();
     test_phi_matches_potential_at_nodes();
     test_mid_edge_fields_are_endpoint_means_but_phi_is_not();
+    test_material_interface_flag();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

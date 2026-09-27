@@ -226,6 +226,7 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
     out.a_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
     out.b_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
     out.e_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
+    out.sigma_tet.assign(static_cast<std::size_t>(nt), 0.0);
     // Sized for every P2 node. The vertex part is filled by accumulation below;
     // the mid-edge part afterwards, from the two endpoints.
     out.a_node.assign(static_cast<std::size_t>(np), Vec3C{});
@@ -233,6 +234,10 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
     out.h_node.assign(static_cast<std::size_t>(np), Vec3C{});
     out.e_node.assign(static_cast<std::size_t>(np), Vec3C{});
     out.vertex_weight.assign(static_cast<std::size_t>(nv), 0.0);
+    out.on_material_interface.assign(static_cast<std::size_t>(np), 0);
+    // Which body first claimed each vertex; a second, different one marks an
+    // interface.
+    std::vector<int> first_body(static_cast<std::size_t>(nv), -1);
 
     // Phi is P2 and already exact at its nodes, so it is copied, not rebuilt.
     const NodalPotential phi = potential_at_nodes(mesh, bound, dofs, solution);
@@ -298,6 +303,7 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
         const int body = bound.body_of_tet[ut];
         const double mu = kMu0 * bound.bodies[static_cast<std::size_t>(body)].mu_r;
         const double nu = 1.0 / mu;
+        out.sigma_tet[ut] = bound.bodies[static_cast<std::size_t>(body)].sigma;
 
         // A and E at a point of this tet.
         auto evaluate = [&](const std::array<double, 4>& L) {
@@ -341,6 +347,14 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
                 out.b_node[uv][ui] += vol * b_const[ui];
                 out.h_node[uv][ui] += vol * nu * b_const[ui];
             }
+            // A vertex whose incident tets span more than one body sits on a
+            // material interface, where averaging across the two sides is
+            // meaningless -- see FieldOutput::on_material_interface.
+            if (first_body[uv] < 0) {
+                first_body[uv] = body;
+            } else if (first_body[uv] != body) {
+                out.on_material_interface[uv] = 1;
+            }
         }
     }
 
@@ -382,6 +396,13 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
             out.h_node[m][ui] = 0.5 * (out.h_node[a0][ui] + out.h_node[a1][ui]);
             out.e_node[m][ui] = 0.5 * (out.e_node[a0][ui] + out.e_node[a1][ui]);
         }
+        // An edge whose endpoint is on an interface straddles it too.
+        out.on_material_interface[m] =
+            (out.on_material_interface[a0] != 0 || out.on_material_interface[a1] != 0) ? 1 : 0;
+    }
+
+    for (int i = 0; i < np; ++i) {
+        if (out.on_material_interface[static_cast<std::size_t>(i)] != 0) ++out.num_interface_nodes;
     }
 
     return out;
@@ -453,8 +474,42 @@ WriteStats write_potential(const std::string& path, const NodalPotential& potent
 }
 
 
+namespace {
+
+/// One VTK `VECTORS` array: the real or the imaginary part of a complex field.
+void put_vectors(TextBuffer& buf, const char* name, const std::vector<Vec3C>& v, int n,
+                 bool real_part) {
+    buf.put("\nVECTORS ");
+    buf.put(name);
+    buf.put(" double\n");
+    for (int i = 0; i < n; ++i) {
+        const Vec3C& x = v[static_cast<std::size_t>(i)];
+        for (int k = 0; k < 3; ++k) {
+            if (k != 0) buf.put(' ');
+            const std::complex<double>& c = x[static_cast<std::size_t>(k)];
+            buf.put(real_part ? c.real() : c.imag());
+        }
+        buf.put('\n');
+    }
+}
+
+void put_magnitude(TextBuffer& buf, const char* name, const std::vector<Vec3C>& v, int n) {
+    buf.put("\nSCALARS ");
+    buf.put(name);
+    buf.put(" double 1\nLOOKUP_TABLE default\n");
+    for (int i = 0; i < n; ++i) {
+        const Vec3C& x = v[static_cast<std::size_t>(i)];
+        double s = 0.0;
+        for (int k = 0; k < 3; ++k) s += std::norm(x[static_cast<std::size_t>(k)]);
+        buf.put(std::sqrt(s));
+        buf.put('\n');
+    }
+}
+
+}  // namespace
+
 WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
-                     const Solution& solution) {
+                     const Solution& solution, const FieldOutput* fields) {
     const auto started = std::chrono::steady_clock::now();
     if (potential.size() != mesh.num_nodes() + mesh.num_edges()) {
         throw std::invalid_argument(
@@ -534,6 +589,35 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
             buf.put('\n');
         }
 
+        if (fields != nullptr) {
+            // Per-cell quantities, written as they are computed rather than
+            // smoothed. `B` is genuinely constant per tet, so `B_cell` is the
+            // exact value and the nodal `B` below is a post-processing average
+            // of it -- carrying both is what lets the smoothing be seen.
+            buf.put("\nSCALARS sigma double 1\nLOOKUP_TABLE default\n");
+            for (int t = 0; t < nc; ++t) {
+                buf.put(fields->sigma_tet[static_cast<std::size_t>(t)]);
+                buf.put('\n');
+            }
+            put_vectors(buf, "B_cell_real", fields->b_tet, nc, true);
+            put_vectors(buf, "B_cell_imag", fields->b_tet, nc, false);
+
+            // J = sigma E, formed per tet because that is where sigma is
+            // single-valued: at a node on a conductor/insulator interface it is
+            // not. Zero throughout an insulator, which is correct and not a gap.
+            std::vector<Vec3C> j(static_cast<std::size_t>(nc), Vec3C{});
+            for (int t = 0; t < nc; ++t) {
+                const std::size_t ut = static_cast<std::size_t>(t);
+                const double s = fields->sigma_tet[ut];
+                for (int k = 0; k < 3; ++k) {
+                    j[ut][static_cast<std::size_t>(k)] =
+                        s * fields->e_tet[ut][static_cast<std::size_t>(k)];
+                }
+            }
+            put_vectors(buf, "J_real", j, nc, true);
+            put_vectors(buf, "J_imag", j, nc, false);
+        }
+
         buf.put("\nPOINT_DATA ");
         buf.put(np);
         buf.put('\n');
@@ -560,6 +644,43 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
         for (int i = 0; i < np; ++i) {
             buf.put(potential.status[static_cast<std::size_t>(i)] == PhiStatus::Absent ? 0 : 1);
             buf.put('\n');
+        }
+
+        if (fields != nullptr) {
+            if (fields->num_nodes() != np) {
+                throw std::invalid_argument(
+                    "write_vtk: the fields cover " + std::to_string(fields->num_nodes()) +
+                    " nodes and the potential " + std::to_string(np) +
+                    ". They must come from the same solve.");
+            }
+            // A complex phasor at every P2 node, real and imaginary parts as
+            // separate VECTORS because the legacy format has no complex type.
+            // ParaView's own Calculator can form any combination of them.
+            put_vectors(buf, "A_real", fields->a_node, np, true);
+            put_vectors(buf, "A_imag", fields->a_node, np, false);
+            put_vectors(buf, "B_real", fields->b_node, np, true);
+            put_vectors(buf, "B_imag", fields->b_node, np, false);
+            put_vectors(buf, "H_real", fields->h_node, np, true);
+            put_vectors(buf, "H_imag", fields->h_node, np, false);
+            put_vectors(buf, "E_real", fields->e_node, np, true);
+            put_vectors(buf, "E_imag", fields->e_node, np, false);
+
+            // The phasor amplitude sqrt(|Ex|^2 + |Ey|^2 + |Ez|^2), which is NOT
+            // the length of either the real or the imaginary vector: at a point
+            // where the field is elliptically polarised neither of those is the
+            // physical peak, and this is.
+            put_magnitude(buf, "E_magnitude", fields->e_node, np);
+            put_magnitude(buf, "B_magnitude", fields->b_node, np);
+
+            // 1 where the nodal average straddles a material interface and the
+            // nodal fields are therefore meaningless. Threshold this to 0
+            // before reading E or H, or use the per-cell arrays instead.
+            buf.put("\nSCALARS material_interface int 1\nLOOKUP_TABLE default\n");
+            for (int i = 0; i < np; ++i) {
+                buf.put(static_cast<int>(
+                    fields->on_material_interface[static_cast<std::size_t>(i)]));
+                buf.put('\n');
+            }
         }
 
         buf.flush();

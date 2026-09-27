@@ -156,10 +156,25 @@ int main(int argc, char** argv) {
                 out_path = "potential_" + std::to_string(&f - frequencies.data()) + ".out";
             }
             const WriteStats ws = write_potential(out_path, nodal, sol);
+            const auto fields_started = std::chrono::steady_clock::now();
+            const FieldOutput fields = compute_fields(mesh, bound, dofs, sol);
+            const double fields_ms =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
+                                                          fields_started)
+                    .count();
             std::string vtk_path = out_path.substr(0, out_path.size() - 4) + ".vtk";
-            const WriteStats vs = write_vtk(vtk_path, mesh, nodal, sol);
+            const WriteStats vs = write_vtk(vtk_path, mesh, nodal, sol, &fields);
             std::cout << "                wrote " << out_path << "   " << ws.nodes << " nodes, "
                       << ws.bytes / 1024 << " KB, " << ws.milliseconds << " ms\n";
+            std::cout << "                fields A,B,H,E at " << fields.num_nodes()
+                      << " nodes in " << fields_ms << " ms";
+            if (fields.num_interface_nodes > 0) {
+                std::cout << "   " << fields.num_interface_nodes << " on a material interface";
+            }
+            if (fields.num_orphan_vertices > 0) {
+                std::cout << "   (" << fields.num_orphan_vertices << " orphan vertices)";
+            }
+            std::cout << "\n";
             std::cout << "                wrote " << vtk_path << "   " << vs.bytes / 1024
                       << " KB, " << vs.milliseconds << " ms   (ParaView)\n";
         }
