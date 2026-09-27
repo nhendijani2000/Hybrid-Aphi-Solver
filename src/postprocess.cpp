@@ -601,6 +601,12 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
             }
             put_vectors(buf, "B_cell_real", fields->b_tet, nc, true);
             put_vectors(buf, "B_cell_imag", fields->b_tet, nc, false);
+            // E per cell as well as per node. In an insulator `J` is zero, so
+            // without this there is no averaging-free E anywhere outside the
+            // conductors -- which is exactly where the nodal one is least
+            // trustworthy, since the interface runs along that boundary.
+            put_vectors(buf, "E_cell_real", fields->e_tet, nc, true);
+            put_vectors(buf, "E_cell_imag", fields->e_tet, nc, false);
 
             // J = sigma E, formed per tet because that is where sigma is
             // single-valued: at a node on a conductor/insulator interface it is

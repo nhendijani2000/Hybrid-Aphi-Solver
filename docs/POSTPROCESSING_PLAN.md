@@ -600,3 +600,29 @@ single frequency where the reactance is `1.2e-07 Ω` against a resistance of
 accuracy or that conditioning could account for it. Routes A and B of §4
 (`2W_m/I²` and `(1/I²)∫A·J dV`) would distinguish them, since they do not
 subtract two nearly equal quantities.
+
+### B against Ampere's law, mid-height cross-section
+
+Per-cell `B` (`tools/pv_ampere.py`), cells with `0.4 < z < 0.6 mm` to keep away
+from the ends, binned by radius. The enclosed-current fraction uses the **24-gon**,
+not `pi r^2`, and `I = 7205.5 A` from the `J` integral above.
+
+       r (um)      n     |B| meas   |B| Ampere    ratio
+        0 -  25    10      0.6176      0.6118     1.010
+      100 - 125   191      4.1328      4.1277     1.001
+      175 - 200   500      6.6408      6.7232     0.988      <- conductor surface
+      250 - 275   107      5.3998      5.4560     0.990
+      450 - 475    22      3.1432      3.1116     1.010
+
+Linear in `r` inside, `1/r` outside, ratio within 1-4 % across the whole domain.
+The residual `|B_r|/|B|` is 1-7 %, largest near the axis where `|B|` itself is
+small -- it should be 0, and it is the discretisation error.
+
+**A plotted peak of 6.6 T is not 8 % below the textbook 7.21 T.** `mu0 I/(2 pi a)`
+holds at `r = a`, which on this mesh is only the polygon's 24 *vertices*; most of
+the surface sits at the apothem `a cos(pi/24) = 198 um`. Comparing a binned mean
+over 175-200 um against a single-point maximum is not a comparison, and reading
+a discrepancy into it was an error made and corrected here.
+
+The `flux_tangential` outer boundary is visible directly in a vector plot of
+`B_real` on this plane: the arrows lie along the box walls, which is `n.B = 0`.
