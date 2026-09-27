@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
+#include <system_error>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -67,6 +69,19 @@ int main(int argc, char** argv) {
                       << "docs/SOLVER_PLAN.md. Use row_scaled or scaled_phi for now -- both need\n"
                       << "a non-zero frequency.\n";
             return 1;
+        }
+
+        // Make the output directory before anything long-running, so a missing
+        // or unwritable path fails in a second rather than after the solve.
+        if (!p.output_dir.empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(p.output_dir, ec);
+            if (ec && !std::filesystem::is_directory(p.output_dir)) {
+                std::cerr << "output: could not create \"" << p.output_dir
+                          << "\": " << ec.message() << "\n";
+                return 1;
+            }
+            std::cout << "output dir    " << p.output_dir << "\n";
         }
 
         Mesh mesh = read_gmsh_msh(p.mesh_file);
@@ -155,6 +170,7 @@ int main(int argc, char** argv) {
             if (frequencies.size() > 1) {
                 out_path = "potential_" + std::to_string(&f - frequencies.data()) + ".out";
             }
+            if (!p.output_dir.empty()) out_path = p.output_dir + "/" + out_path;
             const WriteStats ws = write_potential(out_path, nodal, sol);
             const auto fields_started = std::chrono::steady_clock::now();
             const FieldOutput fields = compute_fields(mesh, bound, dofs, sol);

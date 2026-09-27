@@ -56,7 +56,8 @@ struct ParseResult {
 /// job -- those are a different class of mistake and reporting them
 /// separately is what lets each name the right thing.
 ///
-/// A relative `[mesh] file` is resolved against the directory containing
+/// A relative `[mesh] file` or `[output] directory` is resolved against the
+/// directory containing
 /// `path`, so an input file can sit beside its mesh and be run from
 /// anywhere.
 ///

@@ -229,7 +229,10 @@ void test_syntax_errors() {
     expect_error("[mesh]\nfile =\n", 2, "missing value");
     expect_error("[mesh]\nfile = a\nfile = b\n", 3, "duplicate key reports the second one");
     expect_error("[wrong]\nx = 1\n", 1, "unknown section");
-    expect_error("[output]\nx = 1\n", 1, "reserved [output] section");
+    // [output] used to be rejected outright as reserved. It is implemented now
+    // (see test_output_directory), so the error moved from the section header
+    // to the unknown key on line 2.
+    expect_error("[output]\nx = 1\n", 2, "unknown key in [output]");
 }
 
 // Every rejection below is paired with the same file made valid, so the
@@ -577,12 +580,85 @@ void test_solver_section() {
 }
 
 
+
+// [output] directory: where a case's results go.
+//
+// Resolved against the INPUT FILE, not the working directory, which is the
+// whole point -- a regression case must write into its own folder however it
+// was invoked. If this resolved against the CWD instead, running the same case
+// from the repository root and from inside its folder would scatter outputs in
+// two places and the second run would look like it had produced nothing.
+void test_output_directory() {
+    const std::string body =
+        "[mesh]\n"
+        "file = m.msh\n"
+        "length_unit = mm\n"
+        "[analysis]\n"
+        "type = DC\n"
+        "[body B1]\n"
+        "volume = Wire\n"
+        "sigma = 1\n"
+        "[port P1]\n"
+        "type = boundary_voltage\n"
+        "surface = Wire_Top\n"
+        "voltage = 0\n";
+
+    {
+        const ParseResult r = expect_ok(body, "no [output] section at all");
+        check(r.problem.output_dir.empty(),
+              "without [output] the directory is empty, meaning the working directory");
+    }
+    {
+        const ParseResult r =
+            expect_ok(body + "[output]\ndirectory = output\n", "[output] directory = output");
+        check(r.problem.output_dir == "output",
+              "with no base directory the value is taken as written");
+    }
+
+    // With a base directory -- what happens when a real file is parsed.
+    {
+        const ParseResult r = aphi_solver::parse_input_string(
+            body + "[output]\ndirectory = output\n", "case.aphi", "tests/01_Case");
+        check(!r.problem.mesh_file.empty(), "parses with a base directory");
+        check(r.problem.output_dir == "tests/01_Case/output",
+              "a relative output directory hangs off the input file's folder");
+        check(r.problem.mesh_file == "tests/01_Case/m.msh",
+              "and the mesh path resolves the same way, from the same helper");
+    }
+    {
+        const ParseResult r = aphi_solver::parse_input_string(
+            body + "[output]\ndirectory = C:\\results\n", "case.aphi", "tests/01_Case");
+        check(r.problem.output_dir == "C:\\results", "an absolute Windows path is left alone");
+    }
+    {
+        const ParseResult r = aphi_solver::parse_input_string(
+            body + "[output]\ndirectory = /var/results\n", "case.aphi", "tests/01_Case");
+        check(r.problem.output_dir == "/var/results",
+              "and so is an absolute POSIX path");
+    }
+
+    // A directory name may contain spaces, which is why the value is taken
+    // verbatim rather than tokenised.
+    {
+        const ParseResult r =
+            expect_ok(body + "[output]\ndirectory = my results\n", "a name with a space");
+        check(r.problem.output_dir == "my results", "the value is not split on whitespace");
+    }
+
+    expect_error(body + "[output]\n", 13, "[output] without a directory is an error");
+    expect_error(body + "[output]\ndirectory = a\n[output]\ndirectory = b\n", 15,
+                 "a second [output] section is an error");
+    expect_error(body + "[output]\ndirectory = a\nextra = 1\n", 15,
+                 "an unknown key in [output] is an error");
+}
+
 }  // namespace
 
 int main() {
     test_cylinder_example_parses();
     test_frequency_example_parses();
     test_lexing();
+    test_output_directory();
     test_utf8_bom_is_tolerated();
     test_syntax_errors();
     test_value_errors_and_controls();

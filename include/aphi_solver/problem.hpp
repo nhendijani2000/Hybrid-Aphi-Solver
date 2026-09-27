@@ -161,6 +161,13 @@ struct Port {
 
 struct Problem {
     std::string mesh_file;  ///< as written, relative to the input file
+
+    /// Where solve_mesh writes potential.out, potential.vtk and anything else
+    /// it produces. Resolved relative to the INPUT FILE, not the working
+    /// directory, so a case runs identically from anywhere -- which is what
+    /// lets a regression case own its own outputs. Empty means the working
+    /// directory, which is the old behaviour.
+    std::string output_dir;
     LengthUnit length_unit = LengthUnit::Metre;
 
     AnalysisType type = AnalysisType::DC;

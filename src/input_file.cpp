@@ -115,6 +115,8 @@ private:
     std::vector<Section> lex() const;
 
     // -- per-section handlers --
+    void read_output(const Section& s);
+    std::string resolve_path(const std::string& raw) const;
     void read_mesh(const Section& s);
     void read_analysis(const Section& s);
     void read_boundary(const Section& s);
@@ -143,6 +145,7 @@ private:
 
     ParseResult result_;
     bool saw_mesh_ = false;
+    bool saw_output_ = false;
     bool saw_analysis_ = false;
     int analysis_line_ = 0;
     int conditioning_line_ = 0;  ///< where [solver] conditioning was set, for the DC check
@@ -334,18 +337,30 @@ Vec3 Parser::as_direction(const Entry& e) const {
 // ---------------------------------------------------------------------------
 // Section handlers.
 
+// A path from the input file, made relative to the input FILE rather than the
+// working directory. Taken verbatim rather than tokenised: a directory name may
+// contain spaces, and splitting one would be a baffling failure.
+std::string Parser::resolve_path(const std::string& raw) const {
+    std::string path = raw;
+    if (!base_dir_.empty()) {
+        const bool absolute =
+            path.size() > 1 && (path[0] == '/' || path[0] == '\\' || path[1] == ':');
+        if (!absolute) path = base_dir_ + "/" + path;
+    }
+    return path;
+}
+
+void Parser::read_output(const Section& s) {
+    reject_unknown_keys(s, {"directory"});
+    const Entry& dir = require(s, "directory");
+    result_.problem.output_dir = resolve_path(dir.value);
+}
+
 void Parser::read_mesh(const Section& s) {
     reject_unknown_keys(s, {"file", "length_unit"});
 
-    // The path is taken verbatim rather than tokenised: a directory name may
-    // contain spaces, and splitting one would be a baffling failure.
     const Entry& file = require(s, "file");
-    std::string path = file.value;
-    if (!base_dir_.empty()) {
-        const bool absolute = path.size() > 1 && (path[0] == '/' || path[0] == '\\' || path[1] == ':');
-        if (!absolute) path = base_dir_ + "/" + path;
-    }
-    result_.problem.mesh_file = path;
+    result_.problem.mesh_file = resolve_path(file.value);
 
     const Entry& unit = require(s, "length_unit");
     const std::string u = as_keyword(unit, {"m", "mm", "um", "nm"});
@@ -657,10 +672,13 @@ ParseResult Parser::run() {
         } else if (s.kind == "solver") {
             read_solver(s);
         } else if (s.kind == "output") {
-            fail(s.line, "[" + s.kind + "] is reserved but not supported yet");
+            if (saw_output_) fail(s.line, "a second [output] section");
+            if (!s.name.empty()) fail(s.line, "[output] takes no name");
+            read_output(s);
+            saw_output_ = true;
         } else {
             fail(s.line, "unknown section '[" + s.kind + "]'; valid sections are mesh, analysis, "
-                         "boundary, solver, Body, port");
+                         "boundary, solver, output, Body, port");
         }
     }
 
