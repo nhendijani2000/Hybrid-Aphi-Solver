@@ -35,9 +35,21 @@ import sys
 
 from paraview.simple import *  # noqa: F403
 
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VTK = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "potential.vtk")
-OUT = sys.argv[2] if len(sys.argv) > 2 else HERE
+# Resolve the project root however this is being run. Under pvbatch/pvpython
+# __file__ is the script; in ParaView's GUI Python Shell it may be undefined,
+# and sys.argv holds the application's own arguments rather than ours -- so
+# take an argument only when it actually looks like one of ours.
+try:
+    HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+except NameError:
+    HERE = os.getcwd()
+
+_args = [a for a in sys.argv[1:] if not a.startswith("-")]
+_vtk_args = [a for a in _args if a.lower().endswith(".vtk")]
+_dir_args = [a for a in _args if not a.lower().endswith((".vtk", ".py"))]
+
+VTK = _vtk_args[0] if _vtk_args else os.path.join(HERE, "potential.vtk")
+OUT = _dir_args[0] if _dir_args else HERE
 STATE = os.path.join(HERE, "potential_wire.pvsm")
 
 WIRE_TAG = 1  # body_tag: 1 is the copper wire, 2 is the air box
