@@ -975,3 +975,63 @@ orders better** for the unsymmetric path — from the normalisation alone. The
 obvious conclusion at step 8 would be "the unsymmetric solve is more accurate",
 and it would be false. Only `backward_error` is comparable across conditionings,
 and step 8 must compare on that.
+
+---
+
+## 19. Before step 7: measured on what exists, and why that is not enough
+
+Step 6 left step 7 without a failing case. Measured, to see whether one was
+hiding in the combinations not yet tried — all at 100 MHz, equilibrated, AMD:
+
+| case | min \|D\| | max \|L\| | backward error | `\|\|b\|\|`-relative |
+|---|---|---|---|---|
+| loop, `row_scaled` | 0.0150 | 1.95 | 3.6e-23 | 0.067 |
+| loop, `scaled_phi` | **0.0150** | **1.95** | 6.3e-18 | 9.2e-10 |
+| cylinder, `row_scaled` | 4.1e-4 | 6.31 | 5.6e-25 | 1.3e-14 |
+
+**Nothing fails.** No pivot needed perturbing anywhere, multiplier growth never
+exceeds 15, and every backward error is at or below 1e-17.
+
+### Two findings worth keeping
+
+**Equilibration makes the two symmetric conditionings numerically identical.**
+`row_scaled` and `scaled_phi` produced *the same* `min |D|` (0.0150415) and the
+same `max |L|` (1.95079) on the loop, to every printed digit. That is not a
+coincidence: the two differ by a diagonal scaling of the Φ block (`r = 1/jω`
+against `c = jω`), and symmetric equilibration absorbs exactly that. So the
+`row_scaled`-vs-`scaled_phi` trade-off that `docs/CONDITIONING.md` treats as a
+real choice is **neutralised once the system is equilibrated** — they differ only
+in what the unknown means (`Φ` against `Φ' = Φ/jω`) and in `||b||`.
+
+**The cylinder's unit-diagonal constraint row is not a problem after
+equilibration.** §10 flagged it as one badly scaled row beside entries of 1e12,
+left deliberately for equilibration to fix. It did: `min |D|` is 4.1e-4 and the
+`||b||`-relative residual is 1.3e-14.
+
+### Why this does not settle step 7
+
+**The fixtures are too easy, and that is the finding.** `cylinder_box.msh` and
+`loop_cut.msh` are both uniform, well-shaped, single-scale meshes of a simple
+body in a box. What is known to wreck A-Φ conditioning is none of those things:
+thin high-aspect-ratio layers, element aspect ratios in the hundreds, multi-scale
+features, sliver elements, and large contrasts across a thin gap. **There is no
+fixture in this repository with any of that**, so "nothing fails" means only
+"nothing fails on two easy meshes".
+
+That is weaker than §18's phrasing implied, and the correction comes from
+experience rather than measurement: the A-Φ system is reported to become severely
+ill-conditioned on realistic meshes, which is exactly the regime these two
+fixtures avoid. **Static pivoting and refinement will be needed.** What is
+missing is not the motivation but a case to build and verify them against.
+
+### The order this implies
+
+1. **Build a hard fixture**, because step 7 cannot be tested without one and a
+   library comparison cannot be informative without one either. A microstrip-like
+   structure is the obvious candidate and is what the EDA track needs anyway: a
+   thin conductor over a ground plane across a thin dielectric, giving element
+   aspect ratios in the hundreds and a genuine multi-scale mesh.
+2. **Then step 7**, verified against a case that actually fails without it.
+3. **Then the §12 backend.** Comparing against MUMPS on the fixtures that exist
+   today would show both solvers at 1e-25 and prove nothing; on a hard mesh it
+   would show whether Bunch-Kaufman buys anything our static pivoting does not.
