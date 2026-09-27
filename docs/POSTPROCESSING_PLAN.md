@@ -642,3 +642,46 @@ looked wrong while being right; the linear version is immediately recognisable.
 
 `tools/pv_bmag.py` writes both, for exactly this comparison. Reach for log only
 when the dynamic range genuinely demands it -- and not for the check above.
+
+### Why |E| is flat in the wire at 50 Hz, and what makes it a ring
+
+Asked directly, against an Ansys plot of a solid winding whose `|E|` shows the
+classic blue core and red rim. Our 50 Hz result is flat across the conductor,
+and that is correct **for this case**, not a defect.
+
+`E = -jw A - grad(Phi)`, and the two terms here are not comparable:
+
+    |grad Phi|  =  1000 V/m          the V/l resistive drop
+    |w A|       ~  0.23 V/m          A_z ~ mu0 I / 4pi = 7.2e-04, w = 314
+
+The induced term is 0.02 % of the resistive one, which is the same number as the
+measured `Im(E)/Re(E)` of 0.099 %. Equivalently: `delta = 9.35 mm` against
+`a = 0.2 mm`, a ratio of **47**. There is no skin effect to see, so the current
+is uniform and so is `E`.
+
+Ansys's winding is at ~400 mm scale; a ~10 mm conductor at 50 Hz has
+`a/delta ~ 1`, which is exactly where the ring appears.
+
+**Demonstrated rather than argued** (`examples/cylinder_1mhz.aphi`,
+`tools/pv_skin.py`): the same mesh at 1 MHz, where `delta = 0.066 mm` and
+`a/delta = 3.03`.
+
+     r (um)      n     |E| V/m    relative to axis
+      0 -  25    10       38.32        1.000
+    100 - 125   191       52.37        1.367
+    150 - 175   331       92.79        2.421
+    175 - 200   500      116.60        3.042
+
+The ring appears, from the same code with only the frequency changed.
+
+**It is under-resolved, and the number says so.** The exact round-wire result
+`J(r)/J(a) = J0(kr)/J0(ka)` with `k = (1-j)/delta` gives `|J(0)/J(a)| = 0.2467`
+at `a/delta = 3.03`; we measure `38.32/116.6 = 0.329`, i.e. **33 % too much
+current left in the core**. `lc_wire = 0.055 mm` against `delta = 0.066 mm` is
+1.2 elements per skin depth, which cannot represent the exponential decay. At
+100 kHz there are 3.8 elements per skin depth but the effect itself is weak
+(exact ratio 0.951). Resolving a skin effect properly on this geometry needs a
+mesh graded to the surface, which `tools/cylinder_box.geo` does not do.
+
+So: the shape is reproduced and the mechanism is right; the contrast is a mesh
+question, not a formulation one.
