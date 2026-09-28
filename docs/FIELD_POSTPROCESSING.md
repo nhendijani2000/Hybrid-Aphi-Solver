@@ -485,3 +485,41 @@ physical rather than gauge. It was not: that perturbation changed only 250 of a
 million stored nonzeros -- the same tree, essentially -- so it sampled almost
 none of the gauge space. A weak perturbation showing no change is not evidence
 of invariance.
+
+### When `Phi = z/l` is the right target, and when it is not
+
+The objection that finally settled this: tree-cotree exists to give a unique
+`A` and `Phi`, and on a simple cylinder `Phi` should come out `z/l`.
+
+Both halves are right, with one distinction each.
+
+Tree-cotree makes the **matrix** non-singular and gives a unique solution *for a
+given tree*. It does not give a tree-independent one: `A_tree = 0` is a
+condition whose meaning depends on which tree, which is why the DFS variant
+above moved `Phi` by 0.75 V.
+
+And `Phi = z/l` is the **resistive-limit** answer. Measured on the same mesh,
+same solver, same gauge, changing only the frequency:
+
+    f       omega*L/R    worst |Re(Phi) - z/L|    profile at z/L = .15 .35 .55 .75 .95
+    1 Hz      0.059            0.0021            0.150  0.352  0.553  0.754  0.961
+    50 Hz     2.96             0.5420            0.021  0.048  0.633  0.973  0.994
+
+At 1 Hz `Phi` is `z/l` to 0.2 %. At 50 Hz the same geometry is not a resistor:
+of the 1 V applied, 0.33 V is resistive drop and 0.94 V is inductive EMF, in
+quadrature. The potential distribution in an inductance-dominated structure is
+not linear, and the split between `grad(Phi)` and `j*omega*A` is exactly what
+the gauge fixes.
+
+The boundary conditions are exact either way: both caps read 0 and 1 to the
+last bit, with zero imaginary part.
+
+**So `Phi = z/l` is a valid validation target only when `omega*L/R << 1`.**
+Above that, a `Phi` that fails it is not a defect to chase.
+
+There is a trap in this for the geometry design. Enlarging the conductor to make
+the skin effect visible also makes the structure inductive -- both scale with
+`omega*mu*sigma*a^2` -- so the case built to show one necessarily loses the
+other. `examples/cylinder_50hz.aphi` (a = 0.2 mm) and
+`regression_tests/01_OneCylinder/cylinder_1hz.aphi` are the resistive controls;
+the 50 Hz cylinder is the inductive one.
