@@ -2,7 +2,7 @@
 # 01_OneCylinder -- the same cylinder at 1 Hz: the RESISTIVE control.
 #
 #
-#     ../../run_case.bat cylinder_50hz.aphi          (from this folder)
+#     ../run_case.bat cylinder_1hz.aphi             (from this folder)
 #
 # Everything it writes lands in ./output/.
 #
