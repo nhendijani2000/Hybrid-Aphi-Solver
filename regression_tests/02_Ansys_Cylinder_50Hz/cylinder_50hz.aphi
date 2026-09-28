@@ -1,0 +1,66 @@
+# ---------------------------------------------------------------------------
+# 02_Ansys_Cylinder_50Hz -- a slender copper cylinder at 50 Hz, sized to match
+# the Ansys Maxwell A-Phi voltage example.
+#
+#     ../run_case.bat cylinder_50hz.aphi            (from this folder)
+#
+# Everything it writes lands in ./output/.
+#
+# GEOMETRY (cylinder.geo): a = 1.5 mm, L = 40 mm, box 40 mm, a 24-gon.
+# 6309 nodes. See the .geo header for how the dimensions were inferred.
+#
+# THE POINT OF THIS CASE. 01_OneCylinder has a = 10 mm, so omega*L/R = 2.889 and
+# Phi is dominated by the gauge. Here a = 1.5 mm, a/delta = 0.16, and the case is
+# resistance dominated -- so Phi should be a clean z/L gradient, the way the
+# Ansys plot shows. Same solver, same tree-cotree gauge, same flux-tangential
+# boundary; only the conductor radius differs.
+#
+# WHAT TO EXPECT
+#
+#   R (DC)    = L/(sigma A_poly) = 0.040 / (5.8e7 * 6.9881e-06)
+#             = 9.8690e-05 ohm      -> 9.87e-05 V at 1 A
+#   Phi       = z/L, a smooth gradient, since omega*L/R << 1
+#   |E|       = V/L = 25 V/m, UNIFORM -- no skin effect at a/delta = 0.16
+#   |B|       = zero on the axis, linear in r inside, 1/r outside
+#
+# A_poly = (24/2) * 1.5^2 * sin(2 pi/24) = 6.9881 mm2, 1.14 % below pi a^2.
+# Compare R against the POLYGON, not the circle.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = cylinder.msh
+length_unit = mm
+
+[output]
+directory   = output
+
+[analysis]
+type        = frequency
+frequencies = 50                           # Hz
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire
+sigma       = 5.8e7                        # copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+[port P1]
+type        = boundary_voltage
+surface     = wire_top
+voltage     = 1.0                          # V
+
+[port P2]
+type        = boundary_voltage
+surface     = wire_bottom
+voltage     = 0.0                          # V, the reference
+
+[solver]
+conditioning = row_scaled
