@@ -523,3 +523,43 @@ the skin effect visible also makes the structure inductive -- both scale with
 other. `examples/cylinder_50hz.aphi` (a = 0.2 mm) and
 `regression_tests/01_OneCylinder/cylinder_1hz.aphi` are the resistive controls;
 the 50 Hz cylinder is the inductive one.
+
+### The tree-cotree gauge inflates |A| by an order of magnitude
+
+Measured after a user pointed out that Ansys Maxwell, using the same tree-cotree
+method and the same flux-tangential boundary, shows a continuous potential over
+a cylinder surface.
+
+    case                  mean |A| in conductor   mu0*I/(4*pi)   ratio
+    0.2 mm wire, 50 Hz          4.84e-03 Wb/m       7.21e-04      6.71
+    10 mm rod,  50 Hz           1.54e-01            1.45e-02     10.66
+
+A Coulomb-gauge solution would sit near the physical scale. Ours is 7-11x above
+it in **both** cases, so the inflation is a property of the gauge as
+implemented, not something that appeared with the larger geometry. What differs
+between the two is only how `omega*A*l` compares with the drive:
+
+    0.2 mm wire   omega*A = 1.52 V/m over 1 mm   = 1.5e-03 V   0.15 % of 1 V
+    10 mm rod     omega*A = 48 V/m over 40 mm    = 1.9 V        190 % of 1 V
+
+which is why one case has a clean `Phi` and the other does not.
+
+**Using tree-cotree does not fix which tree.** Another implementation of the
+same method can produce a much smaller `|A|`, and therefore a much smaller gauge
+term in `Phi`, without being a different formulation.
+
+The Ansys A-Phi technical documentation is consistent with everything measured
+here. It states the same gauge ("The degrees of freedoms of the edge elements on
+the spanning tree of the finite element mesh are set to zero") and the same
+invariance property ("the potentials at the terminal will be floating so they
+are not unique. However, B, J, H, and all other quantities will be unique since
+they depend on the derivative of the potential"). It also describes its voltage
+plot as showing "the total potential which includes the ohmic electric potential
+and the contribution from the eddy effect" -- an assembled quantity rather than
+the bare nodal unknown, which may be why its plots look smooth.
+
+**Open work.** A Coulomb-gauge projection as a post-process -- solve for `psi`
+with `div(A + grad psi) = 0`, then `A' = A + grad psi`, `Phi' = Phi - j*omega*psi`
+-- would make `Phi` unique, shrink `|A|` toward the physical scale, and leave
+every gauge-invariant quantity untouched. It is testable: the BFS and DFS trees
+must then give the same `Phi`.
