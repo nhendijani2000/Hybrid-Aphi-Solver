@@ -161,22 +161,22 @@ for bands, tag in ((11, "banded"), (0, "continuous")):   # 0 = continuous LUT
     clear()
     look(3.0 * A)
     draw(box, "B_cell_magnitude", "CELLS", "|B| per cell (T)", bands, pin)
-    shot("08_B_cell_zoom_%s.png" % tag)
+    shot("09_B_cell_zoom_%s.png" % tag)
 
     clear()
     look(3.0 * A)
     draw(box, "B_magnitude", "POINTS", "|B| nodal (T)", bands, pin)
-    shot("08b_B_nodal_zoom_%s.png" % tag)
+    shot("09b_B_nodal_zoom_%s.png" % tag)
 
     # --- whole domain, each to its own range --------------------------------
     clear()
     look(0.5 * W * 1.05)
     draw(calc, "B_cell_magnitude", "CELLS", "|B| per cell (T)", bands)
-    shot("08c_B_cell_domain_%s.png" % tag)
+    shot("09c_B_cell_domain_%s.png" % tag)
 
     clear()
     look(0.5 * W * 1.05)
     draw(calc, "B_magnitude", "POINTS", "|B| nodal (T)", bands)
-    shot("08d_B_nodal_domain_%s.png" % tag)
+    shot("09d_B_nodal_domain_%s.png" % tag)
 
 print("done -> %s" % OUT)

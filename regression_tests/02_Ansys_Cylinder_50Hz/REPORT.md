@@ -8,7 +8,43 @@ Regenerate every figure here with:
 
 ```bash
 "C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_plots.py
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" pv_bcell.py     # 09_* only
 ```
+
+---
+
+## 0. How to read these figures
+
+**Every figure in this report comes from one single solve, on one mesh** — the
+Netgen-optimised mesh described in §1. "Netgen-optimised" is a property of that
+mesh, not a variant of any individual plot: there is no unoptimised figure here
+to compare against. What Netgen changed, and by how much, is in §2.
+
+Only one figure pair differs in *processing* rather than in what it shows: §4.2
+applies one smoothing pass, and those two files are the only ones with
+`_SMOOTHED` in the name and a red banner burned into the image.
+
+| file | what it is | script |
+|---|---|---|
+| `01_mesh_domain.png` | mesh, whole cross-section | `make_plots.py` |
+| `02_mesh_wire.png` | mesh, the wire alone | `make_plots.py` |
+| `03_phi_on_surface.png` | `Re(Phi)` on the wire's lateral surface | `make_plots.py` |
+| `03b_phi_magnitude_surface.png` | `\|Phi\|`, same view | `make_plots.py` |
+| `04_B_magnitude.png` | **nodal** `\|B\|`, whole domain, **unsmoothed** | `make_plots.py` |
+| `04b_B_magnitude_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |
+| `05_E_magnitude.png` | **per-cell** `\|E\|`, whole domain, log scale | `make_plots.py` |
+| `05b_E_magnitude_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |
+| `06_E_in_wire.png` | nodal `\|E\|` in the wire, **auto colour range** | `make_plots.py` |
+| `06b_E_in_wire_true_scale.png` | the same data, range pinned `0–25 V/m` | `make_plots.py` |
+| `07_J_vectors.png` | `J` as coloured vectors, longitudinal cut | `make_plots.py` |
+| `08_B_magnitude_SMOOTHED.png` | **04 with one smoothing pass** | `make_plots.py` |
+| `08b_B_magnitude_zoom_SMOOTHED.png` | **04b with one smoothing pass** | `make_plots.py` |
+| `09*_B_cell_*` / `09*_B_nodal_*` | per-cell vs nodal `B`, banded and continuous | `pv_bcell.py` |
+
+The `09_*` set is a separate study — it shows what the volume-averaging step in
+the post-processor does, by rendering the raw per-tetrahedron `B` beside the
+nodal one. It is not part of the validation and is documented in
+`docs/FIELD_POSTPROCESSING.md`.
 
 ---
 
@@ -43,13 +79,26 @@ optimised with Netgen. The element budget is heavily concentrated where the
 field is: **6.7 %** inside `r = 1 mm`, **84.8 %** in the band `1.0–2.0 mm`, and
 **3.8 %** beyond `r = 3 mm`.
 
-`Mesh.OptimizeNetgen = 1` is the single most cost-effective setting in this
-case. It improves element *shape* at fixed element size, and measured against
-the same mesh without it, it reduced the tet count (its `CombineImprove` merges
-elements), cut the peak-band azimuthal scatter by **24 %**, improved the error
-in six of eight radial bands, and made the solve **26 % faster in 12 % less
-memory** — 105715 → 101873 tets, 248294 → 240990 unknowns, 681 s / 4.56 GB →
-503 s / 4.03 GB. Better element shape gives the sparse ordering less fill-in.
+### What `Mesh.OptimizeNetgen = 1` bought
+
+It changes element *shape* at fixed element size. Measured against the same
+mesh generated without it — same `.geo`, same sizes, only the flag changed:
+
+| | without Netgen | with Netgen | |
+|---|---|---|---|
+| tets | 105715 | 101873 | `CombineImprove` merges elements |
+| unknowns | 248294 | 240990 | |
+| `nnz(L)` | 239 M | 211 M | |
+| factorise | 681 s, 4.56 GB | **503 s, 4.03 GB** | 26 % faster, 12 % less memory |
+| scatter at the peak | 0.0181 | **0.0138** | −24 % |
+| scatter near the core | 0.0309 | **0.0210** | −32 % |
+| `\|B_phi\|/\|B\|` | 0.9996 | **0.9999** | |
+| band errors | — | better in 6 of 8 | |
+
+Better-shaped elements give the sparse ordering less fill-in, so the quality
+gain pays for itself twice. For comparison, the last *refinement* step
+(`lc_skin` 0.35 → 0.25) bought 0.0215 → 0.0181 for 1.6× the unknowns and 2.8×
+the factorisation time. Netgen bought 0.0181 → 0.0138 for nothing.
 
 ---
 
@@ -72,8 +121,11 @@ almost purely imaginary. `E`, `B`, `H` and `J` are not.
 
 ## 4. Magnetic flux density
 
-Mid-length cross-section. Linear colour scale: a log ramp compresses the `1/r`
-decay into the top few colours and hides the ring entirely.
+### 4.1 The solver's output
+
+Nodal `|B|`, mid-length cross-section, **no smoothing**. Linear colour scale: a
+log ramp compresses the `1/r` decay into the top few colours and hides the ring
+entirely. These are the figures to read numbers off.
 
 | whole domain | zoomed to 3a |
 |---|---|
@@ -82,21 +134,21 @@ decay into the top few colours and hides the ring entirely.
 Zero on the axis, rising linearly inside the conductor, falling as `1/r`
 outside — the peak sits at `r = a`.
 
-### 4.1 Smoothed variant, for comparison only
+### 4.2 The same data with one smoothing pass
 
-Commercial tools smooth plotted fields by default, which is the leading
-explanation for why their `|B|` cross-sections look cleaner. These apply one
-smoothing pass so a like-for-like comparison can be made. **They are not the
-solver's output** and each carries a banner saying so.
+**The only difference from §4.1 is one point↔cell averaging round trip.** Same
+solve, same mesh, same colour map. Commercial tools smooth plotted fields by
+default, which is the leading explanation for why their `|B|` cross-sections
+look cleaner, so these exist to compare like with like. **They are not the
+solver's output**, and each carries a red banner in the image saying so.
 
-| honest default | smoothed, 1 pass |
+| smoothed, whole domain | smoothed, zoomed to 3a |
 |---|---|
-| ![](output/plots/04b_B_magnitude_zoom.png) | ![](output/plots/08b_B_magnitude_zoom_SMOOTHED.png) |
-| ![](output/plots/04_B_magnitude.png) | ![](output/plots/08_B_magnitude_SMOOTHED.png) |
+| ![](output/plots/08_B_magnitude_SMOOTHED.png) | ![](output/plots/08b_B_magnitude_zoom_SMOOTHED.png) |
 
 Measured cost of that one pass:
 
-| | unsmoothed | 1 pass | 2 passes | 4 passes |
+| | unsmoothed (§4.1) | 1 pass (§4.2) | 2 passes | 4 passes |
 |---|---|---|---|---|
 | scatter, `1.20–1.49 mm` | 0.0296 | 0.0183 | 0.0179 | 0.0225 |
 | error, `1.20–1.49 mm` | −0.39 % | −1.84 % | −2.43 % | −3.48 % |
@@ -105,23 +157,61 @@ Measured cost of that one pass:
 
 38 % less scatter for 3.2 % of the peak — a better trade than on the pre-Netgen
 mesh, where it cost 6.2 % for 14 %. The bias still grows while the scatter stops
-improving past one pass. **Read numbers off the unsmoothed figures.** Smoothing
-is not a route to a better answer — it is the control needed to compare like
-with like if the reference picture is itself smoothed.
+improving past one pass. Smoothing is not a route to a better answer; it is the
+control needed to compare like with like if the reference picture is itself
+smoothed. `SMOOTH_PASSES` in `make_plots.py` stays **0**.
 
 ---
 
-## 5. Electric field and current density
+## 5. Electric field
 
-| magnitude, whole domain | magnitude inside the wire |
+### 5.1 Whole domain — why it looks faceted
+
+![](output/plots/05_E_magnitude.png)
+
+Two deliberate choices make this figure look rougher than §5.2, and both are
+about honesty rather than quality:
+
+**It is the PER-CELL array, not the nodal one.** A nodal average at the wire
+surface straddles the material interface, where `E`'s normal component
+genuinely jumps — the nodal value is meaningless exactly there. Per-cell values
+have no interface to straddle, so each is exact; the price is that `E` is
+piecewise-linear per tetrahedron and ParaView renders one flat colour per cell.
+
+**The far-field mesh is coarse by design** — only 3.8 % of the elements sit
+beyond `r = 3 mm` — so those flat cells are large.
+
+The colour scale is logarithmic and spans `5 → 24.9 V/m`. The conductor is at
+the **top** of that range, which is correct: `E` is largest inside the copper
+and decays outward.
+
+### 5.2 Inside the wire — and why the colours disagree with §5.1
+
+| auto colour range | range pinned to 0–25 V/m |
 |---|---|
-| ![](output/plots/05_E_magnitude.png) | ![](output/plots/06_E_in_wire.png) |
+| ![](output/plots/06_E_in_wire.png) | ![](output/plots/06b_E_in_wire_true_scale.png) |
 
-`E` is uniform inside the conductor at `V/L = 25 V/m` — there is no skin effect
-at `a/delta = 0.16`. It is also one order smoother than `B`: `E = -j*omega*A -
-grad(Phi)` is *linear* per tet because `grad(Phi)` comes from the P2 space,
-while `B = curl A` is *constant* per tet. That is the whole reason `B` plots
-rougher than `E`, in this code and in any other first-order edge-element code.
+**This is the answer to "why is the centre red in one figure and blue in the
+other".** The two figures show the same number, ~24.935 V/m, against colour
+ranges that differ by a factor of about 20000.
+
+In §5.1 the range is `5 → 24.9 V/m` across the whole box, so the conductor sits
+at the top and renders dark red. In `06` ParaView rescaled to the wire's *own*
+range, which is **24.9342 → 24.9351 V/m** — a total span of `9e-04 V/m`, or
+**0.004 %** of the value. Auto-rescaling blew that up to the full colour map,
+producing a red ring and a blue core that look like a strong radial gradient and
+are in fact numerical noise at the fifth significant figure.
+
+`06b` pins the range to `0–25 V/m` and the same data renders as a uniform disc,
+which is the physical truth: with `a/delta = 0.16` there is no skin effect, and
+`E = V/L = 24.935 V/m` uniformly. The exact value is `1/0.040 = 25.0 V/m`; we
+are **0.26 %** low, consistent with the polygon being 0.41 % smaller in area
+than the circle it approximates.
+
+So the two figures are not inconsistent. `06` is the one that misleads, and it
+is kept only because the noise structure is occasionally worth seeing.
+
+### 5.3 Current density
 
 ![](output/plots/07_J_vectors.png)
 
@@ -172,7 +262,7 @@ constant per tetrahedron — the lowest-order quantity in the formulation.
 **A coherent polygon harmonic is now visible, at 0.31 %.** Fourier analysis of
 the azimuthal profile at `r = a` finds a peak at `m = 40`, the polygon order.
 On every earlier mesh no such peak existed: it was buried under element-quality
-noise. Netgen removed enough of that noise to expose it. At 0.31 % of the mean
+noise, and Netgen removed enough of that to expose it. At 0.31 % of the mean
 against 1.4 % total scatter it is not what the eye sees, but it means that if
 quality noise falls further, raising `N` finally becomes worthwhile — with
 `lc_skin` lowered in step, so the facet stays comparable to the volume size.

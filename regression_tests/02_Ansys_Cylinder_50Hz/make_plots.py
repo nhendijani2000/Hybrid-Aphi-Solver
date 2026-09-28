@@ -272,12 +272,26 @@ surface(cut(b_src, [0, 0, 1], [0, 0, ZMID]), "B_magnitude", "POINTS", "B magnitu
 GetColorTransferFunction("B_magnitude").MapControlPointsToLinearSpace()
 shot("04b_B_magnitude_zoom.png")
 
-# --- 5. |E|, per cell over the whole domain ---------------------------------
+# --- 5. |E| over the whole domain, per cell ---------------------------------
+# PER-CELL, not nodal: a nodal average straddles the wire/air interface, where
+# E's normal component genuinely jumps, so the nodal value is meaningless right
+# there. The price is that it renders faceted -- each tet is one flat colour.
+#
+# The array is the full phasor amplitude sqrt(|Re|^2 + |Im|^2), matching what
+# the nodal E_magnitude scalar holds. Colouring by the magnitude of E_cell_real
+# alone would plot only the real part and silently under-read.
+def cell_mag(src, name):
+    c = Calculator(Input=src)
+    c.AttributeType = "Cell Data"
+    c.ResultArrayName = name + "_cell_magnitude"
+    c.Function = ("sqrt(mag(%s_cell_real)^2 + mag(%s_cell_imag)^2)" % (name, name))
+    return c
+
 clear()
 look(0.5 * W * 1.05)
-surface(cut(e_src, [0, 0, 1], [0, 0, ZMID]), "E_cell_real", "CELLS", "E magnitude (V/m)",
-        comp="Magnitude")
-lut = GetColorTransferFunction("E_cell_real")
+surface(cell_mag(cut(e_src, [0, 0, 1], [0, 0, ZMID]), "E"),
+        "E_cell_magnitude", "CELLS", "E magnitude (V/m)")
+lut = GetColorTransferFunction("E_cell_magnitude")
 lut.MapControlPointsToLogSpace()
 lut.UseLogScale = 1          # E spans 1.4 decades of smooth decay -- log suits it
 shot("05_E_magnitude.png")
@@ -285,18 +299,31 @@ shot("05_E_magnitude.png")
 # --- 5b. the same, zoomed --------------------------------------------------
 clear()
 look(3.0 * A)
-surface(cut(e_src, [0, 0, 1], [0, 0, ZMID]), "E_cell_real", "CELLS", "E magnitude (V/m)",
-        comp="Magnitude")
-_l = GetColorTransferFunction("E_cell_real")
+surface(cell_mag(cut(e_src, [0, 0, 1], [0, 0, ZMID]), "E"),
+        "E_cell_magnitude", "CELLS", "E magnitude (V/m)")
+_l = GetColorTransferFunction("E_cell_magnitude")
 _l.MapControlPointsToLogSpace(); _l.UseLogScale = 1
 shot("05b_E_magnitude_zoom.png")
 
 # --- 6. |E| in the wire alone, nodal ----------------------------------------
+# NOTE ON THE COLOUR RANGE. Inside the conductor E is uniform at V/L = 24.935
+# V/m and the whole plotted span is about 9e-04 V/m, i.e. 4e-05 of the value.
+# Auto-rescaling therefore blows a 0.004 % variation up to the full colour
+# range, and the figure LOOKS like a strong radial gradient when it is noise.
+# 06 keeps the auto range so the structure is visible; 06b pins the range to
+# 0..25 V/m, where the same data reads as what it physically is: uniform.
 clear()
 look(A * 1.25)
 surface(cut(e_src, [0, 0, 1], [0, 0, ZMID], only_wire=True), "E_magnitude", "POINTS",
         "E magnitude (V/m)")
 shot("06_E_in_wire.png")
+
+clear()
+look(A * 1.25)
+surface(cut(e_src, [0, 0, 1], [0, 0, ZMID], only_wire=True), "E_magnitude", "POINTS",
+        "E magnitude (V/m)")
+GetColorTransferFunction("E_magnitude").RescaleTransferFunction(0.0, 25.0)
+shot("06b_E_in_wire_true_scale.png")
 
 # --- 7. J as vectors, coloured by magnitude ---------------------------------
 # Longitudinal cut: the current is axial, so a cross-section shows arrows end on.
