@@ -64,18 +64,18 @@ if not os.path.isdir(OUT):
 # costs peak amplitude -- so the knob stays at 0. Do not quote the numbers.
 SMOOTH_PASSES = 0
 
-# Colour-map resolution. 256 is effectively a continuous ramp; 11 gives the
-# banded contours that Ansys plots use by default. Both are honest -- this is a
-# presentation choice and changes no number.
+# Colour-map resolution. None (or 0) means a genuinely continuous lookup table;
+# an integer N gives N banded contours, which is what Ansys plots use by default.
+# Both are honest -- this is a presentation choice and changes no number.
 #
-# Set to 256 because a continuous ramp reads as a physical field while banding
-# reads as a contour map, and on these figures the continuous version is the one
-# that looks right. The tradeoff: B = curl A is CONSTANT per tetrahedron with
-# first-order edge elements -- the lowest-order quantity in the formulation --
-# so it carries 2-6 % azimuthal scatter where an axisymmetric problem permits
-# none, and a continuous ramp renders every bit of that as visible texture.
-# Banding hides it by quantising. See docs/FIELD_POSTPROCESSING.md.
-BANDS = 256
+# Continuous is the standing choice: banding hides the per-element scatter by
+# quantising it, and reads as a contour map rather than a physical field. The
+# tradeoff is that B = curl A is CONSTANT per tetrahedron with first-order edge
+# elements -- the lowest-order quantity in the formulation -- so it carries 2-6 %
+# azimuthal scatter where an axisymmetric problem permits none, and a continuous
+# ramp renders every bit of that as visible texture. See
+# docs/FIELD_POSTPROCESSING.md. Pass legend(..., bands=11) for one banded figure.
+BANDS = None
 
 paraview.simple._DisableFirstRenderCameraReset()
 
@@ -147,8 +147,12 @@ def legend(array, title, fmt="{:.3g}", bands=None):
     pass 11 for banded contours on a single figure."""
     lut = GetColorTransferFunction(array)
     lut.ApplyPreset("Jet", True)      # blue low -> red high
-    lut.Discretize = 1
-    lut.NumberOfTableValues = BANDS if bands is None else bands
+    n = BANDS if bands is None else bands
+    if n:
+        lut.Discretize = 1
+        lut.NumberOfTableValues = n
+    else:
+        lut.Discretize = 0        # a true continuous LUT, not 256 steps
     lut.UseLogScale = 0
     bar = GetScalarBar(lut, view)
     bar.Title = title

@@ -707,7 +707,7 @@ by default. A continuous ramp renders every wiggle; banding makes the eye read
 contours. It changes no number.
 
 (SUPERSEDED as the default -- see "Presentation: continuous, not banded" at
-the end of this document; `BANDS = 256` is now the standing choice.)
+the end of this document; a continuous LUT is now the standing choice.)
 
 `SMOOTH_PASSES` applies point<->cell round trips, each replacing a node's value
 by an average over its element patch -- what a viewer's "smooth" option does.
@@ -953,8 +953,9 @@ rather than explained away.
 ### Presentation: continuous, not banded
 
 `make_plots.py` carries a `BANDS` constant next to `SMOOTH_PASSES`. It is set to
-**256**, an effectively continuous ramp, and `legend(..., bands=11)` still gives
-banded contours on any single figure.
+**None**, which sets `lut.Discretize = 0` -- a genuinely continuous lookup table,
+not a finely stepped one. An integer gives that many banded contours, and
+`legend(..., bands=11)` still does so on any single figure.
 
 An earlier revision defaulted to 11 bands on the grounds that Ansys plots are
 banded -- and they are; the legend in the public verification document has 11

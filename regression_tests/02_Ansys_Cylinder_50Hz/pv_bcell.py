@@ -98,8 +98,11 @@ box.Invert = 1
 def legend(array, title, bands):
     lut = GetColorTransferFunction(array)
     lut.ApplyPreset("Jet", True)
-    lut.Discretize = 1
-    lut.NumberOfTableValues = bands
+    if bands:
+        lut.Discretize = 1
+        lut.NumberOfTableValues = bands
+    else:
+        lut.Discretize = 0    # true continuous LUT
     lut.UseLogScale = 0
     bar = GetScalarBar(lut, view)
     bar.Title = title
@@ -153,7 +156,7 @@ print("  zoom range  cell %.4g .. %.4g" % (r_cell[0], r_cell[1]))
 print("  zoom range  node %.4g .. %.4g" % (r_node[0], r_node[1]))
 print("  pinned      %.4g .. %.4g" % (pin[0], pin[1]))
 
-for bands, tag in ((11, "banded"), (256, "continuous")):
+for bands, tag in ((11, "banded"), (0, "continuous")):   # 0 = continuous LUT
     # --- zoom, pinned range, the pair that answers the question -------------
     clear()
     look(3.0 * A)
