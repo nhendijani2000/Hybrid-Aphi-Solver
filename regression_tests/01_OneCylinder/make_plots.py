@@ -171,11 +171,23 @@ look(A * 1.25)
 surface(cut(phi_src, [0, 0, 1], [0, 0, ZMID], only_wire=True), None, None, None, edges=True)
 shot("02_mesh_wire.png")
 
-# --- 3. |Phi| ----------------------------------------------------------------
+# --- 3. Phi over the cylinder SURFACE --------------------------------------
+# Not a cross-section: the potential is driven along the axis, so the face that
+# shows it is the lateral surface, seen side on.
 clear()
-look(0.5 * W * 1.05)
-surface(cut(phi_src, [0, 0, 1], [0, 0, ZMID]), "phi_magnitude", "POINTS", "Phi magnitude (V)")
-shot("03_phi_magnitude.png")
+look(0.62 * L, along="y")
+wire3d = Threshold(Input=phi_src)
+wire3d.Scalars = ["CELLS", "body_tag"]
+wire3d.LowerThreshold = 1.0
+wire3d.UpperThreshold = 1.0
+wire3d.ThresholdMethod = "Between"
+surface(wire3d, "phi_real", "POINTS", "Re(Phi)  (V)")
+shot("03_phi_on_surface.png")
+
+clear()
+look(0.62 * L, along="y")
+surface(wire3d, "phi_magnitude", "POINTS", "Phi magnitude (V)")
+shot("03b_phi_magnitude_surface.png")
 
 # --- 4. |B|, LINEAR scale ----------------------------------------------------
 clear()
