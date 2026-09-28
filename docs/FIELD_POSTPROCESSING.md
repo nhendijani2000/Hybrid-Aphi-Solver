@@ -387,57 +387,58 @@ them is the smoothing that §7 added, and nothing else makes it visible.
 
 ---
 
-## 14. `J = sigma E`, and what happens at a conductor surface
+## 14. `J = sigma E` and `B = mu H`, held exactly at every node
 
-`sigma` belongs to a **body**, so it is single-valued inside a tet and
-two-valued at a node whose incident tets span two. `J` inherits that -- but
-unlike `E`, it has a **right** answer at a conductor surface rather than no
-answer, and getting this wrong is very visible.
+Both constitutive relations are applied **at the node**, with that node's own
+material:
 
-At the surface `J` is finite inside and zero outside. The meaningful value, and
-the one a skin effect makes *largest*, is the **inside limit**. So `j_node`
-averages over **conducting tets only**:
+    j_node = sigma_node * e_node          h_node = b_node / mu_node
 
-    j_node[v]  =  ( sum over conducting t containing v  vol_t sigma_t E_t(v) )
-                / ( sum over conducting t containing v  vol_t )
+No averaging of `sigma`, no averaging of `mu`. A material property has no
+business being interpolated, and a reader who divides `J` by `sigma` must get
+`E` back.
 
-which gives the conductor-side limit at the surface, and exactly zero in the
-insulator's interior because no conducting tet reaches it.
+### Which material, where two meet
 
-**A first version zeroed `J` at every interface node**, reusing the rule that is
-right for `E`. On the cylinder that put zero current density across the entire
-conductor surface -- all 1351 surface nodes -- precisely where the skin effect
-makes it maximal. A nodal `J` plot showed a hollow shell. Measured before and
-after, mid-height, `|J|` relative to the axis:
+`node_body` picks the **most conducting** of the bodies meeting at a node. At a
+copper/air surface that is the copper: the current density there is a property
+of the conductor, not of the air beside it. `on_material_interface` records that
+a choice was made.
 
-    r band (mm)      before      after     exact-ish
-    0.00 - 1.25       1.000      1.000
-    6.25 - 7.50       1.014      1.014
-    7.50 - 8.75       0.420      1.031
-    8.75 - 10.00      0.000      1.062      <- the conductor surface
+**The jump across the surface is physical and is kept.** It lives in `j_tet`,
+which changes discontinuously from one tet to the next -- finite in the last
+conducting tet, exactly zero in the first insulating one. What a single node
+cannot do is carry both values at once, so it reports the conductor's.
 
-The 1.062 at the surface is the skin effect at `a/delta = 1.07`, consistent with
-the 5.5 % rise in `|E|` measured over the same bins.
+### E really is double-valued there, and only in one component
 
-### Mid-edge nodes are accumulated, not averaged
+- **Tangential `E` is continuous** across any interface, always (from
+  `curl E`). Single-valued, and the nodal average of it is correct.
+- **Normal `E` jumps.** At a free conductor surface `J.n = 0` forces `E_n ~ 0`
+  just inside, while outside `E_n` is finite -- the difference is the surface
+  charge. The nodal average is of two genuinely different numbers.
 
-`A`, `B`, `H` and `E` take the mean of their two endpoints at a midpoint (Sec.
-7). `J` does **not**: it is evaluated at the midpoint from the conducting tets
-that contain that edge, in the same loop as the vertices.
+So `e_node` at a surface node is right in its tangential part and meaningless in
+its normal part, and `j_node = sigma e_node` inherits exactly that.
 
-The endpoint mean would be wrong here. An edge running from a surface vertex out
-into the air has one endpoint carrying the full surface current density and one
-carrying none, and their mean would put half of it at a point **inside the
-insulator**. Accumulating instead gives that midpoint zero, correctly, because
-a conducting tet's four vertices all lie in the conductor, so such an edge
-belongs to no conducting tet at all. An edge lying *along* the surface does
-belong to conducting tets and does get the conductor-side value.
+Measured on `regression_tests/01_OneCylinder` at 50 Hz, mid-height, where the
+lateral normal is radial and the current axial:
 
-The cost is that `j_node` is not exactly `sigma * e_node` at a midpoint. At a
-vertex it is, to round-off, and a test checks both halves of that.
+    r band (mm)     |Jz| A/m2     |Jr| A/m2     Jr/Jz
+    0.00 -  1.25    4.588e+08     2.985e+05    0.0007
+    6.25 -  7.50    4.650e+08     2.456e+05    0.0005
+    7.50 -  8.75    4.724e+08     2.206e+07    0.0467
+    8.75 - 10.00    4.863e+08     6.892e+07    0.1417   <- the surface
 
-### Which one to integrate
+**`Jz` is right**: 1.060 times its value on the axis, the skin effect at
+`a/delta = 1.07`, consistent with the 5.5 % rise measured in `|E|` over the same
+bins. **`Jr` is spurious**: it must be exactly zero at a free surface, since no
+current leaves the conductor, and it comes out at 14 % of `Jz`.
 
-`j_tet` -- exact, no averaging, no interface to straddle. `tools/pv_extract_rl.py`
-reads it and recovers the terminal current to the digit. `j_node` exists because
-it plots smoothly.
+That 14 % is not introduced by `J`. It is already in `e_node`, whose radial part
+averages a near-zero inside with a finite outside; multiplying by `sigma` merely
+makes it visible. Reading the **axial** component at a surface is sound; reading
+the normal one is not, and `material_interface` marks exactly those nodes.
+
+`j_tet` carries no such error -- it never straddles anything -- and is what
+`tools/pv_extract_rl.py` integrates.

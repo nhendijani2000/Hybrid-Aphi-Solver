@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "aphi_solver/basis_functions.hpp"
+#include "aphi_solver/constants.hpp"
 #include "aphi_solver/postprocess.hpp"
 
 using namespace aphi_solver;
@@ -1212,19 +1213,30 @@ void test_current_density() {
           "with one body, J = sigma E at every vertex to round-off");
     check(worst_tet == 0.0, "and exactly in every tet, where no averaging happens at all");
 
-    // At a MID-EDGE node the two are computed differently on purpose: E is the
-    // mean of its endpoints, while J is evaluated there from the conducting
-    // tets. They need not agree, and the reason matters -- see below.
-    bool mid_differs = false;
+    // Mid-edge nodes too: the relation is applied at the node, so it holds
+    // wherever a node is, without exception.
+    double worst_mid = 0.0;
     for (int e = 0; e < m.num_edges(); ++e) {
         const std::size_t u = static_cast<std::size_t>(d.edge_p2(e));
-        if (std::abs(one.j_node[u][2] - sigma * one.e_node[u][2]) > 1e-9 * scale) {
-            mid_differs = true;
+        for (int k = 0; k < 3; ++k) {
+            const std::size_t uk = static_cast<std::size_t>(k);
+            worst_mid = std::max(worst_mid, std::abs(one.j_node[u][uk] - sigma * one.e_node[u][uk]));
         }
     }
-    check(mid_differs,
-          "at mid-edge nodes J is evaluated directly rather than averaged from the endpoints, "
-          "so it differs from sigma*E there -- deliberately");
+    check(worst_mid == 0.0, "and at mid-edge nodes exactly, since sigma is applied at the node");
+
+    // B = mu H at every node, the same way.
+    const double mu = kMu0 * bnd.bodies[0].mu_r;
+    double worst_h = 0.0, h_scale = 0.0;
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        for (int k = 0; k < 3; ++k) {
+            const std::size_t uk = static_cast<std::size_t>(k);
+            worst_h = std::max(worst_h, std::abs(one.b_node[u][uk] - mu * one.h_node[u][uk]));
+            h_scale = std::max(h_scale, std::abs(one.b_node[u][uk]));
+        }
+    }
+    check(worst_h <= 1e-12 * h_scale, "and B = mu H at every node, to round-off");
 
     // --- two bodies, one an insulator. This is the case that matters.
     BoundBody insulator = bnd.bodies[0];

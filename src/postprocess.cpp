@@ -255,7 +255,12 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
     std::vector<int> first_body(static_cast<std::size_t>(nv), -1);
     // Volume of the CONDUCTING tets at each node, which is J's own weight: it
     // differs from vertex_weight wherever a conductor meets an insulator.
-    std::vector<double> j_weight(static_cast<std::size_t>(np), 0.0);
+    // The material each node reports: the most conducting of the bodies meeting
+    // there. J = sigma E and B = mu H are then held exactly at every node.
+    std::vector<int> node_body(static_cast<std::size_t>(np), -1);
+    auto sigma_of = [&bound](int b) {
+        return b < 0 ? -1.0 : bound.bodies[static_cast<std::size_t>(b)].sigma;
+    };
 
     // Phi is P2 and already exact at its nodes, so it is copied, not rebuilt.
     const NodalPotential phi = potential_at_nodes(mesh, bound, dofs, solution);
@@ -367,7 +372,7 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
                 out.a_node[uv][ui] += vol * at.first[ui];
                 out.e_node[uv][ui] += vol * at.second[ui];
                 out.b_node[uv][ui] += vol * b_const[ui];
-                out.h_node[uv][ui] += vol * nu * b_const[ui];
+                out.h_node[uv][ui] += vol * nu * b_const[ui];  // overwritten below
             }
             // A vertex whose incident tets span more than one body sits on a
             // material interface, where averaging across the two sides is
@@ -379,45 +384,27 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
             }
         }
 
-        // J = sigma E, accumulated over CONDUCTING tets only.
+        // Which material a node reports. `J = sigma E` and `B = mu H` are held
+        // EXACTLY at every node, so each node needs one material, and where two
+        // meet the choice is the **most conducting** one. That is the side a
+        // reader is looking for at a conductor surface: the current density
+        // there is a property of the copper, not of the air beside it.
         //
-        // This is the one field where averaging across a material interface has
-        // a right answer rather than no answer: at a conductor surface J is
-        // finite on the inside and zero on the outside, and the meaningful
-        // value -- the one a skin effect makes largest -- is the inside limit.
-        // Taking only the conducting tets gives exactly that, and gives zero in
-        // the insulator's interior because no conducting tet reaches it.
-        //
-        // Mid-edge nodes are accumulated HERE rather than averaged from their
-        // endpoints afterwards. An edge running from the conductor surface out
-        // into the air has one endpoint carrying current and one carrying none;
-        // averaging those would put half the surface current density at a point
-        // inside the air.
-        const double sigma_t = out.sigma_tet[ut];
-        if (sigma_t > 0.0) {
-            for (int c = 0; c < 4; ++c) {
-                const std::size_t uv =
-                    static_cast<std::size_t>(mesh.tets[ut][static_cast<std::size_t>(c)]);
-                const std::pair<Vec3C, Vec3C> at = evaluate(kCorner[static_cast<std::size_t>(c)]);
-                j_weight[uv] += vol;
-                for (int i = 0; i < 3; ++i) {
-                    const std::size_t ui = static_cast<std::size_t>(i);
-                    out.j_node[uv][ui] += vol * sigma_t * at.second[ui];
-                }
+        // The jump across the surface is physical and is kept -- it lives in
+        // `j_tet`, which changes discontinuously from one tet to the next. What
+        // a node cannot do is carry both values at once.
+        for (int c = 0; c < 4; ++c) {
+            const std::size_t uv =
+                static_cast<std::size_t>(mesh.tets[ut][static_cast<std::size_t>(c)]);
+            if (node_body[uv] < 0 || sigma_of(body) > sigma_of(node_body[uv])) {
+                node_body[uv] = body;
             }
-            for (int le = 0; le < 6; ++le) {
-                const std::pair<int, int>& lv = kTetLocalEdgeVerts[static_cast<std::size_t>(le)];
-                std::array<double, 4> L{};
-                L[static_cast<std::size_t>(lv.first)] = 0.5;
-                L[static_cast<std::size_t>(lv.second)] = 0.5;
-                const int ge = mesh.tet_edges[ut][static_cast<std::size_t>(le)];
-                const std::size_t um = static_cast<std::size_t>(dofs.edge_p2(ge));
-                const std::pair<Vec3C, Vec3C> at = evaluate(L);
-                j_weight[um] += vol;
-                for (int i = 0; i < 3; ++i) {
-                    const std::size_t ui = static_cast<std::size_t>(i);
-                    out.j_node[um][ui] += vol * sigma_t * at.second[ui];
-                }
+        }
+        for (int le = 0; le < 6; ++le) {
+            const int ge = mesh.tet_edges[ut][static_cast<std::size_t>(le)];
+            const std::size_t um = static_cast<std::size_t>(dofs.edge_p2(ge));
+            if (node_body[um] < 0 || sigma_of(body) > sigma_of(node_body[um])) {
+                node_body[um] = body;
             }
         }
     }
@@ -465,13 +452,25 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
             (out.on_material_interface[a0] != 0 || out.on_material_interface[a1] != 0) ? 1 : 0;
     }
 
+    // The two constitutive relations, applied at the node exactly as written:
+    //
+    //     J = sigma E          H = B / mu
+    //
+    // with sigma and mu those of the node's own material. No averaging of
+    // sigma, no averaging of mu -- a material property has no business being
+    // interpolated. Where two materials meet, `node_body` has chosen the more
+    // conducting one and `on_material_interface` records that a choice was made.
     for (int i = 0; i < np; ++i) {
         const std::size_t u = static_cast<std::size_t>(i);
         if (out.on_material_interface[u] != 0) ++out.num_interface_nodes;
-        // A node with no conducting tet carries no current, and that zero is
-        // the answer rather than a gap.
-        if (j_weight[u] > 0.0) {
-            for (int k = 0; k < 3; ++k) out.j_node[u][static_cast<std::size_t>(k)] /= j_weight[u];
+        const int body = node_body[u];
+        if (body < 0) continue;  // orphan: no incident tet, so no material
+        const BoundBody& nb = bound.bodies[static_cast<std::size_t>(body)];
+        const double nu_node = 1.0 / (kMu0 * nb.mu_r);
+        for (int k = 0; k < 3; ++k) {
+            const std::size_t uk = static_cast<std::size_t>(k);
+            out.j_node[u][uk] = nb.sigma * out.e_node[u][uk];
+            out.h_node[u][uk] = nu_node * out.b_node[u][uk];
         }
     }
 
