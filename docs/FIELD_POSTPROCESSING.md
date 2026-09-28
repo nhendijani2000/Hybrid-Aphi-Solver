@@ -454,3 +454,34 @@ copied, never averaged, never assigned a side.
 `j_tet` and `b_tet` -- exact, no averaging, no interface to straddle.
 `tools/pv_extract_rl.py` reads `j_tet`. The nodal forms exist because they plot
 smoothly.
+
+### Measured: change the gauge, watch Phi move and E not
+
+Asserted several times in this document, and eventually doubted, so it was run.
+The spanning tree was changed two ways on the **identical mesh, identical node
+numbering, identical everything else**, and the case re-solved:
+
+| gauge change | worst change in Phi | worst change in E |
+|---|---|---|
+| BFS neighbours reversed | 0.0605 V | 3.5e-11 V/m (4e-12 of peak) |
+| **breadth-first -> depth-first** | **0.7548 V** | 8.8e-11 V/m (1e-11 of peak) |
+
+`E` is gauge-invariant to round-off. `Phi` moves by three quarters of the
+applied volt.
+
+And `Phi`'s SHAPE is not merely shifted. Along the conductor surface:
+
+    z/L        0.15    0.35    0.55    0.75    0.95
+    BFS       0.026   0.068   0.609   0.966   0.992      rises 0 -> 1
+    DFS       0.547   0.566   0.649   0.691   0.797      never reaches either
+
+Its azimuthal scatter at mid height changes too, 0.31 to 0.11. **What a plot of
+Phi looks like is a choice, not a result.**
+
+One intermediate result is worth keeping because it nearly misled. Reversing
+the BFS neighbour order left the azimuthal scatter *identical* to three decimals
+(0.3098 against 0.3095), which looked like evidence that the scatter was
+physical rather than gauge. It was not: that perturbation changed only 250 of a
+million stored nonzeros -- the same tree, essentially -- so it sampled almost
+none of the gauge space. A weak perturbation showing no change is not evidence
+of invariance.
