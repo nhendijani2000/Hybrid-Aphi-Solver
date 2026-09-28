@@ -182,11 +182,21 @@ wire3d.LowerThreshold = 1.0
 wire3d.UpperThreshold = 1.0
 wire3d.ThresholdMethod = "Between"
 surface(wire3d, "phi_real", "POINTS", "Re(Phi)  (V)")
+# Diverging, centred on 0.5 V. Jet spends its last third on oranges and reds that
+# read as one colour, so a smooth ramp renders as two blocks; a diverging map puts
+# its resolution where Phi is actually changing. Range pinned to the two applied
+# terminal voltages so the midpoint IS 0.5 rather than wherever the data lands.
+_p = GetColorTransferFunction("phi_real")
+_p.ApplyPreset("Cool to Warm", True)
+_p.RescaleTransferFunction(0.0, 1.0)
 shot("03_phi_on_surface.png")
 
 clear()
 look(0.62 * L, along="y")
 surface(wire3d, "phi_magnitude", "POINTS", "Phi magnitude (V)")
+_q = GetColorTransferFunction("phi_magnitude")
+_q.ApplyPreset("Cool to Warm", True)
+_q.RescaleTransferFunction(0.0, 1.0)
 shot("03b_phi_magnitude_surface.png")
 
 # --- 4. |B|, LINEAR scale ----------------------------------------------------
