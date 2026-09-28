@@ -347,9 +347,9 @@ shot("07_J_vectors.png")
 #
 # They are NOT the solver's output. MEASURED cost of one pass on this mesh:
 #
-#     sd 1.20-1.49 mm   0.0277 -> 0.0238      14 % less scatter
-#     err 1.20-1.49 mm  +0.54% -> -2.33%      bias grows
-#     displayed peak    1.3322 -> 1.2502 T    -6.2 %
+#     sd 1.20-1.49 mm   0.0296 -> 0.0183      38 % less scatter
+#     err 1.20-1.49 mm  -0.39% -> -1.84%      bias grows
+#     displayed peak    1.3385 -> 1.2954 T    -3.2 %
 #
 # Every one carries a banner saying so, because a figure pulled into a slide
 # deck loses its filename. Read numbers off the unsmoothed figures above.
@@ -373,7 +373,7 @@ def banner(text):
 
 
 _LABEL = ("SMOOTHED FOR PRESENTATION - %d pass - NOT solver output\n"
-          "peak B low by 6.2 pct, band error +0.5 pct to -2.3 pct"
+          "peak B low by 3.2 pct, band error -0.4 pct to -1.8 pct"
           % SMOOTH_PRESENT)
 
 clear()

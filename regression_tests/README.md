@@ -48,20 +48,20 @@ The same solver on a SLENDER conductor: `a = 1.5 mm`, `L = 40 mm`, box 40 mm, a
 40-gon, at the same 50 Hz. Built to match the regime of the Ansys Maxwell A-Phi
 voltage example, whose dimensions are inferred in the .geo header.
 
-`a/delta = 0.1605` and `omega*L/R = 0.0724`, so this case is resistance dominated
+`a/delta = 0.1605` and `omega*L/R = 0.0725`, so this case is resistance dominated
 and `Phi` is readable -- the opposite branch from 01. Measured:
 
 | | |
 |---|---|
-| `Phi` vs the exact `z/L` | worst 1.18e-03, mean 2.48e-04, over all 98003 wire nodes |
-| `Phi` at `\|z - L/2\| < 1 um` | 83 nodes, mean 0.499993, spread **3.40e-04** |
+| `Phi` vs the exact `z/L` | worst 8.26e-04, mean 2.51e-04, over all 95149 wire nodes |
+| `Phi` at mid height | 84 nodes within 1 um, mean 0.499996, spread 6.02e-04 |
 | the same spread on case 01 | **0.31** |
-| `R` | 9.796996e-05 ohm against 9.796863e-05 DC exact, **1.4e-05** |
-| `L` from `Im(Z)/omega` | 22.58 nH |
-| `J(0)/J(a)` | 0.999969 against the Bessel 0.999959 |
-| `\|B\|` vs exact, inside the conductor | every band within **1 %** |
-| `\|B\|` azimuthal scatter at the peak | 0.0181, coherent content 0.11 % |
-| nodes / unknowns | 18804 / 248294, 681 s factorise, 4.56 GB |
+| `R` | 9.796995e-05 ohm against 9.796863e-05 DC exact, **1.3e-05** |
+| `L` from `Im(Z)/omega` | 22.60 nH |
+| `J(0)/J(a)` | 0.999968 against the Bessel 0.999959 |
+| `B` vs exact, inside the conductor | every band within **0.5 %** |
+| `B` azimuthal scatter at the peak | 0.0138, coherent content 0.31 % at `m = N` |
+| nodes / unknowns | 18994 / 240990, 503 s factorise, 4.03 GB |
 
 **`a/delta` and `omega*L/R` are the same parameter**, both scaling as
 `omega a^2`, so a case cannot show a strong skin effect and a readable potential

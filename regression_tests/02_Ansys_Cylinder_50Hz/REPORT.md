@@ -21,10 +21,10 @@ Regenerate every figure here with:
 | excitation | 1.0 V on the top face, 0.0 V on the bottom |
 | frequency | 50 Hz |
 | skin depth | `delta = 9.346 mm`, so `a/delta = 0.1605` — **no skin effect** |
-| regime | `omega*L/R = 0.0724`, resistance dominated, so `Phi` is readable |
+| regime | `omega*L/R = 0.0725`, resistance dominated, so `Phi` is readable |
 | formulation | first-order Whitney edge `A`, second-order P2 nodal `Phi` |
-| mesh | 18804 nodes, 105715 tets, 0.25 mm at the conductor surface, 0.4 mm in its core |
-| solve | 248294 unknowns, 681 s, 4.56 GB, backward error 2.8e-21 |
+| mesh | 18994 nodes, 101873 tets, **Netgen-optimised**, 0.25 mm at the surface, 0.4 mm in the core |
+| solve | 240990 unknowns, 503 s, 4.03 GB, backward error 4.8e-21 |
 
 `a/delta` and `omega*L/R` are the same parameter, both scaling as `omega*a^2`.
 A case cannot show a strong skin effect and a readable potential at once; this
@@ -38,10 +38,18 @@ one takes the resistive branch.
 |---|---|
 | ![](output/plots/01_mesh_domain.png) | ![](output/plots/02_mesh_wire.png) |
 
-Graded from 0.25 mm at the conductor surface to 6 mm in the far air. The
-element budget is heavily concentrated where the field is: **8.9 %** inside
-`r = 1 mm`, **78.5 %** in the band `1.0–2.0 mm`, and only **2.5 %** beyond
-`r = 3 mm`.
+Graded from 0.25 mm at the conductor surface to 6 mm in the far air, then
+optimised with Netgen. The element budget is heavily concentrated where the
+field is: **6.7 %** inside `r = 1 mm`, **84.8 %** in the band `1.0–2.0 mm`, and
+**3.8 %** beyond `r = 3 mm`.
+
+`Mesh.OptimizeNetgen = 1` is the single most cost-effective setting in this
+case. It improves element *shape* at fixed element size, and measured against
+the same mesh without it, it reduced the tet count (its `CombineImprove` merges
+elements), cut the peak-band azimuthal scatter by **24 %**, improved the error
+in six of eight radial bands, and made the solve **26 % faster in 12 % less
+memory** — 105715 → 101873 tets, 248294 → 240990 unknowns, 681 s / 4.56 GB →
+503 s / 4.03 GB. Better element shape gives the sparse ordering less fill-in.
 
 ---
 
@@ -50,12 +58,12 @@ element budget is heavily concentrated where the field is: **8.9 %** inside
 `Phi` over the lateral surface of the wire, seen side on — not a cross-section,
 because the potential is driven along the axis.
 
-| `Re(Phi)` | `|Phi|` |
+| `Re(Phi)` | magnitude |
 |---|---|
 | ![](output/plots/03_phi_on_surface.png) | ![](output/plots/03b_phi_magnitude_surface.png) |
 
-A clean `z/L` gradient from 0 to 1 V. Against the exact `z/L` over all 98003
-wire nodes: worst deviation **1.18e-03**, mean **2.48e-04**.
+A clean `z/L` gradient from 0 to 1 V. Against the exact `z/L` over all 95149
+wire nodes: worst deviation **8.26e-04**, mean **2.51e-04**.
 
 `Phi` is gauge dependent — a different spanning tree shifts it by `-j*omega*psi`,
 almost purely imaginary. `E`, `B`, `H` and `J` are not.
@@ -90,21 +98,22 @@ Measured cost of that one pass:
 
 | | unsmoothed | 1 pass | 2 passes | 4 passes |
 |---|---|---|---|---|
-| scatter, `1.20–1.49 mm` | 0.0277 | 0.0238 | 0.0255 | 0.0280 |
-| error, `1.20–1.49 mm` | +0.54 % | −2.33 % | −3.76 % | −5.69 % |
-| displayed peak (T) | 1.3322 | 1.2502 | 1.2226 | 1.1886 |
-| | | −6.2 % | −8.2 % | −10.8 % |
+| scatter, `1.20–1.49 mm` | 0.0296 | 0.0183 | 0.0179 | 0.0225 |
+| error, `1.20–1.49 mm` | −0.39 % | −1.84 % | −2.43 % | −3.48 % |
+| displayed peak (T) | 1.3385 | 1.2954 | 1.2716 | 1.2387 |
+| peak change | — | −3.2 % | −5.0 % | −7.5 % |
 
-14 % less scatter for 6.2 % of the peak, and the bias keeps growing while the
-scatter stops improving past one pass. **Read numbers off the unsmoothed
-figures.** Smoothing is not a route to a better answer — it is the control
-needed to compare like with like if the reference picture is itself smoothed.
+38 % less scatter for 3.2 % of the peak — a better trade than on the pre-Netgen
+mesh, where it cost 6.2 % for 14 %. The bias still grows while the scatter stops
+improving past one pass. **Read numbers off the unsmoothed figures.** Smoothing
+is not a route to a better answer — it is the control needed to compare like
+with like if the reference picture is itself smoothed.
 
 ---
 
 ## 5. Electric field and current density
 
-| `|E|`, whole domain | `|E|` inside the wire |
+| magnitude, whole domain | magnitude inside the wire |
 |---|---|
 | ![](output/plots/05_E_magnitude.png) | ![](output/plots/06_E_in_wire.png) |
 
@@ -128,53 +137,61 @@ Nothing below fits a free parameter. The current follows from `R_dc` under the
 
 | quantity | result |
 |---|---|
-| `R` | 9.796996e-05 ohm against 9.796863e-05 DC exact, **1.4e-05** |
-| `L` from `Im(Z)/omega` | 22.58 nH |
-| `J(0)/J(a)` | 0.999969 against the Bessel 0.999959 |
-| `Phi` vs exact `z/L` | worst 1.18e-03, mean 2.48e-04, over 98003 wire nodes |
-| `Phi` at `\|z − L/2\| < 1 um` | 83 nodes, mean 0.499993, spread 3.40e-04 |
-| `B` direction | `\|B_phi\|/\|B\| = 0.9996` — azimuthal to 0.04 % |
-| `B` vs exact, inside the conductor | every band within **1 %** |
+| `R` | 9.796995e-05 ohm against 9.796863e-05 DC exact, **1.3e-05** |
+| `L` from `Im(Z)/omega` | 22.60 nH |
+| `J(0)/J(a)` | 0.999968 against the Bessel 0.999959 |
+| `Phi` vs exact `z/L` | worst 8.26e-04, mean 2.51e-04, over 95149 wire nodes |
+| `Phi` at mid height | 84 nodes within 1 um, mean 0.499996, spread 6.02e-04 |
+| `B` direction at the peak | azimuthal component 0.9999 of the total — **0.01 %** off |
+| `B` vs exact, inside the conductor | every band within **0.5 %** |
 
 `|B|` against the exact axisymmetric solution, by radius:
 
-| band (mm) | `<\|B\|>` T | exact T | error | azimuthal scatter |
+| band (mm) | mean, T | exact, T | error | azimuthal scatter |
 |---|---|---|---|---|
-| 0.30 – 0.60 | 0.4107 | 0.4107 | −0.11 % | 0.0716 |
-| 0.60 – 0.90 | 0.6980 | 0.6928 | +0.92 % | 0.0389 |
-| 0.90 – 1.20 | 0.9584 | 0.9593 | −0.16 % | 0.0309 |
-| 1.20 – 1.49 | 1.2409 | 1.2459 | −0.35 % | 0.0181 |
-| 1.49 – 2.00 | 1.1865 | 1.2164 | −2.35 % | 0.0352 |
-| 2.00 – 3.00 | 0.8656 | 0.8802 | −1.64 % | 0.0511 |
-| 3.00 – 5.00 | 0.5543 | 0.5676 | −2.33 % | 0.0751 |
-| 5.00 – 8.00 | 0.3257 | 0.3363 | −3.17 % | 0.0927 |
+| 0.30 – 0.60 | 0.4167 | 0.4163 | +0.24 % | 0.0477 |
+| 0.60 – 0.90 | 0.6914 | 0.6884 | +0.40 % | 0.0309 |
+| 0.90 – 1.20 | 0.9906 | 0.9929 | −0.22 % | 0.0210 |
+| 1.20 – 1.49 | 1.2734 | 1.2722 | +0.10 % | 0.0138 |
+| 1.49 – 2.00 | 1.2380 | 1.2633 | −1.99 % | 0.0307 |
+| 2.00 – 3.00 | 0.8776 | 0.8869 | −1.15 % | 0.0559 |
+| 3.00 – 5.00 | 0.5490 | 0.5601 | −2.01 % | 0.0768 |
+| 5.00 – 8.00 | 0.3267 | 0.3349 | −2.37 % | 0.0868 |
 
-Linear rise inside, `1/r` outside, correct absolute scale, over a 25× span in
-radius.
+Linear rise inside, `1/r` outside, correct absolute scale, over a 25x span in
+radius. Inside the conductor every band is within 0.5 %.
 
 ---
 
 ## 7. Known limitations
 
-**Azimuthal scatter in `B` of 1.8–2.8 % at the peak.** The problem is
+**Azimuthal scatter in `B` of 1.4–3.1 % near the conductor.** The problem is
 axisymmetric, so this is error. It is `O(h)` element noise from `B` being
-constant per tetrahedron. Fourier analysis of 14374 samples around the azimuth
-finds **no coherent structure above 0.11 %** and no harmonic at the polygon
-order, at any refinement level or polygon count tested — the visible star is
-incoherent per-element scatter that the eye organises into a pattern.
+constant per tetrahedron — the lowest-order quantity in the formulation.
+
+**A coherent polygon harmonic is now visible, at 0.31 %.** Fourier analysis of
+the azimuthal profile at `r = a` finds a peak at `m = 40`, the polygon order.
+On every earlier mesh no such peak existed: it was buried under element-quality
+noise. Netgen removed enough of that noise to expose it. At 0.31 % of the mean
+against 1.4 % total scatter it is not what the eye sees, but it means that if
+quality noise falls further, raising `N` finally becomes worthwhile — with
+`lc_skin` lowered in step, so the facet stays comparable to the volume size.
 
 **Far-field accuracy was traded for near-field resolution.** Beyond `r = 3 mm`
-the error is ~2–3 % against ~1 % on a uniformly-graded mesh. That band holds
-2.5 % of the elements and does not affect `R`, `L` or the conductor fields, but
+the error is ~2 % against ~1 % on a uniformly-graded mesh. That band holds
+3.8 % of the elements and does not affect `R`, `L` or the conductor fields, but
 it does degrade `tools/pv_ampere.py`.
 
 **What was tried and did not work**, all measured and documented in
 `docs/FIELD_POSTPROCESSING.md`: superconvergent patch recovery (made `B` more
 than twice as rough), plot smoothing (costs peak amplitude for modest gain),
-raising the polygon order (no effect on scatter, and slivers above `N = 48`),
-and coarsening the far field further (at most 2.5 % of the mesh to reclaim).
+raising the polygon order alone (no effect on scatter, and slivers above
+`N = 48`), and coarsening the far field further (at most a few per cent of the
+mesh to reclaim).
 
-**Refinement is reaching its limit.** `lc_skin` 0.7 → 0.35 → 0.25 gave
-peak-band scatter 0.029 → 0.0215 → 0.0181, ratios ×0.74 and ×0.84 where `O(h)`
-allows ×0.50 and ×0.71. Going further needs a solver holding more than the
-~250k unknowns this direct factorisation manages.
+**Uniform refinement is reaching its limit.** `lc_skin` 0.7 → 0.35 → 0.25 gave
+peak-band scatter 0.029 → 0.0215 → 0.0181, ratios x0.74 and x0.84 where `O(h)`
+allows x0.50 and x0.71. Netgen then took it to 0.0138 for free, which is a
+larger gain than the last refinement step bought — element *shape* was the
+cheaper lever all along. Going further by refinement alone needs a solver
+holding more than the ~250k unknowns this direct factorisation manages.

@@ -1092,3 +1092,54 @@ that picture turns out to be smoothed.
 
 `01_OneCylinder` deliberately does NOT get these figures: the banner quotes cost
 figures measured on case 02's mesh, and they would be wrong there.
+
+### Element SHAPE, not element size: `Mesh.OptimizeNetgen`
+
+`Mesh.OptimizeNetgen` was 0 throughout every experiment above. Turning it on is
+the single most cost-effective change made to this case, and it inverts the
+conclusion that refinement had run out of road.
+
+It changes element *shape* at fixed element size. gmsh's own optimiser leaves a
+mediocre distribution -- median quality in the 0.4-0.5 band with 529 tets below
+0.3 -- and a sliver tet contributes one wildly wrong constant `B`. Netgen's
+passes cut total badness 130242 -> 86001 (-34 %) and, through `CombineImprove`,
+*reduce* the element count.
+
+    band (mm)      sd: C     +Netgen      err: C     +Netgen
+    0.30 - 0.60    0.0716    0.0477       -0.11%     +0.24%
+    0.60 - 0.90    0.0389    0.0309       +0.92%     +0.40%
+    0.90 - 1.20    0.0309    0.0210       -0.16%     -0.22%
+    1.20 - 1.49    0.0181    0.0138       -0.35%     +0.10%
+    1.49 - 2.00    0.0352    0.0307       -2.35%     -1.99%
+    2.00 - 3.00    0.0511    0.0559       -1.64%     -1.15%
+    3.00 - 5.00    0.0751    0.0768       -2.33%     -2.01%
+    5.00 - 8.00    0.0927    0.0868       -3.17%     -2.37%
+
+    tets       105715 -> 101873       unknowns  248294 -> 240990
+    nnz(L)      239 M -> 211 M        factorise    681 s -> 503 s
+    memory     4.56 GB -> 4.03 GB     |B_phi|/|B|  0.9996 -> 0.9999
+
+**Scatter down 24 % at the peak and 32 % near the core, errors better in six of
+eight bands, and the solve 26 % faster in 12 % less memory.** Better-shaped
+elements give the sparse ordering less fill-in, so the quality gain pays for
+itself twice.
+
+For comparison, the last *refinement* step (`lc_skin` 0.35 -> 0.25) bought
+0.0215 -> 0.0181 for 1.6x the unknowns and 2.8x the factorisation time. Netgen
+bought 0.0181 -> 0.0138 for nothing. **Element shape was the cheaper lever all
+along**, and it was never tried until the refinement route had been exhausted.
+
+**It also exposed a coherent polygon harmonic.** The Fourier check now finds a
+peak at `m = 40` -- the polygon order -- at 0.31 % of the mean, the strongest
+harmonic. On every earlier mesh there was no such peak, which is what grounded
+the repeated conclusion that `N` is irrelevant. That conclusion was right about
+*those* meshes and wrong as a general statement: the signature was buried under
+element-quality noise. At 0.31 % against 1.4 % total scatter it is still not
+what the eye sees, but it means raising `N` becomes worthwhile once quality
+noise falls further -- with `lc_skin` lowered in step to keep the facet
+comparable to the volume size.
+
+**Smoothing is also a better trade on this mesh**, remeasured: one pass gives
+38 % less scatter (0.0296 -> 0.0183) for 3.2 % of the peak (1.3385 -> 1.2954 T),
+against 14 % for 6.2 % before. The bias still grows and the scatter still stops
+improving past one pass, so `SMOOTH_PASSES` stays 0.
