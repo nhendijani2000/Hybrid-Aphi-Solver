@@ -56,8 +56,8 @@
 //     lc = 0.7 mm -> matched N ~ 13        N = 96 -> facet 0.098 mm, 5x too fine
 //
 // Using N = 96 honestly needs lc_skin ~ 0.1 mm, about 125x the elements in the
-// surface shell. The pairing here is lc_skin = 0.35 with N = 32 (facet 0.294
-// against a 0.35 mm volume size); at lc_skin = 0.7 it was N = 24.
+// surface shell. The pairing here is lc_skin = 0.25 with N = 40 (facet 0.235
+// against a 0.25 mm volume size); at lc_skin = 0.35 it was N = 32, at 0.7 N = 24.
 // ---------------------------------------------------------------------------
 // frequency and a sweep upward walks into strong skin effect.
 //
@@ -68,13 +68,13 @@ SetFactory("Built-in");
 a = 1.5;     // wire radius, mm -- circumradius of the polygon
 W = 40.0;    // box side, mm
 L = 40.0;    // height, mm (wire and box alike)
-N = 32;      // sides of the wire polygon -- matched to lc_skin, see the note above
+N = 40;      // sides of the wire polygon -- matched to lc_skin, see the note above
 
 // Mesh sizing. These are the field parameters, NOT point sizes: the field
 // below overrides point sizes entirely (see CharacteristicLengthExtendFromBoundary).
-lc_skin = 0.35;   // at the conductor surface -- the lever that smooths B
-lc_far  = 5.0;    // out in the air, where nothing happens
-d_far   = 5.0;    // distance over which one grows into the other
+lc_skin = 0.25;   // at the conductor surface -- the lever that smooths B
+lc_far  = 6.0;    // out in the air, where nothing happens
+d_far   = 4.0;    // distance over which one grows into the other
 
 // The conductor core is NOT covered by the distance field above: distance from
 // the lateral face reaches only a = 1.5 mm on the axis, so the core is sized at
@@ -85,7 +85,7 @@ d_far   = 5.0;    // distance over which one grows into the other
 // while every well-resolved band sat within 3 %. lc_core caps the size inside
 // the wire and fixes it. At a/delta = 0.16 there is no boundary layer, so a
 // UNIFORM wire mesh is the right target; lc_core < lc_skin simply makes it so.
-lc_core = 0.5;    // inside the conductor, everywhere -- 3 elements per radius
+lc_core = 0.4;    // inside the conductor, everywhere
 
 // --- wire cross-section: a regular N-gon inscribed in radius a --------------
 For i In {0:N-1}

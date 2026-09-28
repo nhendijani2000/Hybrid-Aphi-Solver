@@ -870,12 +870,36 @@ re-solves until the energy converges, adding elements exactly where the error
 is -- which for a current-carrying conductor is the surface. Our meshes are
 hand-graded and solved once.
 
-This matters because Maxwell's `B` is piecewise constant per tetrahedron too:
-it is the same first-order edge-element discretisation with the same zero-order
-recovered flux density. **It buys smoothness with elements, not with a better
-recovery scheme.** That is the third independent piece of evidence -- after
-smoothing and after patch recovery both failed -- that the roughness in our
-plots is resolution and nothing else.
+**RETRACTED (2026-09-28).** The paragraph that stood here claimed Maxwell's `B`
+is "piecewise constant per tetrahedron too: the same first-order edge-element
+discretisation", and concluded it "buys smoothness with elements, not with a
+better recovery scheme". **That was asserted with no evidence.** Maxwell exposes
+a basis-order setting and nothing was checked about what these runs used. If
+they solved at higher order then `B = curl A` is LINEAR per tet there against
+CONSTANT per tet here -- one full order -- which would explain a smooth plot on
+a mesh no denser than ours, and the "third independent piece of evidence"
+claimed below was not evidence of anything.
+
+What is actually known: the runs are `LastAdaptive` at pass 4-8, so adaptive
+refinement was used. Whether that, or the element order, or both, account for
+the difference is UNRESOLVED.
+
+The competing explanation is now the more likely one, and it is already on the
+record in `docs/FORMULATION.md`: this project deliberately pairs FIRST-order
+Nedelec `A` with second-order P2 `Phi` (the "mixed order" decision, Sept 2026,
+with matched second-order Nedelec `A` listed as a superseded option pending
+Graglia/Wilton/Peterson 1997). `B` inherits `A`'s order, which is exactly why it
+is the roughest quantity in the formulation while `E` -- which takes `grad(Phi)`
+from the P2 space -- has always looked clean.
+
+Our own refinement data points the same way. Peak-band scatter over three
+meshes, `lc_skin` 0.7 -> 0.35 -> 0.25: 0.029 -> 0.0215 -> 0.0181, ratios x0.74
+and x0.84 where `O(h)` allows x0.50 and x0.71. Refinement is returning roughly
+half the order it should. (Each step also changed `N`, `lc_core`, `lc_far` and
+`d_far`, so this is not a clean convergence study -- but it is the data in
+hand.) Second-order Nedelec `A` would make `B` linear per tet, which is the same
+order jump superconvergent patch recovery was trying to fake from a
+constant-per-tet field -- presumably why SPR failed as badly as it did.
 
 **Their legend is banded in 11 steps**, which is what `legend(..., bands=11)`
 already does. Banding was not the thing making our figures look artificial.

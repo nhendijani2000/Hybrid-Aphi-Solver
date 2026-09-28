@@ -6,8 +6,8 @@
 #
 # Everything it writes lands in ./output/.
 #
-# GEOMETRY (cylinder.geo): a = 1.5 mm, L = 40 mm, box 40 mm, a 32-gon.
-# 11715 nodes, 0.5 mm inside the wire, 0.35 mm at its surface. See the .geo header for
+# GEOMETRY (cylinder.geo): a = 1.5 mm, L = 40 mm, box 40 mm, a 40-gon.
+# 18804 nodes, 0.4 mm inside the wire, 0.25 mm at its surface. See the .geo header for
 # how the dimensions were inferred and why the core needs its own constraint.
 #
 # THE POINT OF THIS CASE. 01_OneCylinder has a = 10 mm, so omega*L/R = 2.889 and
@@ -18,13 +18,13 @@
 #
 # WHAT TO EXPECT
 #
-#   R (DC)    = L/(sigma A_poly) = 0.040 / (5.8e7 * 7.0233e-06)
-#             = 9.8196e-05 ohm      -> 9.82e-05 V at 1 A
+#   R (DC)    = L/(sigma A_poly) = 0.040 / (5.8e7 * 7.0396e-06)
+#             = 9.7969e-05 ohm      -> 9.80e-05 V at 1 A
 #   Phi       = z/L, a smooth gradient, since omega*L/R << 1
 #   |E|       = V/L = 25 V/m, UNIFORM -- no skin effect at a/delta = 0.16
 #   |B|       = zero on the axis, linear in r inside, 1/r outside
 #
-# A_poly = (32/2) * 1.5^2 * sin(2 pi/32) = 7.0233 mm2, 0.64 % below pi a^2.
+# A_poly = (40/2) * 1.5^2 * sin(2 pi/40) = 7.0396 mm2, 0.41 % below pi a^2.
 # Compare R against the POLYGON, not the circle.
 # ---------------------------------------------------------------------------
 
