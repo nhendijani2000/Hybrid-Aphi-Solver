@@ -89,6 +89,48 @@ int main(int argc, char** argv) {
         scale_mesh_to_metres(mesh, p.length_unit);
         const BoundProblem bound = bind_to_mesh(p, mesh);
         const DofMap dofs = build_dof_map(bound, mesh);
+
+        // Gauge completeness, printed because it is the one property whose
+        // failure is invisible downstream: a tree missing edges leaves part of
+        // the gradient nullspace unpinned, so A can grow in those directions
+        // while B = curl A stays correct and every residual looks fine.
+        // A genuine spanning tree has exactly (nodes - components) edges.
+        {
+            int tree = 0, dirichlet = 0, free_edges = 0;
+            std::vector<bool> on_dirichlet(static_cast<std::size_t>(mesh.num_nodes()), false);
+            for (int e = 0; e < mesh.num_edges(); ++e) {
+                switch (dofs.edge_state[static_cast<std::size_t>(e)]) {
+                    case EdgeDof::Tree: ++tree; break;
+                    case EdgeDof::Free: ++free_edges; break;
+                    case EdgeDof::Dirichlet: {
+                        ++dirichlet;
+                        const std::pair<int, int>& ends = mesh.edges[static_cast<std::size_t>(e)];
+                        on_dirichlet[static_cast<std::size_t>(ends.first)] = true;
+                        on_dirichlet[static_cast<std::size_t>(ends.second)] = true;
+                        break;
+                    }
+                }
+            }
+            int boundary_nodes = 0;
+            for (bool b : on_dirichlet) {
+                if (b) ++boundary_nodes;
+            }
+
+            // Count in the GROUP view, which is the one the interior tree
+            // spans: each Dirichlet surface is one group (its own surface tree
+            // edges hold it together, and those are classified Dirichlet here,
+            // not Tree), every other node is a singleton. One connected mesh
+            // with one Dirichlet surface therefore wants groups - 1 interior
+            // tree edges. Comparing against nodes - 1 instead counts the
+            // surface tree twice over and reports a deficit that is not there.
+            const int groups = 1 + (mesh.num_nodes() - boundary_nodes);
+            std::cout << "edges         " << mesh.num_edges() << " total = " << free_edges
+                      << " free + " << tree << " tree + " << dirichlet << " Dirichlet\n";
+            std::cout << "gauge         " << groups << " groups (" << boundary_nodes
+                      << " boundary nodes as one) wants " << (groups - 1)
+                      << " interior tree edges, has " << tree;
+            std::cout << (tree == groups - 1 ? "   complete\n" : "   *** INCOMPLETE ***\n");
+        }
         const SparsityPattern pattern =
             build_sparsity(dofs, bound, mesh, SparsityStorage::UpperTriangle);
 
