@@ -608,3 +608,33 @@ So on this geometry, with `flux_tangential` on the whole box and a large flux
 linkage, tree-cotree alone cannot deliver a smooth `Phi`. On the resistive cases
 it can, because the EMF that has to be absorbed is negligible: 1.5e-03 V on the
 0.2 mm wire against a 1 V drive.
+
+### The regime is set by `omega*L/R`, not by frequency
+
+Written down after comparing against an Ansys Maxwell voltage plot that shows a
+perfectly continuous potential over three conductors -- at 50 Hz, the same
+frequency as the case here that does not.
+
+There is no contradiction, because the parameter is not frequency. For a round
+conductor `omega*L/R` scales as `omega * a^2`, so radius and frequency enter the
+same way. From the Maxwell case's own reported terminal impedance,
+`R = 3.4575e-04 ohm` and `omega*L = 1.2395e-05 ohm` at 1 A:
+
+    pi a^2 = l / (sigma R) = l / 20053     ->   a ~ 1.26 mm for l = 100 mm
+
+                    a        a/delta @50Hz    omega*L/R
+    Maxwell rods   ~1.26 mm      0.13           0.036
+    this case      10 mm         1.07           2.96
+
+Scaling by `a^2`: `(10/1.26)^2 = 63`, and `0.036 * 63 = 2.3` against the measured
+2.96. Both cases sit where their geometry puts them.
+
+**`a/delta` and `omega*L/R` are the same parameter.** Making the skin effect
+visible (`a/delta >~ 1`) necessarily makes the structure inductive
+(`omega*L/R >~ 1`), which is exactly when `Phi` stops being readable. A case
+cannot show both a strong skin effect and a clean potential. The Maxwell plot is
+continuous *because* those rods have no skin effect to show.
+
+Verified on this solver, same mesh and same tree-cotree gauge, at
+`omega*L/R = 0.059`: `Phi` is a smooth gradient, `z/l` to 0.2 %. The
+0.2 mm wire at 50 Hz (`omega*L/R = 8.8e-04`) gives `z/l` to 4e-07.
