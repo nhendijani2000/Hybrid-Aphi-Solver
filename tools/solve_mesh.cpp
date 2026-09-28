@@ -178,7 +178,10 @@ int main(int argc, char** argv) {
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
                                                           fields_started)
                     .count();
-            std::string vtk_path = out_path.substr(0, out_path.size() - 4) + ".vtk";
+            const std::string stem = out_path.substr(0, out_path.size() - 4);
+            std::string fields_path = stem + "_fields.out";
+            const WriteStats fs = write_solution(fields_path, nodal, fields, sol);
+            std::string vtk_path = stem + ".vtk";
             const WriteStats vs = write_vtk(vtk_path, mesh, nodal, sol, &fields);
             std::cout << "                wrote " << out_path << "   " << ws.nodes << " nodes, "
                       << ws.bytes / 1024 << " KB, " << ws.milliseconds << " ms\n";
@@ -191,6 +194,8 @@ int main(int argc, char** argv) {
                 std::cout << "   (" << fields.num_orphan_vertices << " orphan vertices)";
             }
             std::cout << "\n";
+            std::cout << "                wrote " << fields_path << "   " << fs.bytes / 1024
+                      << " KB, " << fs.milliseconds << " ms   (Phi, A, B, H, E as text)\n";
             std::cout << "                wrote " << vtk_path << "   " << vs.bytes / 1024
                       << " KB, " << vs.milliseconds << " ms   (ParaView)\n";
         }

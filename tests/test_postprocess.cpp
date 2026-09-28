@@ -949,6 +949,89 @@ void test_material_interface_flag() {
                     "where sigma is single-valued");
 }
 
+
+// fields.out: every node, every field, as text.
+//
+// The risk in a 31-column file is that the header and the rows drift apart --
+// a column added to one and not the other produces a file that parses and is
+// silently mislabelled from that column on. So this counts them against each
+// other rather than trusting either.
+void test_write_solution() {
+    Mesh m = make_cube();
+    const BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = build_dof_map(bnd, m);
+
+    Solution s;
+    s.conditioning = Conditioning::RowScaled;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.resize(static_cast<std::size_t>(d.num_total));
+    for (int i = 0; i < d.num_total; ++i) {
+        s.x[static_cast<std::size_t>(i)] = Complex(std::sin(0.5 * i), std::cos(0.3 * i + 0.2));
+    }
+
+    const NodalPotential p = potential_at_nodes(m, bnd, d, s);
+    const FieldOutput f = compute_fields(m, bnd, d, s);
+
+    const std::string path = temp_path("fields.out");
+    const WriteStats stats = write_solution(path, p, f, s);
+    check(stats.nodes == p.size(), "one entry per P2 node");
+    check(stats.bytes > 0, "the file is written");
+
+    std::ifstream in(path);
+    std::string line, header;
+    int rows = 0, wrong_width = 0;
+    std::vector<std::string> first_row;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line[0] == '#') {
+            if (line.rfind("# index ", 0) == 0) header = line;
+            continue;
+        }
+        if (line.empty()) continue;
+        std::istringstream row(line);
+        std::vector<std::string> cols;
+        std::string tok;
+        while (row >> tok) cols.push_back(tok);
+        if (rows == 0) first_row = cols;
+        if (cols.size() != first_row.size()) ++wrong_width;
+        ++rows;
+    }
+    check(rows == p.size(), "a row per node, and no more");
+    check(wrong_width == 0, "every row has the same number of columns");
+
+    // The header names its columns. Count them and require the same number.
+    std::istringstream hs(header.substr(1));
+    int header_cols = 0;
+    std::string h;
+    while (hs >> h) ++header_cols;
+    check(header_cols == static_cast<int>(first_row.size()),
+          "the header names exactly as many columns as the rows carry (" +
+              std::to_string(header_cols) + " vs " + std::to_string(first_row.size()) +
+              ") -- otherwise every column past the mismatch is silently mislabelled");
+    check(first_row.size() == 4u + 2u + 24u + 1u,
+          "index, position, Phi, four complex vectors, and the interface flag");
+
+    // The values are the ones compute_fields produced, not a re-derivation.
+    // Column 4 is Re(Phi); the last is the interface flag.
+    std::ifstream again(path);
+    int checked = 0;
+    bool values_match = true;
+    while (std::getline(again, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::istringstream row(line);
+        int idx = 0;
+        double x = 0, y = 0, z = 0, pr = 0, pi = 0;
+        row >> idx >> x >> y >> z >> pr >> pi;
+        const std::size_t u = static_cast<std::size_t>(idx);
+        if (pr != f.phi_node[u].real() || pi != f.phi_node[u].imag()) values_match = false;
+        if (x != p.position[u].x || z != p.position[u].z) values_match = false;
+        ++checked;
+    }
+    check(values_match && checked == p.size(),
+          "positions and Phi read back bit-for-bit, so to_chars round-trips them");
+
+    std::remove(path.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -966,6 +1049,7 @@ int main() {
     test_phi_matches_potential_at_nodes();
     test_mid_edge_fields_are_endpoint_means_but_phi_is_not();
     test_material_interface_flag();
+    test_write_solution();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

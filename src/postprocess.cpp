@@ -474,6 +474,114 @@ WriteStats write_potential(const std::string& path, const NodalPotential& potent
 }
 
 
+
+WriteStats write_solution(const std::string& path, const NodalPotential& potential,
+                          const FieldOutput& fields, const Solution& solution) {
+    const auto started = std::chrono::steady_clock::now();
+    if (fields.num_nodes() != potential.size()) {
+        throw std::invalid_argument(
+            "write_solution: the fields cover " + std::to_string(fields.num_nodes()) +
+            " nodes and the potential " + std::to_string(potential.size()) +
+            ". They must come from the same solve.");
+    }
+
+    std::FILE* f = std::fopen(path.c_str(), "wb");
+    if (f == nullptr) {
+        throw std::runtime_error("write_solution: could not open '" + path + "' for writing");
+    }
+
+    WriteStats stats;
+    stats.nodes = potential.size();
+    {
+        TextBuffer buf(f);
+        const int n = potential.size();
+
+        buf.put("# fields.out -- Phi, A, B, H and E at every P2 node\n");
+        buf.put("# A-Phi solver ");
+        buf.put(kVersion);
+        buf.put("\n# conditioning ");
+        buf.put(conditioning_keyword(solution.conditioning));
+        buf.put("   omega ");
+        buf.put(solution.omega);
+        buf.put(" rad/s   frequency ");
+        buf.put(solution.omega / 6.283185307179586476925286766559);
+        buf.put(" Hz\n");
+        buf.put("# nodes ");
+        buf.put(n);
+        buf.put("  (vertices ");
+        buf.put(fields.num_vertices);
+        buf.put(", edge midpoints ");
+        buf.put(fields.num_edges);
+        buf.put(")\n");
+        buf.put("#\n");
+        buf.put("# Units: positions m, Phi V, A Wb/m, B T, H A/m, E V/m. Every field is a\n");
+        buf.put("# complex phasor under exp(+j w t), written as its real then imaginary part.\n");
+        buf.put("#\n");
+        buf.put("# Phi is EXACT at every node, including the mid-edge ones: it lives in a P2\n");
+        buf.put("# space and a midpoint carries a genuine solved unknown. A, B, H and E have\n");
+        buf.put("# no mid-edge freedom, so at a midpoint they are the mean of the two\n");
+        buf.put("# endpoints. docs/FIELD_POSTPROCESSING.md Sec. 8.\n");
+        buf.put("#\n");
+        buf.put("# WHAT MAY BE READ FROM THIS FILE. The discrete system is exactly gauge\n");
+        buf.put("# invariant, and the tree-cotree gauge picks one representative, so Phi and A\n");
+        buf.put("# are gauge DEPENDENT -- a different spanning tree shifts Phi by -j*w*psi,\n");
+        buf.put("# almost purely imaginary. B, H and E are not. Sec. 9.\n");
+        buf.put("#\n");
+        buf.put("# iface = 1 means the node's incident tets span more than one body. The nodal\n");
+        buf.put("# average straddles a material interface there and E and H are MEANINGLESS:\n");
+        buf.put("# E's normal component genuinely jumps across it. Filter on this column.\n");
+        buf.put("# Sec. 12. The per-cell arrays in the .vtk have no interface to straddle.\n");
+        buf.put("#\n");
+        buf.put("# index x y z  Re(Phi) Im(Phi)"
+                "  Re(Ax) Im(Ax) Re(Ay) Im(Ay) Re(Az) Im(Az)"
+                "  Re(Bx) Im(Bx) Re(By) Im(By) Re(Bz) Im(Bz)"
+                "  Re(Hx) Im(Hx) Re(Hy) Im(Hy) Re(Hz) Im(Hz)"
+                "  Re(Ex) Im(Ex) Re(Ey) Im(Ey) Re(Ez) Im(Ez)"
+                "  iface\n");
+
+        auto put_vec = [&buf](const Vec3C& v) {
+            for (int k = 0; k < 3; ++k) {
+                const std::complex<double>& c = v[static_cast<std::size_t>(k)];
+                buf.put(' ');
+                buf.put(c.real());
+                buf.put(' ');
+                buf.put(c.imag());
+            }
+        };
+
+        for (int i = 0; i < n; ++i) {
+            const std::size_t u = static_cast<std::size_t>(i);
+            buf.put(i);
+            const Vec3& p = potential.position[u];
+            buf.put(' ');
+            buf.put(p.x);
+            buf.put(' ');
+            buf.put(p.y);
+            buf.put(' ');
+            buf.put(p.z);
+            buf.put(' ');
+            buf.put(fields.phi_node[u].real());
+            buf.put(' ');
+            buf.put(fields.phi_node[u].imag());
+            put_vec(fields.a_node[u]);
+            put_vec(fields.b_node[u]);
+            put_vec(fields.h_node[u]);
+            put_vec(fields.e_node[u]);
+            buf.put(' ');
+            buf.put(static_cast<int>(fields.on_material_interface[u]));
+            buf.put('\n');
+        }
+
+        buf.flush();
+        stats.bytes = buf.bytes_written();
+    }
+    std::fclose(f);
+    stats.milliseconds =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+            .count();
+    return stats;
+}
+
 namespace {
 
 /// One VTK `VECTORS` array: the real or the imaginary part of a complex field.

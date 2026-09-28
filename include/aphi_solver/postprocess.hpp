@@ -247,6 +247,21 @@ struct FieldOutput {
 FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const DofMap& dofs,
                            const Solution& solution);
 
+/// Writes `Φ`, `A`, `B`, `H` and `E` at every P2 node as text -- `fields.out`
+/// by convention. The plan's `WriteSolution`
+/// (`docs/POSTPROCESSING_PLAN.md` §3), in this project's naming.
+///
+/// One line per node: index, position, then each field as a real/imaginary
+/// pair per component, and finally the material-interface flag. Thirty-one
+/// columns, so the header names them.
+///
+/// This is the companion to `write_vtk`, not a replacement: the VTK carries the
+/// same nodal values **plus** the per-cell ones, which are the exact,
+/// unaveraged quantities. Use this when the values are wanted as numbers rather
+/// than as a picture.
+WriteStats write_solution(const std::string& path, const NodalPotential& potential,
+                          const FieldOutput& fields, const Solution& solution);
+
 /// Writes a legacy VTK unstructured grid for ParaView.
 ///
 /// The mesh is written as **quadratic** tetrahedra, so the P2 mid-edge values go
