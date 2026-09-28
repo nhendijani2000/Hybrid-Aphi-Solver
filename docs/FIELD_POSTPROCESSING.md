@@ -1026,3 +1026,49 @@ field. That is the last cheap thing.
 where `O(h)` allows x0.50 and x0.71) are consistent with refinement being the
 wrong lever, and with second-order Nedelec `A` -- which makes `B` linear per tet
 instead of constant -- being the right one.
+
+### The Ansys comparison, third attempt -- and what the evidence actually allows
+
+Three explanations were offered for why Maxwell's `|B|` cross-sections look
+smoother than ours. The first two were wrong; both are retracted above and here.
+
+1. *Mesh density / adaptive refinement.* The runs are `LastAdaptive` at pass
+   4-8, which is true. But the author of those runs states the meshes were not
+   especially dense and the passes ran quickly, and our own refinement study
+   shows diminishing returns well short of the target. Insufficient on its own.
+2. *Element order.* Proposed here after the first failed: if Maxwell solved at
+   higher order, `B` would be linear per tet there against constant per tet
+   here. **Refuted: Ansys uses first-order Nedelec as well**, so `B` is constant
+   per tetrahedron in both codes. This was asserted without checking, twice in
+   opposite directions, and should not have been.
+3. *Plot smoothing.* Maxwell applies a smoothing function to plotted fields.
+   This is the only remaining explanation consistent with all of: the same
+   element order, a mesh that is not dense, a fast solve, and a smooth picture.
+
+**It remains an inference, not a verified fact.** Nobody has read the plot
+settings of those runs. It is recorded here as the leading hypothesis and
+nothing more.
+
+**What smoothing costs us, remeasured on variant C** (it was measured before on
+a far coarser mesh, where it cost 16 % of the peak):
+
+    passes   sd 1.20-1.49   err 1.20-1.49   err 1.49-2.00   peak |B| (T)
+       0        0.0277         +0.54%          -6.55%         1.3322
+       1        0.0238         -2.33%          -8.33%         1.2502   -6.2 %
+       2        0.0255         -3.76%          -9.15%         1.2226   -8.2 %
+       4        0.0280         -5.69%         -10.48%         1.1886  -10.8 %
+
+14 % less scatter at one pass, for 6.2 % of the peak and an error walking from
++0.5 % to -2.3 %. At two passes and beyond the scatter stops improving while the
+bias keeps growing. Cheaper than on the coarse mesh, still a bad trade.
+
+`SMOOTH_PASSES` therefore stays at **0**, so a value read off a figure is the
+value the solver produced. If the comparison target is a smoothed plot, then our
+unsmoothed figure is the more faithful one and the difference in appearance is
+not a defect to chase.
+
+**Where this leaves `B`.** Validated to better than 1 % against the exact
+axisymmetric solution in every band inside the conductor, azimuthal to
+`|B_phi|/|B| = 0.9996`, with 1.8-2.8 % azimuthal scatter that is genuine `O(h)`
+element noise -- no coherent structure above 0.11 %, at any refinement level or
+polygon count tested. Nothing further is known to be wrong with it.
