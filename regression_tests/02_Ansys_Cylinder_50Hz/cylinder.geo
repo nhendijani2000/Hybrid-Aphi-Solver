@@ -34,6 +34,30 @@
 // facet edge must carry an element whatever lc_skin says, which drove the mesh
 // to 18696 nodes. 24 facets give 0.39 mm edges and a 1.1 % area deficit
 // against pi a^2 -- still the polygon, not the circle, that R is compared to.
+//
+// N = 96 WAS TRIED AND REVERTED (2026-09-28). The 24-gon's 15-degree facets were
+// a candidate explanation for the azimuthal lobing in |B| at the conductor
+// surface. N = 96 makes the cross-section round to 0.07 % in area and costs only
+// 59 % more nodes -- but it does NOT smooth B, and it introduces a worse
+// artefact. Measured, N=24 -> N=96, at identical volume sizing:
+//
+//     azimuthal sd/mean   0.029-0.057  ->  0.027-0.063     unchanged
+//     unknowns            114390       ->  183150
+//     factorise           290 s, 2.1 GB -> 795 s, 4.2 GB
+//
+// The reason is element QUALITY, not count. The 96 boundary nodes are forced by
+// the polygon, but the interior only supports lc_core = 0.5 mm, so gmsh fans
+// dozens of slivers from each interior node out to the dense boundary. Those
+// slivers put feathery radial spikes into |B| at r = a, replacing the lobing.
+//
+// THE RULE: facet(N) = 2a sin(pi/N) must be comparable to the VOLUME size lc.
+//
+//     lc = 0.5 mm -> matched N ~ 19        N = 24 -> facet 0.39 mm, matched
+//     lc = 0.7 mm -> matched N ~ 13        N = 96 -> facet 0.098 mm, 5x too fine
+//
+// Using N = 96 honestly needs lc_skin ~ 0.1 mm, about 125x the elements in the
+// surface shell. The pairing here is lc_skin = 0.35 with N = 32 (facet 0.294
+// against a 0.35 mm volume size); at lc_skin = 0.7 it was N = 24.
 // ---------------------------------------------------------------------------
 // frequency and a sweep upward walks into strong skin effect.
 //
@@ -44,13 +68,24 @@ SetFactory("Built-in");
 a = 1.5;     // wire radius, mm -- circumradius of the polygon
 W = 40.0;    // box side, mm
 L = 40.0;    // height, mm (wire and box alike)
-N = 24;      // sides of the wire polygon
+N = 32;      // sides of the wire polygon -- matched to lc_skin, see the note above
 
 // Mesh sizing. These are the field parameters, NOT point sizes: the field
 // below overrides point sizes entirely (see CharacteristicLengthExtendFromBoundary).
-lc_skin = 0.7;    // at the conductor surface
-lc_far  = 4.0;    // out in the air, where nothing happens
-d_far   = 10.0;   // distance over which one grows into the other
+lc_skin = 0.35;   // at the conductor surface -- the lever that smooths B
+lc_far  = 5.0;    // out in the air, where nothing happens
+d_far   = 5.0;    // distance over which one grows into the other
+
+// The conductor core is NOT covered by the distance field above: distance from
+// the lateral face reaches only a = 1.5 mm on the axis, so the core is sized at
+// lc_skin + (1.5/d_far)(lc_far - lc_skin) = 1.2 mm against a 1.5 mm radius --
+// about ONE element spanning the core. MEASURED consequence: only 178 tet
+// centroids land in the annulus 0.60-0.90 mm over the middle 40 % of the
+// length, and |B| there came out 11.5 % high against the exact mu0*I*r/2*pi*a^2
+// while every well-resolved band sat within 3 %. lc_core caps the size inside
+// the wire and fixes it. At a/delta = 0.16 there is no boundary layer, so a
+// UNIFORM wire mesh is the right target; lc_core < lc_skin simply makes it so.
+lc_core = 0.5;    // inside the conductor, everywhere -- 3 elements per radius
 
 // --- wire cross-section: a regular N-gon inscribed in radius a --------------
 For i In {0:N-1}
@@ -116,9 +151,9 @@ Physical Surface("wire_top", 11)    = {wire_top};
 // wanted: the skin effect is inside, and the 1/r field outside wants some
 // resolution too, but neither needs it more than a few skin depths away.
 //
-// Distance from the lateral surface reaches a = 10 mm at the axis, so the core
-// of the conductor is meshed at roughly lc_skin + (10/d_far)(lc_far - lc_skin)
-// = 3.8 mm -- coarse, and correctly so, since nothing happens there.
+// Distance from the lateral surface reaches only a = 1.5 mm at the axis, so the
+// core would be meshed at roughly lc_skin + (1.5/d_far)(lc_far - lc_skin)
+// = 1.2 mm -- far too coarse. Field 4 below overrides it.
 Field[1] = Distance;
 Field[1].SurfacesList = {lateral[]};
 Field[1].Sampling = 100;
@@ -130,7 +165,20 @@ Field[2].SizeMax = lc_far;
 Field[2].DistMin = 0.0;
 Field[2].DistMax = d_far;
 
-Background Field = 2;
+// The threshold field alone leaves the core coarse (see lc_core above), so cap
+// it inside the wire and take the smaller of the two everywhere. Restrict
+// returns a huge size outside its volume, which is exactly what Min wants.
+Field[3] = MathEval;
+Field[3].F = Sprintf("%g", lc_core);
+
+Field[4] = Restrict;
+Field[4].InField = 3;
+Field[4].VolumesList = {wire_volume};
+
+Field[5] = Min;
+Field[5].FieldsList = {2, 4};
+
+Background Field = 5;
 
 // Without this the point sizes above compete with the field and win near the
 // geometry, which would defeat the grading entirely.

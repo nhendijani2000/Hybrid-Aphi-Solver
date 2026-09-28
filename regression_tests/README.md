@@ -43,20 +43,22 @@ produced nothing.
 ## 02_Ansys_Cylinder_50Hz
 
 The same solver on a SLENDER conductor: `a = 1.5 mm`, `L = 40 mm`, box 40 mm, a
-24-gon, at the same 50 Hz. Built to match the regime of the Ansys Maxwell A-Phi
+32-gon, at the same 50 Hz. Built to match the regime of the Ansys Maxwell A-Phi
 voltage example, whose dimensions are inferred in the .geo header.
 
-`a/delta = 0.16` and `omega*L/R = 0.073`, so this case is resistance dominated
+`a/delta = 0.1605` and `omega*L/R = 0.0724`, so this case is resistance dominated
 and `Phi` is readable -- the opposite branch from 01. Measured:
 
 | | |
 |---|---|
-| `Phi` vs the exact `z/L` | worst 9.2e-04, mean 2.6e-04 |
-| `Phi` at exactly `z = L/2` | 0.499982, azimuthal spread **1.5e-04** |
+| `Phi` vs the exact `z/L` | worst 1.12e-03, mean 2.78e-04, over all 55546 wire nodes |
+| `Phi` at `\|z - L/2\| < 1 um` | 70 nodes, mean 0.499888, spread **1.42e-03** |
 | the same spread on case 01 | **0.31** |
-| `R` | 9.869112e-05 ohm against 9.868974e-05 DC exact, **1.4e-05** |
-| `J(0)/J(a)` | 0.99997 against the Bessel 0.999959 |
-| nodes / unknowns | 6309 / 80958, ~6 min |
+| `R` | 9.819732e-05 ohm against 9.819599e-05 DC exact, **1.4e-05** |
+| `L` from `Im(Z)/omega` | 22.64 nH |
+| `J(0)/J(a)` | 0.999972 against the Bessel 0.999959 |
+| `\|B\|` azimuthal scatter at the peak | 0.0215, and 0.3 % coherent (see the docs) |
+| nodes / unknowns | 11715 / 153234, 247 s factorise, 2.28 GB |
 
 **`a/delta` and `omega*L/R` are the same parameter**, both scaling as
 `omega a^2`, so a case cannot show a strong skin effect and a readable potential

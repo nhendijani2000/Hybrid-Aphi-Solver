@@ -662,6 +662,19 @@ Verified on this solver, same mesh and same tree-cotree gauge, at
 
 ### Why `B` plots look rougher than `E`, and what smoothing does about it
 
+> **CORRECTION (2026-09-28). Every `sd/mean` figure in this section is inflated.**
+> They were measured in radial bands 0.75 mm wide, but inside the conductor
+> `|B|` grows linearly with `r`, so across such a band the true field nearly
+> doubles. That genuine radial variation was counted as scatter. Binned narrowly
+> enough for the radial trend to be negligible, and divided by the exact
+> `mu0*I*r/(2*pi*a^2)` at each sample's own radius, the real azimuthal scatter on
+> the mesh these tables describe is **4.3 - 6 %, not 8 - 12 %**. The tables are
+> kept because the *comparisons* within them are still sound -- both sides of
+> each always used the same binning -- but no absolute number here should be
+> quoted. The corrected measurement, and the mesh defect it exposed, are in
+> "The interior mesh constraint" at the end of this document.
+
+
 Raised by comparing our `|B|` cross-section against an Ansys Maxwell one, which
 is visibly smoother. The observation is right and the cause is structural:
 
@@ -692,6 +705,9 @@ tets at different radii where `|B| ~ 1/r` changes fast.
 `legend(..., bands=11)` discretises the colour map, which is what Ansys plots do
 by default. A continuous ramp renders every wiggle; banding makes the eye read
 contours. It changes no number.
+
+(SUPERSEDED as the default -- see "Presentation: continuous, not banded" at
+the end of this document; `BANDS = 256` is now the standing choice.)
 
 `SMOOTH_PASSES` applies point<->cell round trips, each replacing a node's value
 by an average over its element patch -- what a viewer's "smooth" option does.
@@ -758,4 +774,192 @@ average again.
 error is `O(h)` and the far-field scatter is the mesh being coarse against
 `1/r`, which is a resolution problem with a resolution answer. On this geometry
 that means holding fine elements out to a few radii instead of grading away
-immediately -- affordable only with a solver that takes more than ~80k unknowns.
+immediately. The ~80k figure once quoted here as the solver ceiling was too
+low: 114390 unknowns factorises in 290 s and 2.1 GB. See the next section.
+
+### The interior mesh constraint, and how `B` is actually validated
+
+Two things came out of asking "is `B` correct at all?" after the per-cell plot
+looked bad. The answer is that `B` was correct and the *metric* was wrong, and
+that fixing the metric exposed a real mesh defect.
+
+**The metric.** `sd/mean` of `|B|` inside a radial band only measures error if
+the band is narrow enough that the true field is constant across it. It is not:
+`|B| = mu0*I*r/(2*pi*a^2)` inside the conductor, so over a band 0.75 mm wide at
+`a = 1.5 mm` the exact field changes by a factor of two. The fix is to divide
+each sample by the exact value **at its own radius** before taking the spread.
+
+**How `B` is validated.** Three independent tests, none of which fits a free
+parameter -- the current comes from `R_dc = L/(sigma*A_poly)` under the 1 V
+drive, giving `I = 10132.8 A` and `B(a) = 1.3510 T`.
+
+1. *Direction.* `B` must be purely azimuthal. `|B_phi|/|B|` runs 0.993 - 0.9995
+   across every band; the spurious radial and axial parts are 1.5 - 5 %.
+2. *Profile.* `|B|` must rise linearly in `r` inside and fall as `1/r` outside.
+   It holds to within 3.4 % over a 25x span in radius.
+3. *Absolute scale.* Set by `R_dc`, not fitted, and matched to the same 3 %.
+
+A field that was wrong could not land on `mu0*I/(2*pi*r)` to within a percent
+over that range.
+
+**The defect the metric exposed.** The `Distance` + `Threshold` field in
+`cylinder.geo` is measured from the wire's *lateral* faces, so it never
+constrains the core: distance reaches only `a = 1.5 mm` on the axis, giving
+`lc_skin + (1.5/d_far)(lc_far - lc_skin) = 1.2 mm` against a 1.5 mm radius --
+roughly **one element spanning the core**. (The comment in the `.geo` that
+described this said "10 mm at the axis", left over from `01_OneCylinder`, and so
+concluded the core was "coarse, and correctly so".)
+
+The fix is a `Restrict` field capping the size inside the wire, combined with
+`Min`. At `a/delta = 0.16` there is no boundary layer to resolve, so a *uniform*
+wire mesh is the right target and `lc_core = 0.5` simply makes it one:
+
+    Field[3] = MathEval;  Field[3].F = Sprintf("%g", lc_core);
+    Field[4] = Restrict;  Field[4].InField = 3;
+                          Field[4].VolumesList = {wire_volume};
+    Field[5] = Min;       Field[5].FieldsList = {2, 4};
+    Background Field = 5;
+
+`MathEval` stores its argument as a literal string, so a bare `"lc_core"` does
+not resolve the `.geo` variable -- hence `Sprintf`.
+
+**Measured effect.** 6309 -> 8734 nodes, 80958 -> 114390 unknowns, 290 s and
+2.1 GB to factorise. Error against the exact solution, and the corrected
+azimuthal scatter:
+
+    band (mm)      err before   err after     sd before   sd after     n before -> after
+    0.30 - 0.60      +0.10%      +2.24%         0.091      0.084          245 ->  474
+    0.60 - 0.90     +11.46%      -0.07%         0.050      0.049          178 -> 1038
+    0.90 - 1.20      +2.10%      +3.43%         0.049      0.032          948 -> 1239
+    1.20 - 1.49      -2.98%      -0.52%         0.044      0.029         2195 -> 4585
+    1.49 - 2.00      -3.63%      -3.18%         0.055      0.050         3503 -> 5123
+    2.00 - 3.00      -0.55%      -0.84%         0.058      0.057         2248 -> 2409
+    3.00 - 5.00      -1.03%      -0.76%         0.060      0.057         1373 -> 1305
+    5.00 - 8.00      -0.57%      -1.07%         0.059      0.057          928 ->  871
+
+The 11.5 % outlier -- the one band that was genuinely wrong -- goes to 0.07 %,
+and inside the conductor the scatter drops by about a third (0.044 -> 0.029,
+0.049 -> 0.032) with `|B_phi|/|B|` rising from 0.9987 to 0.9995. Outside the
+wire nothing moves, correctly: the air mesh was not changed. The nodal `|B|`
+cross-section now renders as clean concentric rings.
+
+This is the "refine the mesh" answer of the previous section, done, and it
+confirms the diagnosis: the roughness was resolution, not post-processing. It is
+also why neither smoothing nor patch recovery could have fixed it.
+
+**Still open.** `01_OneCylinder` has the same defect in milder form: `a = 10 mm`
+with `d_far = 45` sizes the core at about 5.1 mm, roughly 4 elements per radius.
+It has not been changed, because doing so invalidates every number in that
+case's report and costs a re-solve.
+
+**Reproduce it:** `regression_tests/02_Ansys_Cylinder_50Hz/pv_bcell.py` renders
+the per-cell and nodal fields side by side, banded and continuous, with the pair
+pinned to a common colour range.
+
+### What Ansys actually does differently
+
+Our `|B|` cross-section was compared against Maxwell plots several times, always
+unfavourably. Reading the public verification document
+(`WindingExcitationEdyAPhi_Verification_Stranded.docx`, a three-ring-winding
+case) settles what the difference is, and it is not post-processing.
+
+**Maxwell ran adaptive mesh refinement.** Every solver dialog reproduced in that
+document reads `LastAdaptive`, with the pass counter at 4 and 6 in the figures
+and 8 in the runs it came from. Maxwell refines against an error estimator and
+re-solves until the energy converges, adding elements exactly where the error
+is -- which for a current-carrying conductor is the surface. Our meshes are
+hand-graded and solved once.
+
+This matters because Maxwell's `B` is piecewise constant per tetrahedron too:
+it is the same first-order edge-element discretisation with the same zero-order
+recovered flux density. **It buys smoothness with elements, not with a better
+recovery scheme.** That is the third independent piece of evidence -- after
+smoothing and after patch recovery both failed -- that the roughness in our
+plots is resolution and nothing else.
+
+**Their legend is banded in 11 steps**, which is what `legend(..., bands=11)`
+already does. Banding was not the thing making our figures look artificial.
+(We tried it as the default and moved back to a continuous ramp; see the final
+section.)
+
+**Practical consequence.** Matching those pictures means either many more
+elements or an error-estimator-driven refinement loop, and both need a solver
+that holds meshes the current direct factorisation does not. This is the second
+independent argument for the MUMPS backend, `SOLVER_PLAN.md` Sec. 12 -- the
+first being the `O(h)` convergence of `B` itself.
+
+### Which mesh parameter actually smooths `B`: all three, measured
+
+The mesh has three size controls, and each was tested in isolation on
+`02_Ansys_Cylinder_50Hz`. Only one of them was ever the answer.
+
+    lever      what it sizes                 effect on |B|
+    lc_core    inside the conductor          fixed a real +11.5 % error; scatter -1/3
+    N          roundness of the cross-section  NOTHING, twice over (below)
+    lc_skin    the air just outside the wire   the real lever: scatter -26 % at the peak
+
+**`N` does not matter, established twice by different methods.**
+
+*By construction:* `N = 24 -> 96` at identical volume sizing left the azimuthal
+scatter at 0.027-0.063 against 0.029-0.057 -- unchanged -- while costing 114390
+-> 183150 unknowns and 290 s -> 795 s. It also made things visibly worse, by
+introducing slivers: the 96 boundary nodes are forced by the polygon but the
+interior only supports `lc_core`, so gmsh fans dozens of thin triangles from
+each interior node out to the dense boundary, putting feathery radial spikes
+into `|B|` at `r = a`. Reverted. The rule is in the `.geo`: `facet(N) =
+2a*sin(pi/N)` must be comparable to the VOLUME size, not smaller.
+
+*By Fourier analysis:* on the refined mesh the `|B|` ring still renders as a
+regular scalloped star, and the obvious hypothesis was that the polygon's flats
+were finally being resolved. Tested on 14374 cell samples in the band
+`1.30 - 1.70 mm`, binned into 360 azimuthal bins:
+
+    strongest azimuthal harmonics of |B|
+      m = 16     0.28 % of mean
+      m = 40     0.21 %
+      m =  4     0.16 %
+      m = 32     not in the top six
+
+**No peak at `m = N`.** The azimuthally-averaged profile is uniform to 0.3 %, so
+there is no coherent geometric feature at all -- the star is incoherent
+per-element scatter that the eye organises into a pattern because the elements
+sit in a ring. Hypothesis refuted; `O(h)` again.
+
+**`lc_skin` is the lever.** Halving it (0.7 -> 0.35, with `N` raised to 32 to keep
+the facet matched, and `d_far` 10 -> 5 / `lc_far` 4 -> 5 to pay for it):
+
+    band (mm)      sd before    sd after      err before   err after
+    0.60 - 0.90      0.049       0.0403         -0.07%      -0.56%
+    0.90 - 1.20      0.032       0.0362         +3.43%      +1.72%
+    1.20 - 1.49      0.029       0.0215         -0.52%      -0.63%   <- the peak
+    1.49 - 2.00      0.050       0.0410         -3.18%      -2.71%
+    2.00 - 3.00      0.057       0.0576         -0.84%      -1.62%
+    3.00 - 5.00      0.057       0.0780         -0.76%      -2.68%   <- paid for
+    5.00 - 8.00      0.057       0.0991         -1.07%      -2.91%   <- paid for
+
+Scatter at the peak is down 26 % and `|B_phi|/|B|` reached 0.9997. **It was
+free**: 153234 unknowns factorised in 247 s and 2.28 GB, against 114390 in 302 s
+and 2.14 GB, because coarsening the far field gave AMD a better ordering.
+
+**Two costs to be honest about.** Beyond `r = 3 mm` the error went from ~1 % to
+~3 % and the sample count collapsed -- that is what paid for the surface, and it
+degrades anything reading the far field, including `tools/pv_ampere.py`. And the
+azimuthal spread of `Phi` at mid height went from 1.5e-04 to **1.42e-03**. That
+is most likely not a regression in accuracy: `Phi` is gauge dependent (Sec. 9), a
+different mesh gives a different spanning tree and hence a different `psi`, and
+`E` is unaffected. It has not been separately verified, so it is recorded here
+rather than explained away.
+
+### Presentation: continuous, not banded
+
+`make_plots.py` carries a `BANDS` constant next to `SMOOTH_PASSES`. It is set to
+**256**, an effectively continuous ramp, and `legend(..., bands=11)` still gives
+banded contours on any single figure.
+
+An earlier revision defaulted to 11 bands on the grounds that Ansys plots are
+banded -- and they are; the legend in the public verification document has 11
+discrete steps. But banding is a way of *hiding* the per-element scatter by
+quantising it, and on these figures it reads as a contour map rather than a
+physical field. Continuous is the standing preference here. It changes no
+number, and it renders every bit of the `O(h)` texture the tables above measure,
+which is the honest trade.

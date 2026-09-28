@@ -55,7 +55,25 @@ if not os.path.isdir(OUT):
 #
 # So it is cosmetic where it helps and useless where it does not. Left at 0 so
 # a value read off a figure is the value the solver produced.
+# STALE. Measured on case 02, with bands 0.75 mm wide inside which |B| genuinely
+# doubles, so radial variation was counted as scatter; and on case 02's mesh
+# before its lc_core fix. See docs/FIELD_POSTPROCESSING.md, "The interior mesh
+# constraint". The conclusion holds, the numbers should not be quoted. This case
+# has the same core-sizing defect in milder form (about 4 elements per radius).
 SMOOTH_PASSES = 0
+
+# Colour-map resolution. 256 is effectively a continuous ramp; 11 gives the
+# banded contours that Ansys plots use by default. Both are honest -- this is a
+# presentation choice and changes no number.
+#
+# Set to 256 because a continuous ramp reads as a physical field while banding
+# reads as a contour map, and on these figures the continuous version is the one
+# that looks right. The tradeoff: B = curl A is CONSTANT per tetrahedron with
+# first-order edge elements -- the lowest-order quantity in the formulation --
+# so it carries 2-6 % azimuthal scatter where an axisymmetric problem permits
+# none, and a continuous ramp renders every bit of that as visible texture.
+# Banding hides it by quantising. See docs/FIELD_POSTPROCESSING.md.
+BANDS = 256
 
 paraview.simple._DisableFirstRenderCameraReset()
 
@@ -122,21 +140,13 @@ def cut(src, normal, origin, only_wire=False):
     return sl
 
 
-def legend(array, title, fmt="{:.3g}", bands=11):
-    """Banded rather than continuous, which is what Ansys plots do by default.
-
-    A continuous ramp shows every wiggle in the field. B = curl A is CONSTANT
-    per tetrahedron with first-order edge elements -- the lowest-order quantity
-    in the formulation -- so its azimuthal scatter on this mesh is 7-10 % where
-    an axisymmetric problem permits none, and a continuous ramp renders all of
-    it. Banding quantises the map so the eye reads contours instead of texture.
-
-    This is a presentation choice and changes no number. The scatter is still
-    there; see docs/FIELD_POSTPROCESSING.md."""
+def legend(array, title, fmt="{:.3g}", bands=None):
+    """Colour map and scalar bar. `bands` defaults to the BANDS constant above;
+    pass 11 for banded contours on a single figure."""
     lut = GetColorTransferFunction(array)
     lut.ApplyPreset("Jet", True)      # blue low -> red high
     lut.Discretize = 1
-    lut.NumberOfTableValues = bands
+    lut.NumberOfTableValues = BANDS if bands is None else bands
     lut.UseLogScale = 0
     bar = GetScalarBar(lut, view)
     bar.Title = title

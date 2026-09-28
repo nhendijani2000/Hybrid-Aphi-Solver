@@ -24,8 +24,8 @@ n = d.GetNumberOfPoints()
 # It is not; the two sides were simply different quantities.
 
 I, a, MU0 = I_AMP, A_MM * 1e-3, 4e-7 * math.pi
-# The meshed conductor is a 24-gon, so the enclosed-current fraction inside
-# radius r is (area of the 24-gon clipped to r) / (its full area). Near the axis
+# The meshed conductor is an N-gon (NGON, argv[4]), so the enclosed-current
+# fraction inside radius r is (its area clipped to r) / (its full area). Near the axis
 # that is just pi r^2 / A_poly until r reaches the apothem.
 apothem = a * math.cos(math.pi / NGON)
 A_poly = 0.5 * NGON * a * a * math.sin(2.0 * math.pi / NGON)
