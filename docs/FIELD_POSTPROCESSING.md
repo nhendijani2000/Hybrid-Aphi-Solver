@@ -988,3 +988,41 @@ quantising it, and on these figures it reads as a contour map rather than a
 physical field. Continuous is the standing preference here. It changes no
 number, and it renders every bit of the `O(h)` texture the tables above measure,
 which is the honest trade.
+
+### Variant C: the refinement route reaches its end
+
+`lc_skin` 0.35 -> 0.25 with `N` 32 -> 40 (facet 0.235, ratio 0.94 -- matched),
+`lc_core` 0.5 -> 0.4, `lc_far` 5 -> 6, `d_far` 5 -> 4. 248294 unknowns, 681 s,
+4.56 GB, backward error 2.8e-21. This is the settled configuration for the case.
+
+    band (mm)     sd: base    A       C      err: base     A        C
+    0.30 - 0.60     0.084   0.0796  0.0716     +2.24%   +2.63%   -0.11%
+    0.60 - 0.90     0.049   0.0403  0.0389     -0.07%   -0.56%   +0.92%
+    0.90 - 1.20     0.032   0.0362  0.0309     +3.43%   +1.72%   -0.16%
+    1.20 - 1.49     0.029   0.0215  0.0181     -0.52%   -0.63%   -0.35%
+    1.49 - 2.00     0.050   0.0410  0.0352     -3.18%   -2.71%   -2.35%
+    2.00 - 3.00     0.057   0.0576  0.0511     -0.84%   -1.62%   -1.64%
+    3.00 - 5.00     0.057   0.0780  0.0751     -0.76%   -2.68%   -2.33%
+    5.00 - 8.00     0.057   0.0991  0.0927     -1.07%   -2.91%   -3.17%
+
+Every error inside the conductor is now under 1 %, and the strongest coherent
+azimuthal harmonic fell from 0.28 % to 0.11 % -- still with no peak at `m = N`,
+at any refinement level tested.
+
+**The element budget is already where the picture is**, which kills the obvious
+remaining idea of redistributing it. Measured on C, 105715 tets by distance from
+the axis: 8.9 % inside `r = 1 mm`, **78.5 % in the band 1.0 - 2.0 mm** (the
+bright ring), 8.7 % in 2 - 3 mm, and **2.5 % beyond 3 mm**. Coarsening the far
+field further can free at most 2.5 % of the mesh. There is no budget hiding
+there, and refining the core does not touch the ring.
+
+**What is left on the mesh side**: `Mesh.OptimizeNetgen` is 0. Turning it on cuts
+Netgen's total badness from 130242 to 88499 (32 %) for +1 % nodes -- the quality
+distribution is mediocre, median in the 0.4-0.5 band with 529 tets below 0.3,
+and a sliver tet contributes one wildly wrong constant `B`. Untested against the
+field. That is the last cheap thing.
+
+**But see the retraction above.** The diminishing returns here (x0.74 then x0.84
+where `O(h)` allows x0.50 and x0.71) are consistent with refinement being the
+wrong lever, and with second-order Nedelec `A` -- which makes `B` linear per tet
+instead of constant -- being the right one.
