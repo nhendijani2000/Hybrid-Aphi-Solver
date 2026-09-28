@@ -387,30 +387,57 @@ them is the smoothing that §7 added, and nothing else makes it visible.
 
 ---
 
-## 14. `J = sigma E`, and the one place it is not a nodal quantity
+## 14. `J = sigma E`, and what happens at a conductor surface
 
 `sigma` belongs to a **body**, so it is single-valued inside a tet and
-two-valued at a node whose incident tets span two bodies. `J` inherits that
-exactly:
+two-valued at a node whose incident tets span two. `J` inherits that -- but
+unlike `E`, it has a **right** answer at a conductor surface rather than no
+answer, and getting this wrong is very visible.
 
-| | where it is defined | |
-|---|---|---|
-| `j_tet` | everywhere | `sigma_tet * e_tet`, exact, zero in an insulator |
-| `j_node` | where `on_material_interface == 0` | `sigma * e_node` |
+At the surface `J` is finite inside and zero outside. The meaningful value, and
+the one a skin effect makes *largest*, is the **inside limit**. So `j_node`
+averages over **conducting tets only**:
 
-At an interface node `J` genuinely **is** two-valued -- a finite current density
-on the conductor side and zero on the insulator side -- so `j_node` is left at
-zero there rather than picking one, and `on_material_interface` says why. The
-nodal form exists because it plots smoothly; **`j_tet` is the one to integrate**,
-and it is what `tools/pv_extract_rl.py` reads.
+    j_node[v]  =  ( sum over conducting t containing v  vol_t sigma_t E_t(v) )
+                / ( sum over conducting t containing v  vol_t )
 
-A mid-edge node whose flag is 0 takes `sigma` from either endpoint safely: if
-its two endpoints were in different bodies, every tet holding that edge would
-hold both, so both endpoints would themselves be flagged. That is why the code
-reads `first_body` of `mesh.edges[e].first` without checking the other end.
+which gives the conductor-side limit at the surface, and exactly zero in the
+insulator's interior because no conducting tet reaches it.
 
-Two distinct zeros meet here and the tests separate them: `J` is zero **in an
-insulator** because `sigma` is, and zero **at an interface node** because
-`sigma` is ambiguous. A test also checks that `E` in the insulator is *not*
-zero, so that the first zero is `sigma`'s doing rather than a collapsed
-solution.
+**A first version zeroed `J` at every interface node**, reusing the rule that is
+right for `E`. On the cylinder that put zero current density across the entire
+conductor surface -- all 1351 surface nodes -- precisely where the skin effect
+makes it maximal. A nodal `J` plot showed a hollow shell. Measured before and
+after, mid-height, `|J|` relative to the axis:
+
+    r band (mm)      before      after     exact-ish
+    0.00 - 1.25       1.000      1.000
+    6.25 - 7.50       1.014      1.014
+    7.50 - 8.75       0.420      1.031
+    8.75 - 10.00      0.000      1.062      <- the conductor surface
+
+The 1.062 at the surface is the skin effect at `a/delta = 1.07`, consistent with
+the 5.5 % rise in `|E|` measured over the same bins.
+
+### Mid-edge nodes are accumulated, not averaged
+
+`A`, `B`, `H` and `E` take the mean of their two endpoints at a midpoint (Sec.
+7). `J` does **not**: it is evaluated at the midpoint from the conducting tets
+that contain that edge, in the same loop as the vertices.
+
+The endpoint mean would be wrong here. An edge running from a surface vertex out
+into the air has one endpoint carrying the full surface current density and one
+carrying none, and their mean would put half of it at a point **inside the
+insulator**. Accumulating instead gives that midpoint zero, correctly, because
+a conducting tet's four vertices all lie in the conductor, so such an edge
+belongs to no conducting tet at all. An edge lying *along* the surface does
+belong to conducting tets and does get the conductor-side value.
+
+The cost is that `j_node` is not exactly `sigma * e_node` at a midpoint. At a
+vertex it is, to round-off, and a test checks both halves of that.
+
+### Which one to integrate
+
+`j_tet` -- exact, no averaging, no interface to straddle. `tools/pv_extract_rl.py`
+reads it and recovers the terminal current to the digit. `j_node` exists because
+it plots smoothly.

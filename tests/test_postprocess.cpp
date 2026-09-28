@@ -1161,11 +1161,17 @@ void test_field_set_selection() {
 }
 
 
-// J = sigma E, and where sigma is not single-valued.
+// J = sigma E, and what happens at a conductor surface.
 //
-// The nodal J is the one output whose value depends on a quantity that does not
-// belong to a node at all. Getting it wrong is invisible in a plot -- a wrong
-// sigma just scales the arrows -- so this checks the relation itself.
+// J is the one field where averaging across a material interface has a RIGHT
+// answer rather than no answer. At a conductor surface J is finite inside and
+// zero outside, and the meaningful value -- the one a skin effect makes
+// largest -- is the inside limit. So J averages over conducting tets only.
+//
+// An earlier version zeroed J at every interface node, on the same reasoning
+// used for E. On the cylinder that put zero current density on the entire
+// conductor surface, where the skin effect makes it maximal: a nodal J plot
+// showed a hollow shell, exactly backwards.
 void test_current_density() {
     Mesh m = make_cube();
     BoundProblem bnd = bind_cube(m, 1e6);
@@ -1179,18 +1185,20 @@ void test_current_density() {
         s.x[static_cast<std::size_t>(i)] = Complex(std::cos(0.6 * i), std::sin(0.8 * i));
     }
 
-    // --- one body: sigma is single-valued everywhere, so J = sigma E at EVERY
-    //     node, with nothing excluded.
+    // --- one body: every tet conducts, so J's average runs over the same tets
+    //     E's does, and at a VERTEX the two must agree to round-off.
     const FieldOutput one = compute_fields(m, bnd, d, s);
     const double sigma = bnd.bodies[0].sigma;
     check(sigma > 0.0, "the cube's body conducts, so this test can see anything at all");
 
-    double worst_node = 0.0, worst_tet = 0.0;
-    for (int i = 0; i < d.num_p2_nodes; ++i) {
-        const std::size_t u = static_cast<std::size_t>(i);
+    double worst_vertex = 0.0, scale = 0.0, worst_tet = 0.0;
+    for (int v = 0; v < m.num_nodes(); ++v) {
+        const std::size_t u = static_cast<std::size_t>(v);
         for (int k = 0; k < 3; ++k) {
             const std::size_t uk = static_cast<std::size_t>(k);
-            worst_node = std::max(worst_node, std::abs(one.j_node[u][uk] - sigma * one.e_node[u][uk]));
+            worst_vertex =
+                std::max(worst_vertex, std::abs(one.j_node[u][uk] - sigma * one.e_node[u][uk]));
+            scale = std::max(scale, std::abs(sigma * one.e_node[u][uk]));
         }
     }
     for (int t = 0; t < m.num_tets(); ++t) {
@@ -1200,11 +1208,25 @@ void test_current_density() {
             worst_tet = std::max(worst_tet, std::abs(one.j_tet[ut][uk] - sigma * one.e_tet[ut][uk]));
         }
     }
-    check(worst_node == 0.0, "with one body, J = sigma E exactly at every node");
-    check(worst_tet == 0.0, "and exactly in every tet");
+    check(worst_vertex <= 1e-12 * scale,
+          "with one body, J = sigma E at every vertex to round-off");
+    check(worst_tet == 0.0, "and exactly in every tet, where no averaging happens at all");
 
-    // --- two bodies, one of them an insulator. Now sigma is two-valued at the
-    //     interface, and the nodal J must stand down there rather than pick one.
+    // At a MID-EDGE node the two are computed differently on purpose: E is the
+    // mean of its endpoints, while J is evaluated there from the conducting
+    // tets. They need not agree, and the reason matters -- see below.
+    bool mid_differs = false;
+    for (int e = 0; e < m.num_edges(); ++e) {
+        const std::size_t u = static_cast<std::size_t>(d.edge_p2(e));
+        if (std::abs(one.j_node[u][2] - sigma * one.e_node[u][2]) > 1e-9 * scale) {
+            mid_differs = true;
+        }
+    }
+    check(mid_differs,
+          "at mid-edge nodes J is evaluated directly rather than averaged from the endpoints, "
+          "so it differs from sigma*E there -- deliberately");
+
+    // --- two bodies, one an insulator. This is the case that matters.
     BoundBody insulator = bnd.bodies[0];
     insulator.name = "B2";
     insulator.sigma = 0.0;
@@ -1215,27 +1237,27 @@ void test_current_density() {
     const FieldOutput two = compute_fields(m, bnd, d, s);
     check(two.num_interface_nodes > 0, "the split creates interface nodes");
 
-    int zeroed = 0, checked = 0;
-    bool interface_is_zero = true, interior_is_sigma_e = true;
+    // The point of the change: an interface node in contact with the conductor
+    // carries the CONDUCTOR-SIDE current density, not zero.
+    int iface_live = 0, iface_dead = 0;
     for (int i = 0; i < d.num_p2_nodes; ++i) {
         const std::size_t u = static_cast<std::size_t>(i);
-        const bool iface = two.on_material_interface[u] != 0;
+        if (two.on_material_interface[u] == 0) continue;
         double mag = 0.0;
         for (int k = 0; k < 3; ++k) mag += std::abs(two.j_node[u][static_cast<std::size_t>(k)]);
-        if (iface) {
-            if (mag != 0.0) interface_is_zero = false;
-            ++zeroed;
+        if (mag > 0.0) {
+            ++iface_live;
         } else {
-            ++checked;
+            ++iface_dead;
         }
     }
-    check(interface_is_zero,
-          "J is exactly zero at all " + std::to_string(zeroed) +
-              " interface nodes -- sigma is two-valued there and no single number is right");
-    check(checked > 0, "and there are still " + std::to_string(checked) + " nodes where it is not");
+    check(iface_live > 0,
+          "an interface node touching the conductor carries the conductor-side J (" +
+              std::to_string(iface_live) + " of " + std::to_string(iface_live + iface_dead) +
+              ") -- zeroing these put a hollow shell where the skin effect is strongest");
 
-    // In the insulator, sigma is zero, so J must be zero there too -- and that
-    // is a different reason from the interface one, which is why both matter.
+    // In the insulator's interior, J is zero because sigma is -- a different
+    // reason from the interface one, and both have to hold.
     int insulating_tets = 0;
     bool insulator_is_zero = true;
     for (int t = 0; t < m.num_tets(); ++t) {
@@ -1249,11 +1271,10 @@ void test_current_density() {
         }
     }
     check(insulating_tets > 0 && insulator_is_zero,
-          "J is zero in all " + std::to_string(insulating_tets) +
-              " insulating tets, because sigma is -- not because anything was skipped");
+          "J is zero in all " + std::to_string(insulating_tets) + " insulating tets");
 
-    // And E is NOT zero there, so the two zeros above are genuinely J's and not
-    // a symptom of the whole solution collapsing.
+    // And E there is NOT zero, so that zero is sigma's doing rather than a
+    // collapsed solution.
     double e_in_insulator = 0.0;
     for (int t = 0; t < m.num_tets(); ++t) {
         const std::size_t ut = static_cast<std::size_t>(t);
@@ -1265,6 +1286,34 @@ void test_current_density() {
     }
     check(e_in_insulator > 0.0,
           "while E in the insulator is not zero, so J vanishing there is sigma's doing");
+
+    // A node reached by no conducting tet at all must be zero: that is the
+    // insulator's interior, and it is an answer rather than a gap.
+    int deep = 0;
+    bool deep_is_zero = true;
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        if (two.on_material_interface[u] != 0) continue;
+        bool touches_conductor = false;
+        for (int t = 0; t < m.num_tets(); ++t) {
+            if (two.sigma_tet[static_cast<std::size_t>(t)] <= 0.0) continue;
+            for (int c = 0; c < 4; ++c) {
+                if (static_cast<std::size_t>(
+                        m.tets[static_cast<std::size_t>(t)][static_cast<std::size_t>(c)]) == u) {
+                    touches_conductor = true;
+                }
+            }
+        }
+        if (touches_conductor || i >= m.num_nodes()) continue;
+        ++deep;
+        for (int k = 0; k < 3; ++k) {
+            if (two.j_node[u][static_cast<std::size_t>(k)] != Complex(0.0, 0.0)) {
+                deep_is_zero = false;
+            }
+        }
+    }
+    check(deep_is_zero, "a vertex no conducting tet reaches carries exactly zero J (" +
+                            std::to_string(deep) + " of them)");
 }
 
 }  // namespace
