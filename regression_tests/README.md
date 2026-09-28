@@ -42,6 +42,8 @@ produced nothing.
 
 ## 02_Ansys_Cylinder_50Hz
 
+Full write-up with figures: [02_Ansys_Cylinder_50Hz/REPORT.md](02_Ansys_Cylinder_50Hz/REPORT.md)
+
 The same solver on a SLENDER conductor: `a = 1.5 mm`, `L = 40 mm`, box 40 mm, a
 40-gon, at the same 50 Hz. Built to match the regime of the Ansys Maxwell A-Phi
 voltage example, whose dimensions are inferred in the .geo header.
