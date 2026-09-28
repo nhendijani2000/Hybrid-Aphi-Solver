@@ -51,11 +51,11 @@ and `Phi` is readable -- the opposite branch from 01. Measured:
 
 | | |
 |---|---|
-| `J(0)/J(a)` | 0.99997 against the Bessel 0.999959 |Phi` vs the exact `z/L` | worst 9.2e-04, mean 2.6e-04 |
-| `J(0)/J(a)` | 0.99997 against the Bessel 0.999959 |Phi` at exactly `z = L/2` | 0.499982, azimuthal spread **1.5e-04** |
+| `Phi` vs the exact `z/L` | worst 9.2e-04, mean 2.6e-04 |
+| `Phi` at exactly `z = L/2` | 0.499982, azimuthal spread **1.5e-04** |
 | the same spread on case 01 | **0.31** |
-| `J(0)/J(a)` | 0.99997 against the Bessel 0.999959 |R` | 9.869112e-05 ohm against 9.868974e-05 DC exact, **1.4e-05** |
-| `J(0)/J(a)` | 0.99997 against the Bessel 0.999959 ||J(0)/J(a)|` | 0.99997 against the Bessel 0.999959 |
+| `R` | 9.869112e-05 ohm against 9.868974e-05 DC exact, **1.4e-05** |
+| `J(0)/J(a)` | 0.99997 against the Bessel 0.999959 |
 | nodes / unknowns | 6309 / 80958, ~6 min |
 
 **`a/delta` and `omega*L/R` are the same parameter**, both scaling as
