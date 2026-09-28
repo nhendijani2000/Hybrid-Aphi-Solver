@@ -387,98 +387,70 @@ them is the smoothing that §7 added, and nothing else makes it visible.
 
 ---
 
-## 14. `J = sigma E` and `B = mu H`, held exactly at every node
+## 14. Material interfaces: each field takes its own side
 
-Both constitutive relations are applied **at the node**, with that node's own
-material:
+A node shared between two materials has no single value for `E`'s normal
+component or `H`'s tangential one. One side has to be chosen, and the rule is:
 
-    j_node = sigma_node * e_node          h_node = b_node / mu_node
+| field | side chosen |
+|---|---|
+| `E`, `J` | the **higher conductivity** |
+| `B`, `H` | the **higher permeability** |
+| `A` | neither -- it carries no material, so it averages over everything |
 
-No averaging of `sigma`, no averaging of `mu`. A material property has no
-business being interpolated, and a reader who divides `J` by `sigma` must get
-`E` back.
+The two selections are tracked separately because they need not coincide. At a
+copper/air surface the electrical side is the copper, while the magnetic one is
+a tie (`mu_r = 1` on both) and no choice is made at all.
 
-### Which material, where two meet
+Each field is then averaged **over its own side only**, with its own weight:
 
-`node_body` picks the **most conducting** of the bodies meeting at a node. At a
-copper/air surface that is the copper: the current density there is a property
-of the conductor, not of the air beside it. `on_material_interface` records that
-a choice was made.
+    e_node = sum over tets with sigma = sigma_max   vol * E_t(node)  /  sum vol
+    b_node = sum over tets with mu    = mu_max      vol * B_t        /  sum vol
 
-**The jump across the surface is physical and is kept.** It lives in `j_tet`,
-which changes discontinuously from one tet to the next -- finite in the last
-conducting tet, exactly zero in the first insulating one. What a single node
-cannot do is carry both values at once, so it reports the conductor's.
+and the two constitutive relations are applied at the node, exactly as written,
+with the selected material:
 
-### E really is double-valued there, and only in one component
+    j_node = sigma_max * e_node          h_node = b_node / mu_max
 
-- **Tangential `E` is continuous** across any interface, always (from
-  `curl E`). Single-valued, and the nodal average of it is correct.
-- **Normal `E` jumps.** At a free conductor surface `J.n = 0` forces `E_n ~ 0`
-  just inside, while outside `E_n` is finite -- the difference is the surface
-  charge. The nodal average is of two genuinely different numbers.
+So `J = sigma E` and `B = mu H` hold to the digit at every node, and neither
+`sigma` nor `mu` is ever interpolated. Where a property is uniform across a
+node's tets there is no ambiguity and nothing is excluded.
 
-So `e_node` at a surface node is right in its tangential part and meaningless in
-its normal part, and `j_node = sigma e_node` inherits exactly that.
-
-Measured on `regression_tests/01_OneCylinder` at 50 Hz, mid-height, where the
-lateral normal is radial and the current axial:
-
-    r band (mm)     |Jz| A/m2     |Jr| A/m2     Jr/Jz
-    0.00 -  1.25    4.588e+08     2.985e+05    0.0007
-    6.25 -  7.50    4.650e+08     2.456e+05    0.0005
-    7.50 -  8.75    4.724e+08     2.206e+07    0.0467
-    8.75 - 10.00    4.863e+08     6.892e+07    0.1417   <- the surface
-
-**`Jz` is right**: 1.060 times its value on the axis, the skin effect at
-`a/delta = 1.07`, consistent with the 5.5 % rise measured in `|E|` over the same
-bins. **`Jr` is spurious**: it must be exactly zero at a free surface, since no
-current leaves the conductor, and it comes out at 14 % of `Jz`.
-
-That 14 % is not introduced by `J`. It is already in `e_node`, whose radial part
-averages a near-zero inside with a finite outside; multiplying by `sigma` merely
-makes it visible. Reading the **axial** component at a surface is sound; reading
-the normal one is not, and `material_interface` marks exactly those nodes.
-
-`j_tet` carries no such error -- it never straddles anything -- and is what
-`tools/pv_extract_rl.py` integrates.
-
-### Why a continuous `A` and `Phi` do not give a continuous `E`
-
-Asked directly, and it is the crux of everything above: if `E = -jw A - grad(Phi)`
-is built from two globally continuous fields, should it not be single-valued at
-a node?
-
-No, and the reason is that neither term is continuous in the way that argument
-needs:
-
-- **`Phi` is continuous; `grad(Phi)` is not.** Only the *tangential* derivative
-  is continuous across a face, because `Phi` is continuous *along* that face.
-  `dPhi/dn` jumps.
-- **`A` is H(curl)-conforming**, which means only its *tangential* component is
-  continuous across a face. The normal component jumps. That is the defining
-  property of Whitney edge elements, not a shortcoming.
-
-So `E` is **tangentially continuous and normally discontinuous by
-construction** -- which is precisely the physics: `E_t` is continuous across any
-interface, `E_n` jumps with the surface charge. A discretisation that produced a
-fully continuous `E` would be *wrong*: it could not represent the surface charge
-that must exist at a copper/air boundary.
-
-Measured on `01_OneCylinder` at 50 Hz, per-tet `E` in a shell straddling the
+**Restricting the FIELD matters as much as choosing the material.** `sigma` from
+the copper multiplied by an `E` averaged over copper *and* air still carries the
+air's contribution. Measured on `01_OneCylinder` at 50 Hz, nodal `J` at the
 conductor surface:
 
-                             cells  |E_normal| V/m  |E_tangential|
-    copper side (sigma > 0)    878        0.004375           8.303
-    air side (sigma = 0)      1220           2.459           7.743
-    ratio air / copper                        562 x           0.932
+                                   |Jz| / axis      |Jr| / |Jz|
+    sigma_max x E over all tets          1.060           0.1417
+    sigma_max x E over copper only       1.062           0.0006
+    exact (Bessel, a/delta = 1.07)       1.062           0
 
-The normal component jumps by 562x; the tangential agrees to 7 %, which is
-discretisation across a shell of finite thickness rather than a jump.
+`Jr` must be zero at a free surface -- no current leaves the conductor -- and
+restricting `E` to the conducting side takes it from 14 % of `Jz` down to
+0.06 %, a factor of 236, while bringing `Jz` onto the exact value.
 
-**`E` is single-valued inside a tet and multi-valued at a node.** A node shared
-by thirty tets gets thirty values, and `e_node` is their volume-weighted mean.
-In a homogeneous region those thirty converge to one limit, so the mean is
-harmless smoothing. At a material interface they converge to **two** limits in
-the normal component, and the mean is a number that is neither. That -- not
-anything in `J` -- is the whole origin of the spurious `Jr` in the table above.
+### Mid-edge nodes are accumulated, not averaged from endpoints
+
+This is a change from the rule in Sec. 7, and the interface selection forces it.
+An edge running from a conductor-surface vertex out into the air has one
+endpoint carrying the copper-side field and one carrying the air's; their mean
+is neither, and no choice of material at the midpoint can repair it.
+
+Accumulating at the midpoint instead gets it right for free: a conducting tet's
+four vertices all lie in the conductor, so such an edge belongs to **no**
+conducting tet, its `sigma` range is uniformly the air's, and `J` there is zero
+-- correctly, since that midpoint is inside the insulator.
+
+The cost is that a mid-edge field no longer equals the mean of its endpoints.
+Against a field whose answer is known -- a linear `Phi` with `A = 0`, so `E` is
+constant -- the direct evaluation is exact, and a test pins that.
+
+`Phi` is untouched by all of this: it is a solved P2 unknown at every node,
+copied, never averaged, never assigned a side.
+
+### Which to integrate
+
+`j_tet` and `b_tet` -- exact, no averaging, no interface to straddle.
+`tools/pv_extract_rl.py` reads `j_tet`. The nodal forms exist because they plot
+smoothly.

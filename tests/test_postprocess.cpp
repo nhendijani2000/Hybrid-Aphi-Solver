@@ -862,11 +862,45 @@ void test_mid_edge_fields_are_endpoint_means_but_phi_is_not() {
         worst_phi = std::max(worst_phi, std::abs(f.phi_node[mid] -
                                                  0.5 * (f.phi_node[a0] + f.phi_node[a1])));
     }
-    check(worst_field < 1e-14, "a mid-edge field value is the mean of its two endpoints");
+    // Mid-edge FIELDS are evaluated there from the incident tets, not averaged
+    // from the endpoints -- the endpoint mean cannot honour the material-side
+    // selection at an interface. On a single-material mesh the two agree
+    // closely, which is what this checks: near, but not identical.
+    check(worst_field > 0.0,
+          "a mid-edge field is evaluated there, not averaged from its endpoints, so it does "
+          "not match the endpoint mean exactly on a rough field");
+
+    // Against a field whose answer is known, the direct evaluation must be
+    // exact. A linear Phi with A = 0 gives E = -grad(Phi), a CONSTANT, and a
+    // constant is reproduced by either reconstruction -- so this pins the
+    // direct evaluation rather than merely bounding it.
+    Solution uniform;
+    uniform.conditioning = Conditioning::Natural;
+    uniform.omega = s.omega;
+    uniform.x.assign(static_cast<std::size_t>(d.num_total), Complex(0.0, 0.0));
+    const Vec3 grad{1.5, -0.5, 2.25};
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        const Vec3 p = p2_node_position(m, i);
+        uniform.x[static_cast<std::size_t>(d.num_a + i)] =
+            Complex(grad.x * p.x + grad.y * p.y + grad.z * p.z, 0.0);
+    }
+    const FieldOutput uf = compute_fields(m, bnd, d, uniform);
+    double worst_uniform = 0.0;
+    for (int e = 0; e < m.num_edges(); ++e) {
+        const std::size_t mid = static_cast<std::size_t>(d.edge_p2(e));
+        worst_uniform = std::max(worst_uniform, std::abs(uf.e_node[mid][0] + grad.x));
+        worst_uniform = std::max(worst_uniform, std::abs(uf.e_node[mid][2] + grad.z));
+    }
+    check(worst_uniform < 1e-12,
+          "and on a field whose answer is known -- linear Phi, A = 0, so E is constant -- the "
+          "mid-edge value is exact");
+
+    // Phi, by contrast, is never averaged at all: its mid-edge value is a
+    // solved P2 unknown, and the endpoint mean would discard the term that
+    // makes the space second order.
     check(worst_phi > 1e-6,
-          "while the mid-edge Phi is NOT that mean -- it is the solved quadratic value, and "
-          "averaging it would discard the second-order term (largest difference " +
-              std::to_string(worst_phi) + ")");
+          "while the mid-edge Phi is NOT that mean -- it is the solved quadratic value "
+          "(largest difference " + std::to_string(worst_phi) + ")");
 }
 
 
@@ -912,29 +946,27 @@ void test_material_interface_flag() {
           "splitting the mesh into two bodies marks " +
               std::to_string(two.num_interface_nodes) + " nodes");
 
-    // Recomputed independently: a VERTEX is on an interface exactly when the
-    // bodies of its incident tets are not all equal.
-    std::vector<int> seen(static_cast<std::size_t>(m.num_nodes()), -1);
+    // Recomputed independently. A node -- vertex OR mid-edge -- is on an
+    // interface exactly when sigma or mu is not the same across all the tets
+    // that touch IT. Note this is not the same as propagating a vertex's flag
+    // along its edges: an edge running from a conductor-surface vertex out into
+    // the air touches only air tets, so it is uniform and NOT flagged, even
+    // though one of its endpoints is.
+    std::vector<int> seen(static_cast<std::size_t>(d.num_p2_nodes), -1);
     std::vector<unsigned char> want(static_cast<std::size_t>(d.num_p2_nodes), 0);
     for (int t = 0; t < m.num_tets(); ++t) {
-        const int b = bnd.body_of_tet[static_cast<std::size_t>(t)];
-        for (int k = 0; k < 4; ++k) {
-            const std::size_t v = static_cast<std::size_t>(
-                m.tets[static_cast<std::size_t>(t)][static_cast<std::size_t>(k)]);
-            if (seen[v] < 0) {
-                seen[v] = b;
-            } else if (seen[v] != b) {
-                want[v] = 1;
+        const std::size_t ut = static_cast<std::size_t>(t);
+        const int b = bnd.body_of_tet[ut];
+        for (int k = 0; k < 10; ++k) {
+            const std::size_t u = static_cast<std::size_t>(
+                k < 4 ? m.tets[ut][static_cast<std::size_t>(k)]
+                      : d.edge_p2(m.tet_edges[ut][static_cast<std::size_t>(k - 4)]));
+            if (seen[u] < 0) {
+                seen[u] = b;
+            } else if (seen[u] != b) {
+                want[u] = 1;
             }
         }
-    }
-    for (int e = 0; e < m.num_edges(); ++e) {
-        const std::pair<int, int>& ends = m.edges[static_cast<std::size_t>(e)];
-        want[static_cast<std::size_t>(d.edge_p2(e))] =
-            (want[static_cast<std::size_t>(ends.first)] != 0 ||
-             want[static_cast<std::size_t>(ends.second)] != 0)
-                ? 1
-                : 0;
     }
     check(two.on_material_interface == want,
           "and the flag is exactly that set, vertices and mid-edge nodes alike");

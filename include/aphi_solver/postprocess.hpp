@@ -223,9 +223,13 @@ struct FieldOutput {
     /// insulator, which is correct and not a gap.
     std::vector<Vec3C> j_tet;
 
-    /// Total volume of the tets that contributed to each **vertex** (size
-    /// `num_vertices`, not `num_p2_nodes`). Zero means no tet did, which leaves
-    /// that vertex's fields at zero -- an orphan node.
+    /// Total volume of the tets that contributed to each **P2 node** -- size
+    /// `num_p2_nodes`, mid-edge nodes included, since those are accumulated
+    /// directly rather than averaged from their endpoints. Zero means no tet
+    /// reached that node at all, which leaves its fields at zero.
+    ///
+    /// This is `A`'s weight. `E` and `B` have their own, because at a material
+    /// interface each averages over only one side and the three differ.
     std::vector<double> vertex_weight;
 
     /// 1 at a P2 node whose incident tets do **not** all belong to one body.

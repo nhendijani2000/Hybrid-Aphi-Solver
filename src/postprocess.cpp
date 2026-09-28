@@ -1,8 +1,10 @@
 #include "aphi_solver/postprocess.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
+#include <limits>
 #include <chrono>
 #include <cstring>
 #include <stdexcept>
@@ -248,19 +250,49 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
     out.e_node.assign(static_cast<std::size_t>(np), Vec3C{});
     out.j_node.assign(static_cast<std::size_t>(np), Vec3C{});
     out.j_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
-    out.vertex_weight.assign(static_cast<std::size_t>(nv), 0.0);
+    out.vertex_weight.assign(static_cast<std::size_t>(np), 0.0);
     out.on_material_interface.assign(static_cast<std::size_t>(np), 0);
-    // Which body first claimed each vertex; a second, different one marks an
-    // interface.
-    std::vector<int> first_body(static_cast<std::size_t>(nv), -1);
-    // Volume of the CONDUCTING tets at each node, which is J's own weight: it
-    // differs from vertex_weight wherever a conductor meets an insulator.
-    // The material each node reports: the most conducting of the bodies meeting
-    // there. J = sigma E and B = mu H are then held exactly at every node.
-    std::vector<int> node_body(static_cast<std::size_t>(np), -1);
-    auto sigma_of = [&bound](int b) {
-        return b < 0 ? -1.0 : bound.bodies[static_cast<std::size_t>(b)].sigma;
-    };
+
+    // --- which material each node reports -------------------------------------
+    //
+    // A node shared between two materials has no single value for E's normal
+    // component or H's tangential one, so one side has to be chosen. The rule:
+    // the side with the **higher conductivity** for E and J, and the side with
+    // the **higher permeability** for B and H.
+    //
+    // The two can differ, so they are tracked separately: at a copper/air
+    // surface the electrical side is the copper, while the magnetic one is a
+    // tie (mu_r = 1 on both) and no choice is needed at all.
+    //
+    // `min` and `max` together say whether there is any ambiguity: where they
+    // agree, every incident tet has the same property and nothing is excluded.
+    // This pass needs only connectivity, no basis evaluation, so it is cheap.
+    constexpr double kInf = std::numeric_limits<double>::infinity();
+    std::vector<double> sig_min(static_cast<std::size_t>(np), kInf);
+    std::vector<double> sig_max(static_cast<std::size_t>(np), -kInf);
+    std::vector<double> mu_min(static_cast<std::size_t>(np), kInf);
+    std::vector<double> mu_max(static_cast<std::size_t>(np), -kInf);
+
+    for (int t = 0; t < nt; ++t) {
+        const std::size_t ut = static_cast<std::size_t>(t);
+        const BoundBody& bb = bound.bodies[static_cast<std::size_t>(bound.body_of_tet[ut])];
+        const double s = bb.sigma;
+        const double m = kMu0 * bb.mu_r;
+        for (int k = 0; k < 10; ++k) {
+            const std::size_t u = static_cast<std::size_t>(
+                k < 4 ? mesh.tets[ut][static_cast<std::size_t>(k)]
+                      : dofs.edge_p2(mesh.tet_edges[ut][static_cast<std::size_t>(k - 4)]));
+            sig_min[u] = std::min(sig_min[u], s);
+            sig_max[u] = std::max(sig_max[u], s);
+            mu_min[u] = std::min(mu_min[u], m);
+            mu_max[u] = std::max(mu_max[u], m);
+        }
+    }
+
+    // Separate weights: a node on a copper/air surface accumulates E over the
+    // copper tets only, while B may still run over all of them.
+    std::vector<double> e_weight(static_cast<std::size_t>(np), 0.0);
+    std::vector<double> b_weight(static_cast<std::size_t>(np), 0.0);
 
     // Phi is P2 and already exact at its nodes, so it is copied, not rebuilt.
     const NodalPotential phi = potential_at_nodes(mesh, bound, dofs, solution);
@@ -360,116 +392,89 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
         }
         out.e_tet[ut] = mid.second;
 
-        // Volume-weighted accumulation onto the vertices.
-        const double vol = g.volume < 0.0 ? -g.volume : g.volume;
-        for (int c = 0; c < 4; ++c) {
-            const int v = mesh.tets[ut][static_cast<std::size_t>(c)];
-            const std::size_t uv = static_cast<std::size_t>(v);
-            const std::pair<Vec3C, Vec3C> at = evaluate(kCorner[static_cast<std::size_t>(c)]);
-            out.vertex_weight[uv] += vol;
-            for (int i = 0; i < 3; ++i) {
-                const std::size_t ui = static_cast<std::size_t>(i);
-                out.a_node[uv][ui] += vol * at.first[ui];
-                out.e_node[uv][ui] += vol * at.second[ui];
-                out.b_node[uv][ui] += vol * b_const[ui];
-                out.h_node[uv][ui] += vol * nu * b_const[ui];  // overwritten below
-            }
-            // A vertex whose incident tets span more than one body sits on a
-            // material interface, where averaging across the two sides is
-            // meaningless -- see FieldOutput::on_material_interface.
-            if (first_body[uv] < 0) {
-                first_body[uv] = body;
-            } else if (first_body[uv] != body) {
-                out.on_material_interface[uv] = 1;
-            }
-        }
-
-        // Which material a node reports. `J = sigma E` and `B = mu H` are held
-        // EXACTLY at every node, so each node needs one material, and where two
-        // meet the choice is the **most conducting** one. That is the side a
-        // reader is looking for at a conductor surface: the current density
-        // there is a property of the copper, not of the air beside it.
+        // Volume-weighted accumulation onto all ten of the tet's P2 nodes.
         //
-        // The jump across the surface is physical and is kept -- it lives in
-        // `j_tet`, which changes discontinuously from one tet to the next. What
-        // a node cannot do is carry both values at once.
-        for (int c = 0; c < 4; ++c) {
-            const std::size_t uv =
-                static_cast<std::size_t>(mesh.tets[ut][static_cast<std::size_t>(c)]);
-            if (node_body[uv] < 0 || sigma_of(body) > sigma_of(node_body[uv])) {
-                node_body[uv] = body;
+        // Mid-edge nodes are accumulated HERE rather than averaged from their
+        // two endpoints afterwards. The endpoint mean cannot honour the
+        // side-selection above: an edge running from a conductor-surface vertex
+        // out into the air has one endpoint carrying the copper-side field and
+        // one carrying the air's, and their mean is neither. Accumulating
+        // instead gives that midpoint the air's value, correctly -- a
+        // conducting tet's four vertices all lie in the conductor, so such an
+        // edge belongs to no conducting tet at all.
+        const double vol = g.volume < 0.0 ? -g.volume : g.volume;
+        for (int k = 0; k < 10; ++k) {
+            std::array<double, 4> L{};
+            std::size_t u = 0;
+            if (k < 4) {
+                L[static_cast<std::size_t>(k)] = 1.0;
+                u = static_cast<std::size_t>(mesh.tets[ut][static_cast<std::size_t>(k)]);
+            } else {
+                const std::pair<int, int>& lv = kTetLocalEdgeVerts[static_cast<std::size_t>(k - 4)];
+                L[static_cast<std::size_t>(lv.first)] = 0.5;
+                L[static_cast<std::size_t>(lv.second)] = 0.5;
+                u = static_cast<std::size_t>(
+                    dofs.edge_p2(mesh.tet_edges[ut][static_cast<std::size_t>(k - 4)]));
             }
-        }
-        for (int le = 0; le < 6; ++le) {
-            const int ge = mesh.tet_edges[ut][static_cast<std::size_t>(le)];
-            const std::size_t um = static_cast<std::size_t>(dofs.edge_p2(ge));
-            if (node_body[um] < 0 || sigma_of(body) > sigma_of(node_body[um])) {
-                node_body[um] = body;
+            const std::pair<Vec3C, Vec3C> at = evaluate(L);
+
+            // A carries no material, so it averages over everything.
+            out.vertex_weight[u] += vol;
+            for (int i = 0; i < 3; ++i) {
+                out.a_node[u][static_cast<std::size_t>(i)] += vol * at.first[static_cast<std::size_t>(i)];
             }
+
+            // E and J take the MOST CONDUCTING side; B and H the most
+            // PERMEABLE. Where the property is uniform across the node's tets
+            // there is no ambiguity and nothing is excluded.
+            const bool sigma_uniform = sig_min[u] == sig_max[u];
+            const bool mu_uniform = mu_min[u] == mu_max[u];
+            if (sigma_uniform || out.sigma_tet[ut] == sig_max[u]) {
+                e_weight[u] += vol;
+                for (int i = 0; i < 3; ++i) {
+                    out.e_node[u][static_cast<std::size_t>(i)] +=
+                        vol * at.second[static_cast<std::size_t>(i)];
+                }
+            }
+            if (mu_uniform || mu == mu_max[u]) {
+                b_weight[u] += vol;
+                for (int i = 0; i < 3; ++i) {
+                    out.b_node[u][static_cast<std::size_t>(i)] += vol * b_const[static_cast<std::size_t>(i)];
+                }
+            }
+            if (!sigma_uniform || !mu_uniform) out.on_material_interface[u] = 1;
         }
     }
 
-    for (int v = 0; v < nv; ++v) {
-        const std::size_t uv = static_cast<std::size_t>(v);
-        const double w = out.vertex_weight[uv];
-        if (w <= 0.0) {
-            ++out.num_orphan_vertices;
-            continue;
-        }
-        for (int i = 0; i < 3; ++i) {
-            const std::size_t ui = static_cast<std::size_t>(i);
-            out.a_node[uv][ui] /= w;
-            out.b_node[uv][ui] /= w;
-            out.h_node[uv][ui] /= w;
-            out.e_node[uv][ui] /= w;
-        }
-    }
-
-    // The mid-edge nodes: the mean of the two endpoint values.
-    //
-    // `A`, `B`, `H` and `E` have no mid-edge degree of freedom, so there is
-    // nothing to read there and the endpoint mean is the standard
-    // reconstruction. This is exactly what must NOT be done to `Phi`, whose
-    // mid-edge value is a genuine P2 unknown -- see `phi_node`, which is
-    // copied rather than averaged. The asymmetry is the point.
-    //
-    // An edge with an orphan endpoint inherits that endpoint's zero, which is
-    // the same silence a vertex with no incident tet already carries.
-    for (int e = 0; e < ne; ++e) {
-        const std::pair<int, int>& ends = mesh.edges[static_cast<std::size_t>(e)];
-        const std::size_t a0 = static_cast<std::size_t>(ends.first);
-        const std::size_t a1 = static_cast<std::size_t>(ends.second);
-        const std::size_t m = static_cast<std::size_t>(dofs.edge_p2(e));
-        for (int i = 0; i < 3; ++i) {
-            const std::size_t ui = static_cast<std::size_t>(i);
-            out.a_node[m][ui] = 0.5 * (out.a_node[a0][ui] + out.a_node[a1][ui]);
-            out.b_node[m][ui] = 0.5 * (out.b_node[a0][ui] + out.b_node[a1][ui]);
-            out.h_node[m][ui] = 0.5 * (out.h_node[a0][ui] + out.h_node[a1][ui]);
-            out.e_node[m][ui] = 0.5 * (out.e_node[a0][ui] + out.e_node[a1][ui]);
-        }
-        // An edge whose endpoint is on an interface straddles it too.
-        out.on_material_interface[m] =
-            (out.on_material_interface[a0] != 0 || out.on_material_interface[a1] != 0) ? 1 : 0;
-    }
-
-    // The two constitutive relations, applied at the node exactly as written:
+    // Normalise each average by its OWN weight, then apply the two
+    // constitutive relations at the node exactly as written:
     //
     //     J = sigma E          H = B / mu
     //
-    // with sigma and mu those of the node's own material. No averaging of
-    // sigma, no averaging of mu -- a material property has no business being
-    // interpolated. Where two materials meet, `node_body` has chosen the more
-    // conducting one and `on_material_interface` records that a choice was made.
+    // with `sigma` the highest among the node's tets and `mu` likewise. No
+    // averaging of a material property -- only of the fields, and each over
+    // the side its own property selected.
     for (int i = 0; i < np; ++i) {
         const std::size_t u = static_cast<std::size_t>(i);
         if (out.on_material_interface[u] != 0) ++out.num_interface_nodes;
-        const int body = node_body[u];
-        if (body < 0) continue;  // orphan: no incident tet, so no material
-        const BoundBody& nb = bound.bodies[static_cast<std::size_t>(body)];
-        const double nu_node = 1.0 / (kMu0 * nb.mu_r);
+
+        if (out.vertex_weight[u] > 0.0) {
+            for (int k = 0; k < 3; ++k) out.a_node[u][static_cast<std::size_t>(k)] /= out.vertex_weight[u];
+        } else {
+            ++out.num_orphan_vertices;
+            continue;  // no incident tet: no fields, no material, nothing to say
+        }
+        if (e_weight[u] > 0.0) {
+            for (int k = 0; k < 3; ++k) out.e_node[u][static_cast<std::size_t>(k)] /= e_weight[u];
+        }
+        if (b_weight[u] > 0.0) {
+            for (int k = 0; k < 3; ++k) out.b_node[u][static_cast<std::size_t>(k)] /= b_weight[u];
+        }
+
+        const double nu_node = 1.0 / mu_max[u];
         for (int k = 0; k < 3; ++k) {
             const std::size_t uk = static_cast<std::size_t>(k);
-            out.j_node[u][uk] = nb.sigma * out.e_node[u][uk];
+            out.j_node[u][uk] = sig_max[u] * out.e_node[u][uk];
             out.h_node[u][uk] = nu_node * out.b_node[u][uk];
         }
     }
