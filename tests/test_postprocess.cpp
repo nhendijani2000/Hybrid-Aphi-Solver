@@ -1032,6 +1032,133 @@ void test_write_solution() {
     std::remove(path.c_str());
 }
 
+
+// One file per field: each must carry its own and NOT the others.
+//
+// The failure mode a selector invites is a block guarded by the wrong flag, so
+// B_field.vtk quietly ships E as well, or ships nothing. Checking only that the
+// wanted array is present would miss both halves of that, so this checks
+// presence AND absence, for every field against every other.
+void test_field_set_selection() {
+    Mesh m = make_cube();
+    const BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = build_dof_map(bnd, m);
+
+    Solution s;
+    s.conditioning = Conditioning::RowScaled;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.resize(static_cast<std::size_t>(d.num_total));
+    for (int i = 0; i < d.num_total; ++i) {
+        s.x[static_cast<std::size_t>(i)] = Complex(std::sin(0.4 * i), std::cos(0.7 * i));
+    }
+    const NodalPotential p = potential_at_nodes(m, bnd, d, s);
+    const FieldOutput f = compute_fields(m, bnd, d, s);
+
+    struct Case {
+        FieldSet set;
+        const char* name;
+        const char* array;   // the nodal VECTORS this file must have
+        int text_columns;    // index + x,y,z + 6 + iface
+    };
+    const Case cases[] = {
+        {FieldSet::A, "A", "A_real", 11},
+        {FieldSet::B, "B", "B_real", 11},
+        {FieldSet::H, "H", "H_real", 11},
+        {FieldSet::E, "E", "E_real", 11},
+    };
+    const char* every[] = {"A_real", "B_real", "H_real", "E_real"};
+
+    for (const Case& c : cases) {
+        check(std::string(field_set_name(c.set)) == c.name,
+              std::string("field_set_name gives \"") + c.name + "\"");
+
+        // --- the VTK ---
+        const std::string vpath = temp_path((std::string(c.name) + "_field.vtk").c_str());
+        const WriteStats vs = write_vtk(vpath, m, p, s, &f, c.set);
+        check(vs.bytes > 0, std::string(c.name) + "_field.vtk is written");
+
+        std::ifstream vin(vpath);
+        std::string line;
+        std::vector<std::string> arrays;
+        while (std::getline(vin, line)) {
+            std::istringstream row(line);
+            std::string word, name;
+            row >> word >> name;
+            if (word == "VECTORS" || word == "SCALARS") arrays.push_back(name);
+        }
+        vin.close();
+
+        for (const char* a : every) {
+            const bool present =
+                std::find(arrays.begin(), arrays.end(), std::string(a)) != arrays.end();
+            const bool wanted = std::string(a) == c.array;
+            check(present == wanted,
+                  std::string(c.name) + "_field.vtk " + (wanted ? "has " : "does NOT have ") + a);
+        }
+        // Phi belongs to the potential file, not to a field file.
+        check(std::find(arrays.begin(), arrays.end(), std::string("phi_real")) == arrays.end(),
+              std::string(c.name) + "_field.vtk leaves Phi out");
+        // But the interface flag travels with every field, because without it
+        // the nodal values cannot be read safely.
+        check(std::find(arrays.begin(), arrays.end(), std::string("material_interface")) !=
+                  arrays.end(),
+              std::string(c.name) + "_field.vtk still carries material_interface");
+        std::remove(vpath.c_str());
+
+        // --- the text file ---
+        const std::string tpath = temp_path((std::string(c.name) + "_field.out").c_str());
+        const WriteStats ts = write_solution(tpath, p, f, s, c.set);
+        check(ts.nodes == p.size(), std::string(c.name) + "_field.out has a row per node");
+
+        std::ifstream tin(tpath);
+        std::string header;
+        int rows = 0, header_cols = 0, row_cols = 0;
+        while (std::getline(tin, line)) {
+            if (!line.empty() && line[0] == '#') {
+                if (line.rfind("# index ", 0) == 0) header = line;
+                continue;
+            }
+            if (line.empty()) continue;
+            if (rows == 0) {
+                std::istringstream row(line);
+                std::string tok;
+                while (row >> tok) ++row_cols;
+            }
+            ++rows;
+        }
+        tin.close();
+        std::istringstream hs(header.substr(1));
+        std::string h;
+        while (hs >> h) ++header_cols;
+        check(row_cols == c.text_columns,
+              std::string(c.name) + "_field.out carries " + std::to_string(c.text_columns) +
+                  " columns, not the combined 31");
+        check(header_cols == row_cols,
+              std::string(c.name) + "_field.out header names exactly its columns");
+        std::remove(tpath.c_str());
+    }
+
+    // And FieldSet::All still writes everything, so the combined file did not
+    // become a casualty of the split.
+    const std::string apath = temp_path("all.vtk");
+    write_vtk(apath, m, p, s, &f, FieldSet::All);
+    std::ifstream ain(apath);
+    std::string line;
+    int found = 0;
+    while (std::getline(ain, line)) {
+        std::istringstream row(line);
+        std::string word, name;
+        row >> word >> name;
+        for (const char* a : every) {
+            if (name == a) ++found;
+        }
+        if (name == "phi_real") ++found;
+    }
+    ain.close();
+    check(found == 5, "FieldSet::All still writes Phi and all four fields");
+    std::remove(apath.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -1050,6 +1177,7 @@ int main() {
     test_mid_edge_fields_are_endpoint_means_but_phi_is_not();
     test_material_interface_flag();
     test_write_solution();
+    test_field_set_selection();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

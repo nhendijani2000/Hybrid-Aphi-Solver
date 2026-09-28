@@ -247,9 +247,22 @@ struct FieldOutput {
 FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const DofMap& dofs,
                            const Solution& solution);
 
-/// Writes `Φ`, `A`, `B`, `H` and `E` at every P2 node as text -- `fields.out`
-/// by convention. The plan's `WriteSolution`
-/// (`docs/POSTPROCESSING_PLAN.md` §3), in this project's naming.
+/// Which quantity a writer should emit.
+///
+/// One file per field is the default because it is what a reader actually
+/// wants: opening `B_field.vtk` in ParaView gives a source with `B` on it and
+/// nothing else to pick through, and `E_field.out` is a table of `E` rather
+/// than thirty-one columns of which six are `E`. `All` writes the combined
+/// file, which is still the one to open when comparing two fields in a single
+/// ParaView session.
+enum class FieldSet { All, Potential, A, B, H, E };
+
+/// The short name used in filenames and headers: "potential", "A", "B", ...
+const char* field_set_name(FieldSet which);
+
+/// Writes `Φ`, `A`, `B`, `H` and `E` at every P2 node as text -- the plan's
+/// `WriteSolution` (`docs/POSTPROCESSING_PLAN.md` §3), in this project's
+/// naming. `which` selects one field, or `All` for every one of them.
 ///
 /// One line per node: index, position, then each field as a real/imaginary
 /// pair per component, and finally the material-interface flag. Thirty-one
@@ -260,7 +273,8 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
 /// unaveraged quantities. Use this when the values are wanted as numbers rather
 /// than as a picture.
 WriteStats write_solution(const std::string& path, const NodalPotential& potential,
-                          const FieldOutput& fields, const Solution& solution);
+                          const FieldOutput& fields, const Solution& solution,
+                          FieldSet which = FieldSet::All);
 
 /// Writes a legacy VTK unstructured grid for ParaView.
 ///
@@ -287,6 +301,7 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
 /// Cell data: `body_tag`, the mesh's physical-volume tag, so conductor and
 /// insulator can be separated without consulting the input file.
 WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
-                     const Solution& solution, const FieldOutput* fields = nullptr);
+                     const Solution& solution, const FieldOutput* fields = nullptr,
+                     FieldSet which = FieldSet::All);
 
 }  // namespace aphi_solver

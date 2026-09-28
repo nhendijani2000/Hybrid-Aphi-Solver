@@ -79,6 +79,23 @@ The mesh is graded from the conductor surface outward: 2.0 mm at the surface,
 
 ### Viewing
 
+```
+output/
+  potential.out  potential.vtk     Phi
+  A_field.out    A_field.vtk       A   (gauge dependent -- see below)
+  B_field.out    B_field.vtk       B,  plus the exact per-cell B_cell
+  H_field.out    H_field.vtk       H
+  E_field.out    E_field.vtk       E,  plus E_cell and J = sigma E
+```
+
+One file per field, so opening `B_field.vtk` gives a source with `B` on it
+and nothing else to pick through. `potential.vtk` still carries everything,
+for when two fields need to be compared in one ParaView session.
+
+Each `.out` is a plain table: index, position, that field's six real/imaginary
+components, and the interface flag. Each `.vtk` carries the nodal field, its
+magnitude, `material_interface`, and the per-cell array where one exists.
+
 `output/potential.vtk` opens in ParaView. Colour by `E_magnitude` or
 `B_magnitude`, and **threshold `material_interface` to 0 first** -- the nodal
 average straddles the conductor surface and is meaningless there. The per-cell

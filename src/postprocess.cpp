@@ -17,6 +17,18 @@ namespace aphi_solver {
 
 using Complex = std::complex<double>;
 
+const char* field_set_name(FieldSet which) {
+    switch (which) {
+        case FieldSet::Potential: return "potential";
+        case FieldSet::A: return "A";
+        case FieldSet::B: return "B";
+        case FieldSet::H: return "H";
+        case FieldSet::E: return "E";
+        case FieldSet::All: break;
+    }
+    return "fields";
+}
+
 std::complex<double> Solution::phi_scale() const {
     // Only ScaledPhi substitutes. Natural and RowScaled leave the Phi unknown as
     // Phi itself -- RowScaled scales the Phi ROWS, which changes the equations
@@ -476,7 +488,8 @@ WriteStats write_potential(const std::string& path, const NodalPotential& potent
 
 
 WriteStats write_solution(const std::string& path, const NodalPotential& potential,
-                          const FieldOutput& fields, const Solution& solution) {
+                          const FieldOutput& fields, const Solution& solution,
+                          FieldSet which) {
     const auto started = std::chrono::steady_clock::now();
     if (fields.num_nodes() != potential.size()) {
         throw std::invalid_argument(
@@ -496,7 +509,17 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
         TextBuffer buf(f);
         const int n = potential.size();
 
-        buf.put("# fields.out -- Phi, A, B, H and E at every P2 node\n");
+        const bool all = which == FieldSet::All;
+        const bool w_phi = all || which == FieldSet::Potential;
+        const bool w_a = all || which == FieldSet::A;
+        const bool w_b = all || which == FieldSet::B;
+        const bool w_h = all || which == FieldSet::H;
+        const bool w_e = all || which == FieldSet::E;
+
+        buf.put("# ");
+        buf.put(field_set_name(which));
+        buf.put(all ? " -- Phi, A, B, H and E at every P2 node\n"
+                    : " at every P2 node\n");
         buf.put("# A-Phi solver ");
         buf.put(kVersion);
         buf.put("\n# conditioning ");
@@ -532,12 +555,17 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
         buf.put("# E's normal component genuinely jumps across it. Filter on this column.\n");
         buf.put("# Sec. 12. The per-cell arrays in the .vtk have no interface to straddle.\n");
         buf.put("#\n");
-        buf.put("# index x y z  Re(Phi) Im(Phi)"
-                "  Re(Ax) Im(Ax) Re(Ay) Im(Ay) Re(Az) Im(Az)"
-                "  Re(Bx) Im(Bx) Re(By) Im(By) Re(Bz) Im(Bz)"
-                "  Re(Hx) Im(Hx) Re(Hy) Im(Hy) Re(Hz) Im(Hz)"
-                "  Re(Ex) Im(Ex) Re(Ey) Im(Ey) Re(Ez) Im(Ez)"
-                "  iface\n");
+        // The header names exactly the columns the rows below carry. A test
+        // counts the two against each other: in a file this wide, adding a
+        // column to one and not the other still parses, silently mislabelled
+        // from that point on.
+        buf.put("# index x y z");
+        if (w_phi) buf.put("  Re(Phi) Im(Phi)");
+        if (w_a) buf.put("  Re(Ax) Im(Ax) Re(Ay) Im(Ay) Re(Az) Im(Az)");
+        if (w_b) buf.put("  Re(Bx) Im(Bx) Re(By) Im(By) Re(Bz) Im(Bz)");
+        if (w_h) buf.put("  Re(Hx) Im(Hx) Re(Hy) Im(Hy) Re(Hz) Im(Hz)");
+        if (w_e) buf.put("  Re(Ex) Im(Ex) Re(Ey) Im(Ey) Re(Ez) Im(Ez)");
+        buf.put("  iface\n");
 
         auto put_vec = [&buf](const Vec3C& v) {
             for (int k = 0; k < 3; ++k) {
@@ -559,14 +587,16 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
             buf.put(p.y);
             buf.put(' ');
             buf.put(p.z);
-            buf.put(' ');
-            buf.put(fields.phi_node[u].real());
-            buf.put(' ');
-            buf.put(fields.phi_node[u].imag());
-            put_vec(fields.a_node[u]);
-            put_vec(fields.b_node[u]);
-            put_vec(fields.h_node[u]);
-            put_vec(fields.e_node[u]);
+            if (w_phi) {
+                buf.put(' ');
+                buf.put(fields.phi_node[u].real());
+                buf.put(' ');
+                buf.put(fields.phi_node[u].imag());
+            }
+            if (w_a) put_vec(fields.a_node[u]);
+            if (w_b) put_vec(fields.b_node[u]);
+            if (w_h) put_vec(fields.h_node[u]);
+            if (w_e) put_vec(fields.e_node[u]);
             buf.put(' ');
             buf.put(static_cast<int>(fields.on_material_interface[u]));
             buf.put('\n');
@@ -617,7 +647,7 @@ void put_magnitude(TextBuffer& buf, const char* name, const std::vector<Vec3C>& 
 }  // namespace
 
 WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
-                     const Solution& solution, const FieldOutput* fields) {
+                     const Solution& solution, const FieldOutput* fields, FieldSet which) {
     const auto started = std::chrono::steady_clock::now();
     if (potential.size() != mesh.num_nodes() + mesh.num_edges()) {
         throw std::invalid_argument(
@@ -638,8 +668,17 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
         const int np = potential.size();
         const int nc = mesh.num_tets();
 
+        const bool all = which == FieldSet::All;
+        const bool w_phi = all || which == FieldSet::Potential;
+        const bool w_a = all || which == FieldSet::A;
+        const bool w_b = all || which == FieldSet::B;
+        const bool w_h = all || which == FieldSet::H;
+        const bool w_e = all || which == FieldSet::E;
+
         buf.put("# vtk DataFile Version 3.0\n");
-        buf.put("A-Phi potential, conditioning ");
+        buf.put("A-Phi ");
+        buf.put(field_set_name(which));
+        buf.put(", conditioning ");
         buf.put(conditioning_keyword(solution.conditioning));
         buf.put(", omega ");
         buf.put(solution.omega);
@@ -707,57 +746,64 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
                 buf.put(fields->sigma_tet[static_cast<std::size_t>(t)]);
                 buf.put('\n');
             }
-            put_vectors(buf, "B_cell_real", fields->b_tet, nc, true);
-            put_vectors(buf, "B_cell_imag", fields->b_tet, nc, false);
+            if (w_b || w_h) {
+                put_vectors(buf, "B_cell_real", fields->b_tet, nc, true);
+                put_vectors(buf, "B_cell_imag", fields->b_tet, nc, false);
+            }
             // E per cell as well as per node. In an insulator `J` is zero, so
             // without this there is no averaging-free E anywhere outside the
             // conductors -- which is exactly where the nodal one is least
             // trustworthy, since the interface runs along that boundary.
-            put_vectors(buf, "E_cell_real", fields->e_tet, nc, true);
-            put_vectors(buf, "E_cell_imag", fields->e_tet, nc, false);
+            if (w_e) {
+                put_vectors(buf, "E_cell_real", fields->e_tet, nc, true);
+                put_vectors(buf, "E_cell_imag", fields->e_tet, nc, false);
 
-            // J = sigma E, formed per tet because that is where sigma is
-            // single-valued: at a node on a conductor/insulator interface it is
-            // not. Zero throughout an insulator, which is correct and not a gap.
-            std::vector<Vec3C> j(static_cast<std::size_t>(nc), Vec3C{});
-            for (int t = 0; t < nc; ++t) {
-                const std::size_t ut = static_cast<std::size_t>(t);
-                const double s = fields->sigma_tet[ut];
-                for (int k = 0; k < 3; ++k) {
-                    j[ut][static_cast<std::size_t>(k)] =
-                        s * fields->e_tet[ut][static_cast<std::size_t>(k)];
+                // J = sigma E, formed per tet because that is where sigma is
+                // single-valued: at a node on a conductor/insulator interface it
+                // is not. Zero throughout an insulator, which is correct and not
+                // a gap. It travels with E because it IS E, scaled.
+                std::vector<Vec3C> j(static_cast<std::size_t>(nc), Vec3C{});
+                for (int t = 0; t < nc; ++t) {
+                    const std::size_t ut = static_cast<std::size_t>(t);
+                    const double s = fields->sigma_tet[ut];
+                    for (int k = 0; k < 3; ++k) {
+                        j[ut][static_cast<std::size_t>(k)] =
+                            s * fields->e_tet[ut][static_cast<std::size_t>(k)];
+                    }
                 }
+                put_vectors(buf, "J_real", j, nc, true);
+                put_vectors(buf, "J_imag", j, nc, false);
             }
-            put_vectors(buf, "J_real", j, nc, true);
-            put_vectors(buf, "J_imag", j, nc, false);
         }
 
         buf.put("\nPOINT_DATA ");
         buf.put(np);
         buf.put('\n');
 
-        buf.put("SCALARS phi_real double 1\nLOOKUP_TABLE default\n");
-        for (int i = 0; i < np; ++i) {
-            buf.put(potential.value[static_cast<std::size_t>(i)].real());
-            buf.put('\n');
-        }
-        buf.put("\nSCALARS phi_imag double 1\nLOOKUP_TABLE default\n");
-        for (int i = 0; i < np; ++i) {
-            buf.put(potential.value[static_cast<std::size_t>(i)].imag());
-            buf.put('\n');
-        }
-        buf.put("\nSCALARS phi_magnitude double 1\nLOOKUP_TABLE default\n");
-        for (int i = 0; i < np; ++i) {
-            buf.put(std::abs(potential.value[static_cast<std::size_t>(i)]));
-            buf.put('\n');
-        }
-        // Where Phi does not live, the value is zero because there is nothing to
-        // report -- not because the solve found zero volts there. Without this
-        // field a viewer cannot tell those apart.
-        buf.put("\nSCALARS phi_present int 1\nLOOKUP_TABLE default\n");
-        for (int i = 0; i < np; ++i) {
-            buf.put(potential.status[static_cast<std::size_t>(i)] == PhiStatus::Absent ? 0 : 1);
-            buf.put('\n');
+        if (w_phi) {
+            buf.put("SCALARS phi_real double 1\nLOOKUP_TABLE default\n");
+            for (int i = 0; i < np; ++i) {
+                buf.put(potential.value[static_cast<std::size_t>(i)].real());
+                buf.put('\n');
+            }
+            buf.put("\nSCALARS phi_imag double 1\nLOOKUP_TABLE default\n");
+            for (int i = 0; i < np; ++i) {
+                buf.put(potential.value[static_cast<std::size_t>(i)].imag());
+                buf.put('\n');
+            }
+            buf.put("\nSCALARS phi_magnitude double 1\nLOOKUP_TABLE default\n");
+            for (int i = 0; i < np; ++i) {
+                buf.put(std::abs(potential.value[static_cast<std::size_t>(i)]));
+                buf.put('\n');
+            }
+            // Where Phi does not live, the value is zero because there is
+            // nothing to report -- not because the solve found zero volts
+            // there. Without this field a viewer cannot tell those apart.
+            buf.put("\nSCALARS phi_present int 1\nLOOKUP_TABLE default\n");
+            for (int i = 0; i < np; ++i) {
+                buf.put(potential.status[static_cast<std::size_t>(i)] == PhiStatus::Absent ? 0 : 1);
+                buf.put('\n');
+            }
         }
 
         if (fields != nullptr) {
@@ -770,21 +816,30 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
             // A complex phasor at every P2 node, real and imaginary parts as
             // separate VECTORS because the legacy format has no complex type.
             // ParaView's own Calculator can form any combination of them.
-            put_vectors(buf, "A_real", fields->a_node, np, true);
-            put_vectors(buf, "A_imag", fields->a_node, np, false);
-            put_vectors(buf, "B_real", fields->b_node, np, true);
-            put_vectors(buf, "B_imag", fields->b_node, np, false);
-            put_vectors(buf, "H_real", fields->h_node, np, true);
-            put_vectors(buf, "H_imag", fields->h_node, np, false);
-            put_vectors(buf, "E_real", fields->e_node, np, true);
-            put_vectors(buf, "E_imag", fields->e_node, np, false);
-
-            // The phasor amplitude sqrt(|Ex|^2 + |Ey|^2 + |Ez|^2), which is NOT
-            // the length of either the real or the imaginary vector: at a point
-            // where the field is elliptically polarised neither of those is the
-            // physical peak, and this is.
-            put_magnitude(buf, "E_magnitude", fields->e_node, np);
-            put_magnitude(buf, "B_magnitude", fields->b_node, np);
+            // The `*_magnitude` scalars are the phasor amplitude
+            // sqrt(|Xx|^2 + |Xy|^2 + |Xz|^2), which is NOT the length of either
+            // the real or the imaginary vector: where the field is elliptically
+            // polarised neither of those is the physical peak, and this is.
+            if (w_a) {
+                put_vectors(buf, "A_real", fields->a_node, np, true);
+                put_vectors(buf, "A_imag", fields->a_node, np, false);
+                put_magnitude(buf, "A_magnitude", fields->a_node, np);
+            }
+            if (w_b) {
+                put_vectors(buf, "B_real", fields->b_node, np, true);
+                put_vectors(buf, "B_imag", fields->b_node, np, false);
+                put_magnitude(buf, "B_magnitude", fields->b_node, np);
+            }
+            if (w_h) {
+                put_vectors(buf, "H_real", fields->h_node, np, true);
+                put_vectors(buf, "H_imag", fields->h_node, np, false);
+                put_magnitude(buf, "H_magnitude", fields->h_node, np);
+            }
+            if (w_e) {
+                put_vectors(buf, "E_real", fields->e_node, np, true);
+                put_vectors(buf, "E_imag", fields->e_node, np, false);
+                put_magnitude(buf, "E_magnitude", fields->e_node, np);
+            }
 
             // 1 where the nodal average straddles a material interface and the
             // nodal fields are therefore meaningless. Threshold this to 0
