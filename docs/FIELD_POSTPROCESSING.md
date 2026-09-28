@@ -442,3 +442,43 @@ the normal one is not, and `material_interface` marks exactly those nodes.
 
 `j_tet` carries no such error -- it never straddles anything -- and is what
 `tools/pv_extract_rl.py` integrates.
+
+### Why a continuous `A` and `Phi` do not give a continuous `E`
+
+Asked directly, and it is the crux of everything above: if `E = -jw A - grad(Phi)`
+is built from two globally continuous fields, should it not be single-valued at
+a node?
+
+No, and the reason is that neither term is continuous in the way that argument
+needs:
+
+- **`Phi` is continuous; `grad(Phi)` is not.** Only the *tangential* derivative
+  is continuous across a face, because `Phi` is continuous *along* that face.
+  `dPhi/dn` jumps.
+- **`A` is H(curl)-conforming**, which means only its *tangential* component is
+  continuous across a face. The normal component jumps. That is the defining
+  property of Whitney edge elements, not a shortcoming.
+
+So `E` is **tangentially continuous and normally discontinuous by
+construction** -- which is precisely the physics: `E_t` is continuous across any
+interface, `E_n` jumps with the surface charge. A discretisation that produced a
+fully continuous `E` would be *wrong*: it could not represent the surface charge
+that must exist at a copper/air boundary.
+
+Measured on `01_OneCylinder` at 50 Hz, per-tet `E` in a shell straddling the
+conductor surface:
+
+                             cells  |E_normal| V/m  |E_tangential|
+    copper side (sigma > 0)    878        0.004375           8.303
+    air side (sigma = 0)      1220           2.459           7.743
+    ratio air / copper                        562 x           0.932
+
+The normal component jumps by 562x; the tangential agrees to 7 %, which is
+discretisation across a shell of finite thickness rather than a jump.
+
+**`E` is single-valued inside a tet and multi-valued at a node.** A node shared
+by thirty tets gets thirty values, and `e_node` is their volume-weighted mean.
+In a homogeneous region those thirty converge to one limit, so the mean is
+harmless smoothing. At a material interface they converge to **two** limits in
+the normal component, and the mean is a number that is neither. That -- not
+anything in `J` -- is the whole origin of the spurious `Jr` in the table above.
