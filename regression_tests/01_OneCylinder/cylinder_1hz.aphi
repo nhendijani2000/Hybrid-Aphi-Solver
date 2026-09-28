@@ -4,7 +4,7 @@
 #
 #     ../run_case.bat cylinder_1hz.aphi             (from this folder)
 #
-# Everything it writes lands in ./output/.
+# Everything it writes lands in ./output_1hz/.
 #
 # GEOMETRY (cylinder.geo): a = 10 mm, L = 40 mm, box 200 mm, a 36-gon.
 # 4041 nodes, 49276 unknowns; the 50 Hz solve takes about 3 minutes.
