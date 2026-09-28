@@ -1072,3 +1072,23 @@ axisymmetric solution in every band inside the conductor, azimuthal to
 `|B_phi|/|B| = 0.9996`, with 1.8-2.8 % azimuthal scatter that is genuine `O(h)`
 element noise -- no coherent structure above 0.11 %, at any refinement level or
 polygon count tested. Nothing further is known to be wrong with it.
+
+**Smoothed presentation figures.** `make_plots.py` in `02_Ansys_Cylinder_50Hz`
+writes two extra figures, `08_B_magnitude_SMOOTHED.png` and
+`08b_B_magnitude_zoom_SMOOTHED.png`, with `SMOOTH_PRESENT = 1`. They exist so a
+like-for-like comparison against a smoothed commercial plot can be shown without
+anyone mistaking one for the solver's output: each carries a red two-line banner
+reading `SMOOTHED FOR PRESENTATION - 1 pass - NOT solver output`, because a
+figure pulled into a slide deck loses its filename.
+
+The defaults (`04`, `04b`) are unchanged and unsmoothed, and remain the figures
+to read numbers off. `SMOOTH_PASSES` is still 0.
+
+Worth saying plainly: one pass does not transform the appearance. The texture is
+still clearly visible, the ring simply saturates more because the colour range
+rescales to the reduced peak (1.3322 -> 1.2502 T). Smoothing is not a route to
+the Ansys picture; it is only the control needed to compare like with like if
+that picture turns out to be smoothed.
+
+`01_OneCylinder` deliberately does NOT get these figures: the banner quotes cost
+figures measured on case 02's mesh, and they would be wrong there.

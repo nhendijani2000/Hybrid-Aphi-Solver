@@ -127,7 +127,7 @@ def smoothed(src, passes=None):
         cur.ProcessAllArrays = 1
     return cur
 
-def cut(src, normal, origin, only_wire=False):
+def cut(src, normal, origin, only_wire=False, passes=None):
     s = src
     if only_wire:
         s = Threshold(Input=src)
@@ -135,7 +135,7 @@ def cut(src, normal, origin, only_wire=False):
         s.LowerThreshold = 1.0
         s.UpperThreshold = 1.0
         s.ThresholdMethod = "Between"
-    sl = Slice(Input=smoothed(s))
+    sl = Slice(Input=smoothed(s, passes))
     sl.SliceType = "Plane"
     sl.SliceType.Origin = origin
     sl.SliceType.Normal = normal
@@ -336,5 +336,60 @@ gd.Diffuse = 0.0
 legend("J_magnitude", "J magnitude (A/m2)")
 _shown.append(gd)
 shot("07_J_vectors.png")
+
+
+
+# --- 08. SMOOTHED presentation variants, clearly labelled --------------------
+# Commercial tools smooth plotted fields by default, and that is the leading
+# explanation for why their |B| cross-sections look cleaner than ours (see
+# docs/FIELD_POSTPROCESSING.md, "The Ansys comparison, third attempt"). These
+# figures apply one smoothing pass so a like-for-like comparison can be shown.
+#
+# They are NOT the solver's output. MEASURED cost of one pass on this mesh:
+#
+#     sd 1.20-1.49 mm   0.0277 -> 0.0238      14 % less scatter
+#     err 1.20-1.49 mm  +0.54% -> -2.33%      bias grows
+#     displayed peak    1.3322 -> 1.2502 T    -6.2 %
+#
+# Every one carries a banner saying so, because a figure pulled into a slide
+# deck loses its filename. Read numbers off the unsmoothed figures above.
+SMOOTH_PRESENT = 1
+
+
+def banner(text):
+    t = Text(registrationName="banner_%d" % len(_shown))
+    t.Text = text
+    td = Show(t, view, "TextSourceRepresentation")
+    td.WindowLocation = "Upper Left Corner"
+    td.Color = [0.75, 0.05, 0.05]
+    td.FontSize = 15
+    td.Bold = 1
+    try:
+        td.Justification = "Left"    # each line centres on its own otherwise
+    except Exception:
+        pass
+    _shown.append(td)
+    return td
+
+
+_LABEL = ("SMOOTHED FOR PRESENTATION - %d pass - NOT solver output\n"
+          "peak B low by 6.2 pct, band error +0.5 pct to -2.3 pct"
+          % SMOOTH_PRESENT)
+
+clear()
+look(0.5 * W * 1.05)
+surface(cut(b_src, [0, 0, 1], [0, 0, ZMID], passes=SMOOTH_PRESENT),
+        "B_magnitude", "POINTS", "B magnitude (T)")
+GetColorTransferFunction("B_magnitude").MapControlPointsToLinearSpace()
+banner(_LABEL)
+shot("08_B_magnitude_SMOOTHED.png")
+
+clear()
+look(3.0 * A)
+surface(cut(b_src, [0, 0, 1], [0, 0, ZMID], passes=SMOOTH_PRESENT),
+        "B_magnitude", "POINTS", "B magnitude (T)")
+GetColorTransferFunction("B_magnitude").MapControlPointsToLinearSpace()
+banner(_LABEL)
+shot("08b_B_magnitude_zoom_SMOOTHED.png")
 
 print("\n  all figures in %s" % OUT)

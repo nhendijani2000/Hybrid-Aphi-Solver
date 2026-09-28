@@ -125,7 +125,7 @@ def smoothed(src, passes=None):
         cur.ProcessAllArrays = 1
     return cur
 
-def cut(src, normal, origin, only_wire=False):
+def cut(src, normal, origin, only_wire=False, passes=None):
     s = src
     if only_wire:
         s = Threshold(Input=src)
@@ -133,7 +133,7 @@ def cut(src, normal, origin, only_wire=False):
         s.LowerThreshold = 1.0
         s.UpperThreshold = 1.0
         s.ThresholdMethod = "Between"
-    sl = Slice(Input=smoothed(s))
+    sl = Slice(Input=smoothed(s, passes))
     sl.SliceType = "Plane"
     sl.SliceType.Origin = origin
     sl.SliceType.Normal = normal
