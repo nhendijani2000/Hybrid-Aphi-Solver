@@ -563,3 +563,48 @@ with `div(A + grad psi) = 0`, then `A' = A + grad psi`, `Phi' = Phi - j*omega*ps
 -- would make `Phi` unique, shrink `|A|` toward the physical scale, and leave
 every gauge-invariant quantity untouched. It is testable: the BFS and DFS trees
 must then give the same `Phi`.
+
+### What sets Phi's smoothness under tree-cotree, and what does not
+
+The gauge function is `psi(v) = -integral A.dl` along the tree path from the
+root, so for two ADJACENT nodes joined by a cotree edge
+
+    psi(v) - psi(u) = -closed integral A.dl round the fundamental cycle
+                    = -flux enclosed by that cycle
+
+**`psi` jumps between neighbours by exactly the flux their fundamental cycle
+encloses.** Short cycles enclose little and `psi` is smooth; a cycle that runs
+the length of the conductor encloses the whole flux linkage and `psi` jumps
+there by the EMF.
+
+That predicted the seam: the outer boundary is one group, BFS advances inward
+from both caps, the fronts meet at `z = L/2`, and a node there has tree paths
+to OPPOSITE caps. Observed jump across mid height ~0.6 V against an EMF of
+`omega L I = 0.94 V` -- right size, right place.
+
+**The prediction was wrong about the cure.** Re-entering the boundary nodes in
+order of increasing `z`, so the sweep runs from one cap, changed nothing:
+
+    worst |Re(Phi) - z/L|     0.5420  ->  0.5420
+    azimuthal std at mid       0.3243 ->  0.3219
+
+Two reasons, both structural:
+
+1. **BFS from a SET gives every node its nearest boundary point** whatever order
+   the set is queued in. Reordering changes which neighbour is discovered first
+   within a level, not the depth structure, so the fronts still meet where they
+   met before.
+2. **`psi` constant on the whole boundary is forced, not chosen.** `n x A = 0`
+   on every boundary edge means walking along the boundary accumulates no
+   `psi`, so the entire box surface is one equipotential for it -- for any tree.
+
+Since the conductor spans from one boundary face to the other, loops with both
+ends on the boundary enclose the full flux linkage. `psi` must therefore vary by
+~the EMF somewhere inside, and **no choice of spanning tree removes that.** What
+a tree can do is move where the variation sits and whether it is concentrated or
+spread; it cannot make it go away.
+
+So on this geometry, with `flux_tangential` on the whole box and a large flux
+linkage, tree-cotree alone cannot deliver a smooth `Phi`. On the resistive cases
+it can, because the EMF that has to be absorbed is negligible: 1.5e-03 V on the
+0.2 mm wire against a 1 V drive.
