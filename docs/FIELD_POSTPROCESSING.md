@@ -718,3 +718,44 @@ solver produced. Set it knowingly.
 linear polynomial to the per-cell `B` over each node's element patch instead of
 volume-averaging. That gains an order rather than blurring, and unlike smoothing
 it would improve the far field too.
+
+### Patch recovery for `B` was implemented, measured, and removed
+
+Superconvergent patch recovery (Zienkiewicz-Zhu) is the standard answer to a
+low-order recovered field: instead of averaging the per-element values around a
+node, fit a linear polynomial to them and evaluate it at the node. It was
+implemented here -- normal equations assembled in the same pass, one 4x4 per
+node, Cholesky with a fallback to the average on a degenerate patch -- and it
+made `B` **worse**:
+
+    azimuthal sd/mean of |B|, 02_Ansys_Cylinder_50Hz
+
+    r band (mm)     average   plain SPR   SPR, inverse-distance weighted
+    0.75 - 1.50      0.080      0.180            0.170
+    1.50 - 2.25      0.067      0.082            0.081
+    3.00 - 3.75      0.079      0.276            0.262
+
+Weighting the fit toward nearby samples, which is the usual remedy on a graded
+mesh, recovered almost nothing. Splitting the result by node kind ruled out the
+obvious suspect -- a mid-edge node's elements form a near-coplanar ring around
+its edge, but **vertices got worse too** (0.115 against 0.080), so it was not
+patch degeneracy.
+
+Two reasons, both structural rather than tunable:
+
+- **`B` is azimuthal.** Its Cartesian components swing sinusoidally across a
+  patch that subtends real angle around a small conductor. A linear polynomial
+  fits a sinusoid badly and then extrapolates to the node; plain averaging of a
+  rotating vector errs more symmetrically.
+- **`|B|` has a kink at the conductor surface** -- linear in `r` inside, `1/r`
+  outside. One linear fit across that overshoots.
+
+SPR assumes a smooth field sampled on a reasonably uniform mesh. Neither holds
+near a current-carrying conductor. Reverted; `b_node` is the volume-weighted
+average again.
+
+**What would actually work**, and is not implemented: refine the mesh. `B`'s
+error is `O(h)` and the far-field scatter is the mesh being coarse against
+`1/r`, which is a resolution problem with a resolution answer. On this geometry
+that means holding fine elements out to a few radii instead of grading away
+immediately -- affordable only with a solver that takes more than ~80k unknowns.
