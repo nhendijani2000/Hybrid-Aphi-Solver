@@ -81,25 +81,25 @@ The mesh is graded from the conductor surface outward: 2.0 mm at the surface,
 
 ```
 output/
-  potential.out  potential.vtk     Phi
+  potential.out  potential.vtk     Phi (about 67 MB per frequency in total)
   A_field.out    A_field.vtk       A   (gauge dependent -- see below)
   B_field.out    B_field.vtk       B,  plus the exact per-cell B_cell
   H_field.out    H_field.vtk       H
   E_field.out    E_field.vtk       E,  plus E_cell and J = sigma E
 ```
 
-One file per field, so opening `B_field.vtk` gives a source with `B` on it
-and nothing else to pick through. `potential.vtk` still carries everything,
-for when two fields need to be compared in one ParaView session.
+One file per field. There is no combined file: to see two fields together,
+open two of these in the same ParaView session -- they share a mesh, so the
+views line up, and nothing has to be written twice to allow it.
 
 Each `.out` is a plain table: index, position, that field's six real/imaginary
 components, and the interface flag. Each `.vtk` carries the nodal field, its
 magnitude, `material_interface`, and the per-cell array where one exists.
 
-`output/potential.vtk` opens in ParaView. Colour by `E_magnitude` or
-`B_magnitude`, and **threshold `material_interface` to 0 first** -- the nodal
-average straddles the conductor surface and is meaningless there. The per-cell
-arrays (`E_cell_real`, `B_cell_real`, `J_real`) need no such care.
+Colour `E_field.vtk` by `E_magnitude` or `B_field.vtk` by `B_magnitude`, and
+**threshold `material_interface` to 0 first** -- the nodal average straddles
+the conductor surface and is meaningless there. The per-cell arrays
+(`E_cell_real`, `B_cell_real`, `J_real`) need no such care.
 
 Use a **linear** colour scale for `|B|`: a log ramp compresses the `1/r` decay
 and hides the ring entirely. See `docs/POSTPROCESSING_PLAN.md`.
@@ -113,3 +113,34 @@ Copy the shape of `01_OneCylinder`: a `.geo`, a `.aphi` naming it, an
 `[output] directory = output`, and a header comment saying what the answer
 should be and how you know. A case whose expected answer is not written down
 is not a regression test.
+
+### Measured, on the mesh in this folder
+
+`tools/pv_extract_rl.py output` and `tools/pv_ampere.py output`:
+
+    conductor volume     1.250267e-05 m3   exactly the 36-gon
+    terminal current     47269.85 - 136555.16 j A
+    R                    2.263692e-06 ohm
+    R (DC, exact)        2.206425e-06 ohm
+    R_ac / R_dc          1.0260
+
+`R` is **2.60 % above DC**, against **2.67 %** from the exact Kelvin-function
+result `R_ac/R_dc = (u/2)[ber bei' - bei ber']/(ber'^2 + bei'^2)` at
+`u = sqrt(2) a/delta`. That agreement is the point of the geometry: on the old
+0.2 mm wire this rise was about 1e-7 and indistinguishable from nothing.
+
+`|B|` against Ampere's law, per cell, ratio across the whole domain:
+
+     r (mm)        |B| meas   |B| Ampere    ratio
+     0.05 - 0.075    0.9298      0.9319     0.998
+     0.175 - 0.200   2.6619      2.7001     0.986     <- conductor surface
+     0.250 - 0.275   2.1875      2.2022     0.993
+     0.375 - 0.400   1.4919      1.4926     1.000
+
+Linear in `r` inside, `1/r` outside, within 1-3 % throughout.
+
+**Both scripts compare phasor magnitudes.** At 50 Hz here the current is
+`47270 - 136555j`, so `Re(I)` is only 0.327 of `|I|`: comparing `|Re(B)|`
+against `mu0 |I| / (2 pi r)` gives a ratio of 0.33 at every radius and looks
+like the field is three times too small. It is not -- the two sides are
+different quantities. This bit once and is worth not repeating.

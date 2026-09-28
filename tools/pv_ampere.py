@@ -1,38 +1,53 @@
 from paraview.simple import *
 from paraview import servermanager as sm
-import math, os
+import math, os, sys
 
-HERE = r"C:\Research\APhi_Solver_Project_LowFrequency_EDA\APhi_Solver"
-src = LegacyVTKReader(registrationName='p', FileNames=[os.path.join(HERE, 'potential.vtk')])
+HERE = sys.argv[1] if len(sys.argv) > 1 else "."
+A_MM = float(sys.argv[2]) if len(sys.argv) > 2 else 10.0
+I_AMP = float(sys.argv[3]) if len(sys.argv) > 3 else 144505.189
+NGON = int(sys.argv[4]) if len(sys.argv) > 4 else 36
+ZLO = float(sys.argv[5]) if len(sys.argv) > 5 else 16.0e-3
+ZHI = float(sys.argv[6]) if len(sys.argv) > 6 else 24.0e-3
+src = LegacyVTKReader(registrationName="B", FileNames=[os.path.join(HERE, "B_field.vtk")])
 cc = CellCenters(registrationName='cc', Input=src)
 cc.VertexCells = 1
 d = sm.Fetch(cc)
 pts = d.GetPoints()
-B = d.GetPointData().GetArray('B_cell_real')
+BR = d.GetPointData().GetArray('B_cell_real')
+BI = d.GetPointData().GetArray('B_cell_imag')
 n = d.GetNumberOfPoints()
 
-I, a, MU0 = 7205.5168, 2.0e-4, 4e-7 * math.pi
+# The PHASOR magnitude, sqrt(|Bx|^2 + |By|^2 + |Bz|^2), not the length of the
+# real part. At 50 Hz on a 10 mm conductor the current is 47270 - 136555j A:
+# Re(I) is 0.327 of |I|, so comparing |Re(B)| against mu0*|I|/(2 pi r) reports a
+# ratio of 0.33 everywhere and looks like the field is three times too small.
+# It is not; the two sides were simply different quantities.
+
+I, a, MU0 = I_AMP, A_MM * 1e-3, 4e-7 * math.pi
 # The meshed conductor is a 24-gon, so the enclosed-current fraction inside
 # radius r is (area of the 24-gon clipped to r) / (its full area). Near the axis
 # that is just pi r^2 / A_poly until r reaches the apothem.
-apothem = a * math.cos(math.pi / 24.0)
-A_poly = 0.5 * 24 * a * a * math.sin(2.0 * math.pi / 24.0)
+apothem = a * math.cos(math.pi / NGON)
+A_poly = 0.5 * NGON * a * a * math.sin(2.0 * math.pi / NGON)
 
 rows = {}
 for k in range(n):
     x, y, z = pts.GetPoint(k)
-    if z < 4.0e-4 or z > 6.0e-4:      # near mid height, away from the ends
+    if z < ZLO or z > ZHI:            # near mid height, away from the ends
         continue
     r = math.hypot(x, y)
-    bx, by, bz = B.GetTuple(k)
-    mag = math.sqrt(bx * bx + by * by + bz * bz)
-    # B should be purely azimuthal: e_phi = (-y, x, 0)/r
+    rx, ry, rz = BR.GetTuple(k)
+    ix, iy, iz = BI.GetTuple(k)
+    mag = math.sqrt(rx * rx + ix * ix + ry * ry + iy * iy + rz * rz + iz * iz)
+    # B should be purely azimuthal: e_phi = (-y, x, 0)/r. Both parts projected,
+    # then recombined, so these are phasor magnitudes like `mag` above.
     if r > 1e-9:
-        b_phi = (-y * bx + x * by) / r
-        b_rad = (x * bx + y * by) / r
+        b_phi = math.hypot((-y * rx + x * ry) / r, (-y * ix + x * iy) / r)
+        b_rad = math.hypot((x * rx + y * ry) / r, (x * ix + y * iy) / r)
     else:
         b_phi, b_rad = mag, 0.0
-    rows.setdefault(int(r / 2.5e-5), []).append((r, mag, b_phi, b_rad, bz))
+    b_ax = math.hypot(rz, iz)
+    rows.setdefault(int(r / (a / 8.0)), []).append((r, mag, b_phi, b_rad, b_ax))
 
 print("   r range (um)    n     |B| meas      |B| Ampere      ratio    |B_r|/|B|   |B_z|/|B|")
 for kb in sorted(rows):

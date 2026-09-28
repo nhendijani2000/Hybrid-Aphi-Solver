@@ -7,8 +7,8 @@ OUT  = r"C:\Users\nasta\AppData\Local\Temp\claude\C--Research-APhi-Solver-Projec
 ZMID = 5.0e-4
 
 paraview.simple._DisableFirstRenderCameraReset()
-src = LegacyVTKReader(registrationName='potential.vtk',
-                      FileNames=[os.path.join(HERE, 'potential.vtk')])
+src = LegacyVTKReader(registrationName='B_field.vtk',
+                      FileNames=[os.path.join(HERE, 'B_field.vtk')])
 sl = Slice(registrationName='mid', Input=src)
 sl.SliceType = 'Plane'
 sl.SliceType.Origin = [0.0, 0.0, ZMID]

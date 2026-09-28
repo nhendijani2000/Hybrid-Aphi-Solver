@@ -5,8 +5,8 @@ HERE = r"C:\Research\APhi_Solver_Project_LowFrequency_EDA\APhi_Solver"
 OUT  = r"C:\Users\nasta\AppData\Local\Temp\claude\C--Research-APhi-Solver-Project-LowFrequency-EDA\a5512f13-3d9d-427a-9ffb-314df45d376f\scratchpad"
 
 paraview.simple._DisableFirstRenderCameraReset()
-src = LegacyVTKReader(registrationName='potential.vtk',
-                      FileNames=[os.path.join(HERE, 'potential.vtk')])
+src = LegacyVTKReader(registrationName='E_field.vtk',
+                      FileNames=[os.path.join(HERE, 'E_field.vtk')])
 
 wire = Threshold(registrationName='wire', Input=src)
 wire.Scalars = ['CELLS', 'body_tag']

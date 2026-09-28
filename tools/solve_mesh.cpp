@@ -181,7 +181,8 @@ int main(int argc, char** argv) {
                     .count();
             const std::string stem = out_path.substr(0, out_path.size() - 4);
             std::string vtk_path = stem + ".vtk";
-            const WriteStats vs = write_vtk(vtk_path, mesh, nodal, sol, &fields);
+            const WriteStats vs =
+                write_vtk(vtk_path, mesh, nodal, sol, &fields, FieldSet::Potential);
             std::cout << "                wrote " << out_path << "   " << ws.nodes << " nodes, "
                       << ws.bytes / 1024 << " KB, " << ws.milliseconds << " ms\n";
             std::cout << "                fields A,B,H,E at " << fields.num_nodes()
@@ -194,13 +195,13 @@ int main(int argc, char** argv) {
             }
             std::cout << "\n";
             std::cout << "                wrote " << vtk_path << "   " << vs.bytes / 1024
-                      << " KB, " << vs.milliseconds << " ms   (everything, for comparing "
-                      << "two fields in one ParaView session)\n";
+                      << " KB, " << vs.milliseconds << " ms   (Phi)\n";
 
             // One pair of files per field. Opening B_field.vtk gives a source
-            // with B on it and nothing else to pick through, which is what a
-            // reader usually wants; the combined file above is for when two
-            // fields need to be seen together.
+            // with B on it and nothing else to pick through. There is no
+            // combined file: to see two fields together, open two of these in
+            // the same ParaView session -- they share a mesh, so the views line
+            // up, and nothing has to be written twice to allow it.
             const std::string dir = stem.substr(0, stem.find_last_of("/\\") + 1);
             const std::string suffix = stem.substr(dir.size());
             const FieldSet sets[] = {FieldSet::A, FieldSet::B, FieldSet::H, FieldSet::E};

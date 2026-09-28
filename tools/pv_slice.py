@@ -6,23 +6,39 @@ OUT  = r"C:\Users\nasta\AppData\Local\Temp\claude\C--Research-APhi-Solver-Projec
 ZMID = 5.0e-4
 
 paraview.simple._DisableFirstRenderCameraReset()
-src = LegacyVTKReader(registrationName='potential.vtk',
-                      FileNames=[os.path.join(HERE, 'potential.vtk')])
 
-# Horizontal cut at mid height, through the whole box.
-whole = Slice(registrationName='mid plane', Input=src)
-whole.SliceType = 'Plane'
-whole.SliceType.Origin = [0.0, 0.0, ZMID]
-whole.SliceType.Normal = [0.0, 0.0, 1.0]
+# One file per field, so B and E come from two readers. They share a mesh, so
+# the two slices are geometrically identical and the views line up.
+b_src = LegacyVTKReader(registrationName='B_field.vtk',
+                        FileNames=[os.path.join(HERE, 'B_field.vtk')])
+e_src = LegacyVTKReader(registrationName='E_field.vtk',
+                        FileNames=[os.path.join(HERE, 'E_field.vtk')])
 
-# The same cut restricted to the copper.
-wire3d = Threshold(registrationName='wire', Input=src)
-wire3d.Scalars = ['CELLS', 'body_tag']
-wire3d.LowerThreshold = 1.0; wire3d.UpperThreshold = 1.0; wire3d.ThresholdMethod = 'Between'
-wire = Slice(registrationName='wire mid plane', Input=wire3d)
-wire.SliceType = 'Plane'
-wire.SliceType.Origin = [0.0, 0.0, ZMID]
-wire.SliceType.Normal = [0.0, 0.0, 1.0]
+
+def cut(src, tag):
+    """Horizontal cut at mid height, and the same cut restricted to the copper."""
+    whole = Slice(registrationName='mid plane ' + tag, Input=src)
+    whole.SliceType = 'Plane'
+    whole.SliceType.Origin = [0.0, 0.0, ZMID]
+    whole.SliceType.Normal = [0.0, 0.0, 1.0]
+
+    wire3d = Threshold(registrationName='wire ' + tag, Input=src)
+    wire3d.Scalars = ['CELLS', 'body_tag']
+    wire3d.LowerThreshold = 1.0
+    wire3d.UpperThreshold = 1.0
+    wire3d.ThresholdMethod = 'Between'
+    inner = Slice(registrationName='wire mid plane ' + tag, Input=wire3d)
+    inner.SliceType = 'Plane'
+    inner.SliceType.Origin = [0.0, 0.0, ZMID]
+    inner.SliceType.Normal = [0.0, 0.0, 1.0]
+    return whole, inner
+
+
+b_whole, b_wire = cut(b_src, 'B')
+e_whole, e_wire = cut(e_src, 'E')
+
+# The B plots below use the B reader, the E plots the E reader.
+whole, wire = b_whole, b_wire
 
 view = GetActiveViewOrCreate('RenderView')
 view.ViewSize = [980, 900]
@@ -86,7 +102,7 @@ look(1.15e-3)
 draw(whole, 'B_magnitude', 'POINTS', '|B|  [T]', log=True)
 shot('slice_B_domain.png')
 
-draw(whole, 'E_cell_real', 'CELLS', 'Re(E)  [V/m]', comp='Magnitude', log=True)
+draw(e_whole, 'E_cell_real', 'CELLS', 'Re(E)  [V/m]', comp='Magnitude', log=True)
 shot('slice_E_domain.png')
 
 # ---- the wire alone, 0.2 mm radius ------------------------------------------
@@ -94,7 +110,7 @@ look(2.6e-4)
 draw(wire, 'B_magnitude', 'POINTS', '|B|  [T]')
 shot('slice_B_wire.png')
 
-draw(wire, 'E_cell_real', 'CELLS', 'Re(E)  [V/m]', comp='Magnitude')
+draw(e_wire, 'E_cell_real', 'CELLS', 'Re(E)  [V/m]', comp='Magnitude')
 shot('slice_E_wire.png')
 
 # ---- B as vectors, to show the circulation ----------------------------------
