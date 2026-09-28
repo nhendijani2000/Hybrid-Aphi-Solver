@@ -659,3 +659,62 @@ continuous *because* those rods have no skin effect to show.
 Verified on this solver, same mesh and same tree-cotree gauge, at
 `omega*L/R = 0.059`: `Phi` is a smooth gradient, `z/l` to 0.2 %. The
 0.2 mm wire at 50 Hz (`omega*L/R = 8.8e-04`) gives `z/l` to 4e-07.
+
+### Why `B` plots look rougher than `E`, and what smoothing does about it
+
+Raised by comparing our `|B|` cross-section against an Ansys Maxwell one, which
+is visibly smoother. The observation is right and the cause is structural:
+
+    A                first-order Whitney edge element
+    B = curl A    -> CONSTANT per tetrahedron          zero order
+    grad(Phi)     -> LINEAR per tetrahedron            from P2
+    E = -jwA - grad(Phi) -> LINEAR per tetrahedron     one order higher
+
+**`B` is the lowest-order quantity in the formulation.** Measured on
+`02_Ansys_Cylinder_50Hz`, where the problem is axisymmetric so every bit of
+azimuthal scatter is error:
+
+    r band (mm)      |B| sd/mean   |E| sd/mean
+    0.75 - 1.50         0.079        0.0000     <- inside the conductor
+    2.25 - 3.00         0.120        0.070
+    5.25 - 6.00         0.062        0.034
+
+Inside the conductor `E` is exact -- a uniform field lies in the P2 gradient
+space -- while `B` scatters by 8 %.
+
+**Nodal averaging barely helps.** Per-cell against nodal, same bands: 0.091 vs
+0.079, 0.096 vs 0.120, 0.081 vs 0.062. It gains a point or two and in one band
+is worse, because the error is systematic rather than random and averaging mixes
+tets at different radii where `|B| ~ 1/r` changes fast.
+
+**Two presentation controls, in `make_plots.py`.**
+
+`legend(..., bands=11)` discretises the colour map, which is what Ansys plots do
+by default. A continuous ramp renders every wiggle; banding makes the eye read
+contours. It changes no number.
+
+`SMOOTH_PASSES` applies point<->cell round trips, each replacing a node's value
+by an average over its element patch -- what a viewer's "smooth" option does.
+Measured on `|B|`:
+
+    azimuthal sd/mean        raw    1 pass  2 passes  4 passes
+      at the surface       0.080     0.054     0.037     0.020
+      in the far field     0.067     0.064     0.067     0.069
+    mean |B| at surface    1.078 T   1.029     1.010     0.988
+    displayed MAXIMUM      1.28 T      --      1.07        --
+
+It works near the conductor, where the scatter is high-frequency noise, and pays
+for it by **flattening the peak -- 16 % off the displayed maximum at two
+passes**, since clipping extremes costs more than shifting means. In the far
+field it does nothing at all, because that scatter is the mesh being coarse
+against `1/r` (at `r = 3 mm` the elements are 1.2 mm, so `|B|` changes 40 %
+across one cell) and no averaging recovers resolution that was not there.
+
+So smoothing is cosmetic where it helps and useless where it does not.
+`SMOOTH_PASSES` is left at **0**, so a value read off a figure is the value the
+solver produced. Set it knowingly.
+
+**The principled fix, not implemented:** superconvergent patch recovery -- fit a
+linear polynomial to the per-cell `B` over each node's element patch instead of
+volume-averaging. That gains an order rather than blurring, and unlike smoothing
+it would improve the far field too.

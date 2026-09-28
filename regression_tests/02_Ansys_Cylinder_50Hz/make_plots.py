@@ -39,6 +39,24 @@ L = 40.0e-3        # cylinder length
 if not os.path.isdir(OUT):
     os.makedirs(OUT)
 
+# Plot-level smoothing, off by default. Each pass pushes the nodal field onto
+# cells and back, replacing a node's value by an average over its element patch
+# -- what a viewer's "smooth" option does. MEASURED on 02 for |B|:
+#
+#   azimuthal sd/mean        raw    1 pass  2 passes  4 passes
+#     at the surface       0.080     0.054     0.037     0.020
+#     in the far field     0.067     0.064     0.067     0.069
+#   mean |B| at the surface  1.078 T   1.029     1.010     0.988
+#
+# It works near the conductor, where the scatter is high-frequency noise from a
+# piecewise-constant B, and buys that by FLATTENING THE PEAK -- 8.3 % after four
+# passes. In the far field it does nothing, because that scatter is the mesh
+# being coarse against 1/r, which averaging cannot recover.
+#
+# So it is cosmetic where it helps and useless where it does not. Left at 0 so
+# a value read off a figure is the value the solver produced.
+SMOOTH_PASSES = 0
+
 paraview.simple._DisableFirstRenderCameraReset()
 
 
@@ -78,6 +96,17 @@ def clear():
     del _shown[:]
 
 
+def smoothed(src, passes=None):
+    """Apply SMOOTH_PASSES point<->cell round trips. Identity when 0."""
+    n = SMOOTH_PASSES if passes is None else passes
+    cur = src
+    for _ in range(n):
+        p2c = PointDatatoCellData(Input=cur)
+        p2c.ProcessAllArrays = 1
+        cur = CellDatatoPointData(Input=p2c)
+        cur.ProcessAllArrays = 1
+    return cur
+
 def cut(src, normal, origin, only_wire=False):
     s = src
     if only_wire:
@@ -86,16 +115,28 @@ def cut(src, normal, origin, only_wire=False):
         s.LowerThreshold = 1.0
         s.UpperThreshold = 1.0
         s.ThresholdMethod = "Between"
-    sl = Slice(Input=s)
+    sl = Slice(Input=smoothed(s))
     sl.SliceType = "Plane"
     sl.SliceType.Origin = origin
     sl.SliceType.Normal = normal
     return sl
 
 
-def legend(array, title, fmt="{:.3g}"):
+def legend(array, title, fmt="{:.3g}", bands=11):
+    """Banded rather than continuous, which is what Ansys plots do by default.
+
+    A continuous ramp shows every wiggle in the field. B = curl A is CONSTANT
+    per tetrahedron with first-order edge elements -- the lowest-order quantity
+    in the formulation -- so its azimuthal scatter on this mesh is 7-10 % where
+    an axisymmetric problem permits none, and a continuous ramp renders all of
+    it. Banding quantises the map so the eye reads contours instead of texture.
+
+    This is a presentation choice and changes no number. The scatter is still
+    there; see docs/FIELD_POSTPROCESSING.md."""
     lut = GetColorTransferFunction(array)
     lut.ApplyPreset("Jet", True)      # blue low -> red high
+    lut.Discretize = 1
+    lut.NumberOfTableValues = bands
     lut.UseLogScale = 0
     bar = GetScalarBar(lut, view)
     bar.Title = title
