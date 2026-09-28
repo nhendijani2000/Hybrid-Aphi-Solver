@@ -1007,8 +1007,8 @@ void test_write_solution() {
           "the header names exactly as many columns as the rows carry (" +
               std::to_string(header_cols) + " vs " + std::to_string(first_row.size()) +
               ") -- otherwise every column past the mismatch is silently mislabelled");
-    check(first_row.size() == 4u + 2u + 24u + 1u,
-          "index, position, Phi, four complex vectors, and the interface flag");
+    check(first_row.size() == 4u + 2u + 30u + 1u,
+          "index, position, Phi, five complex vectors (A B H E J), and the flag");
 
     // The values are the ones compute_fields produced, not a re-derivation.
     // Column 4 is Re(Phi); the last is the interface flag.
@@ -1065,8 +1065,9 @@ void test_field_set_selection() {
         {FieldSet::B, "B", "B_real", 11},
         {FieldSet::H, "H", "H_real", 11},
         {FieldSet::E, "E", "E_real", 11},
+        {FieldSet::J, "J", "J_real", 11},
     };
-    const char* every[] = {"A_real", "B_real", "H_real", "E_real"};
+    const char* every[] = {"A_real", "B_real", "H_real", "E_real", "J_real"};
 
     for (const Case& c : cases) {
         check(std::string(field_set_name(c.set)) == c.name,
@@ -1155,8 +1156,115 @@ void test_field_set_selection() {
         if (name == "phi_real") ++found;
     }
     ain.close();
-    check(found == 5, "FieldSet::All still writes Phi and all four fields");
+    check(found == 6, "FieldSet::All still writes Phi and all five fields");
     std::remove(apath.c_str());
+}
+
+
+// J = sigma E, and where sigma is not single-valued.
+//
+// The nodal J is the one output whose value depends on a quantity that does not
+// belong to a node at all. Getting it wrong is invisible in a plot -- a wrong
+// sigma just scales the arrows -- so this checks the relation itself.
+void test_current_density() {
+    Mesh m = make_cube();
+    BoundProblem bnd = bind_cube(m, 1e6);
+    const DofMap d = all_free_dofs(m);
+
+    Solution s;
+    s.conditioning = Conditioning::Natural;
+    s.omega = 2.0 * M_PI * 1e6;
+    s.x.resize(static_cast<std::size_t>(d.num_total));
+    for (int i = 0; i < d.num_total; ++i) {
+        s.x[static_cast<std::size_t>(i)] = Complex(std::cos(0.6 * i), std::sin(0.8 * i));
+    }
+
+    // --- one body: sigma is single-valued everywhere, so J = sigma E at EVERY
+    //     node, with nothing excluded.
+    const FieldOutput one = compute_fields(m, bnd, d, s);
+    const double sigma = bnd.bodies[0].sigma;
+    check(sigma > 0.0, "the cube's body conducts, so this test can see anything at all");
+
+    double worst_node = 0.0, worst_tet = 0.0;
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        for (int k = 0; k < 3; ++k) {
+            const std::size_t uk = static_cast<std::size_t>(k);
+            worst_node = std::max(worst_node, std::abs(one.j_node[u][uk] - sigma * one.e_node[u][uk]));
+        }
+    }
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const std::size_t ut = static_cast<std::size_t>(t);
+        for (int k = 0; k < 3; ++k) {
+            const std::size_t uk = static_cast<std::size_t>(k);
+            worst_tet = std::max(worst_tet, std::abs(one.j_tet[ut][uk] - sigma * one.e_tet[ut][uk]));
+        }
+    }
+    check(worst_node == 0.0, "with one body, J = sigma E exactly at every node");
+    check(worst_tet == 0.0, "and exactly in every tet");
+
+    // --- two bodies, one of them an insulator. Now sigma is two-valued at the
+    //     interface, and the nodal J must stand down there rather than pick one.
+    BoundBody insulator = bnd.bodies[0];
+    insulator.name = "B2";
+    insulator.sigma = 0.0;
+    bnd.bodies.push_back(insulator);
+    const int half = m.num_tets() / 2;
+    for (int t = half; t < m.num_tets(); ++t) bnd.body_of_tet[static_cast<std::size_t>(t)] = 1;
+
+    const FieldOutput two = compute_fields(m, bnd, d, s);
+    check(two.num_interface_nodes > 0, "the split creates interface nodes");
+
+    int zeroed = 0, checked = 0;
+    bool interface_is_zero = true, interior_is_sigma_e = true;
+    for (int i = 0; i < d.num_p2_nodes; ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        const bool iface = two.on_material_interface[u] != 0;
+        double mag = 0.0;
+        for (int k = 0; k < 3; ++k) mag += std::abs(two.j_node[u][static_cast<std::size_t>(k)]);
+        if (iface) {
+            if (mag != 0.0) interface_is_zero = false;
+            ++zeroed;
+        } else {
+            ++checked;
+        }
+    }
+    check(interface_is_zero,
+          "J is exactly zero at all " + std::to_string(zeroed) +
+              " interface nodes -- sigma is two-valued there and no single number is right");
+    check(checked > 0, "and there are still " + std::to_string(checked) + " nodes where it is not");
+
+    // In the insulator, sigma is zero, so J must be zero there too -- and that
+    // is a different reason from the interface one, which is why both matter.
+    int insulating_tets = 0;
+    bool insulator_is_zero = true;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const std::size_t ut = static_cast<std::size_t>(t);
+        if (two.sigma_tet[ut] != 0.0) continue;
+        ++insulating_tets;
+        for (int k = 0; k < 3; ++k) {
+            if (two.j_tet[ut][static_cast<std::size_t>(k)] != Complex(0.0, 0.0)) {
+                insulator_is_zero = false;
+            }
+        }
+    }
+    check(insulating_tets > 0 && insulator_is_zero,
+          "J is zero in all " + std::to_string(insulating_tets) +
+              " insulating tets, because sigma is -- not because anything was skipped");
+
+    // And E is NOT zero there, so the two zeros above are genuinely J's and not
+    // a symptom of the whole solution collapsing.
+    double e_in_insulator = 0.0;
+    for (int t = 0; t < m.num_tets(); ++t) {
+        const std::size_t ut = static_cast<std::size_t>(t);
+        if (two.sigma_tet[ut] != 0.0) continue;
+        for (int k = 0; k < 3; ++k) {
+            e_in_insulator =
+                std::max(e_in_insulator, std::abs(two.e_tet[ut][static_cast<std::size_t>(k)]));
+        }
+    }
+    check(e_in_insulator > 0.0,
+          "while E in the insulator is not zero, so J vanishing there is sigma's doing");
 }
 
 }  // namespace
@@ -1178,6 +1286,7 @@ int main() {
     test_material_interface_flag();
     test_write_solution();
     test_field_set_selection();
+    test_current_density();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

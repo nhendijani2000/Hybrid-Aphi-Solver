@@ -384,3 +384,33 @@ is elliptically polarised neither of those is the physical peak.
 
 Carrying both `B_cell` and the nodal `B` is deliberate: the difference between
 them is the smoothing that §7 added, and nothing else makes it visible.
+
+---
+
+## 14. `J = sigma E`, and the one place it is not a nodal quantity
+
+`sigma` belongs to a **body**, so it is single-valued inside a tet and
+two-valued at a node whose incident tets span two bodies. `J` inherits that
+exactly:
+
+| | where it is defined | |
+|---|---|---|
+| `j_tet` | everywhere | `sigma_tet * e_tet`, exact, zero in an insulator |
+| `j_node` | where `on_material_interface == 0` | `sigma * e_node` |
+
+At an interface node `J` genuinely **is** two-valued -- a finite current density
+on the conductor side and zero on the insulator side -- so `j_node` is left at
+zero there rather than picking one, and `on_material_interface` says why. The
+nodal form exists because it plots smoothly; **`j_tet` is the one to integrate**,
+and it is what `tools/pv_extract_rl.py` reads.
+
+A mid-edge node whose flag is 0 takes `sigma` from either endpoint safely: if
+its two endpoints were in different bodies, every tet holding that edge would
+hold both, so both endpoints would themselves be flagged. That is why the code
+reads `first_body` of `mesh.edges[e].first` without checking the other end.
+
+Two distinct zeros meet here and the tests separate them: `J` is zero **in an
+insulator** because `sigma` is, and zero **at an interface node** because
+`sigma` is ambiguous. A test also checks that `E` in the insulator is *not*
+zero, so that the first zero is `sigma`'s doing rather than a collapsed
+solution.

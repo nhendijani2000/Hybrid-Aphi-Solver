@@ -207,6 +207,22 @@ struct FieldOutput {
     ///   that asymmetry is deliberate.
     std::vector<Vec3C> a_node, b_node, h_node, e_node;
 
+    /// `J = sigma E` at every P2 node.
+    ///
+    /// **`sigma` is a property of the tet, not of the node**, so this is only
+    /// defined where a node's incident tets all share one body -- exactly where
+    /// `on_material_interface` is 0. At an interface node `J` is genuinely
+    /// two-valued (a finite current density on the conductor side, zero on the
+    /// insulator side), and no single number is right, so this is left at zero
+    /// there and the flag says why.
+    ///
+    /// `j_tet` has no such trouble and is the one to integrate.
+    std::vector<Vec3C> j_node;
+
+    /// `sigma E` per tet, which is where `J` is unambiguous. Zero throughout an
+    /// insulator, which is correct and not a gap.
+    std::vector<Vec3C> j_tet;
+
     /// Total volume of the tets that contributed to each **vertex** (size
     /// `num_vertices`, not `num_p2_nodes`). Zero means no tet did, which leaves
     /// that vertex's fields at zero -- an orphan node.
@@ -255,7 +271,7 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
 /// than thirty-one columns of which six are `E`. `All` writes the combined
 /// file, which is still the one to open when comparing two fields in a single
 /// ParaView session.
-enum class FieldSet { All, Potential, A, B, H, E };
+enum class FieldSet { All, Potential, A, B, H, E, J };
 
 /// The short name used in filenames and headers: "potential", "A", "B", ...
 const char* field_set_name(FieldSet which);

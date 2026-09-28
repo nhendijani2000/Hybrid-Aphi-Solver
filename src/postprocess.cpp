@@ -24,6 +24,7 @@ const char* field_set_name(FieldSet which) {
         case FieldSet::B: return "B";
         case FieldSet::H: return "H";
         case FieldSet::E: return "E";
+        case FieldSet::J: return "J";
         case FieldSet::All: break;
     }
     return "fields";
@@ -245,6 +246,8 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
     out.b_node.assign(static_cast<std::size_t>(np), Vec3C{});
     out.h_node.assign(static_cast<std::size_t>(np), Vec3C{});
     out.e_node.assign(static_cast<std::size_t>(np), Vec3C{});
+    out.j_node.assign(static_cast<std::size_t>(np), Vec3C{});
+    out.j_tet.assign(static_cast<std::size_t>(nt), Vec3C{});
     out.vertex_weight.assign(static_cast<std::size_t>(nv), 0.0);
     out.on_material_interface.assign(static_cast<std::size_t>(np), 0);
     // Which body first claimed each vertex; a second, different one marks an
@@ -343,6 +346,10 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
 
         const std::pair<Vec3C, Vec3C> mid = evaluate(kCentroid);
         out.a_tet[ut] = mid.first;
+        for (int i = 0; i < 3; ++i) {
+            out.j_tet[ut][static_cast<std::size_t>(i)] =
+                out.sigma_tet[ut] * mid.second[static_cast<std::size_t>(i)];
+        }
         out.e_tet[ut] = mid.second;
 
         // Volume-weighted accumulation onto the vertices.
@@ -413,8 +420,32 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
             (out.on_material_interface[a0] != 0 || out.on_material_interface[a1] != 0) ? 1 : 0;
     }
 
+    // J = sigma E at the nodes, but ONLY where sigma is single-valued.
+    //
+    // A node on a material interface has incident tets in two bodies, so there
+    // is no one sigma to multiply by: J really is two-valued there, finite on
+    // the conductor side and zero on the insulator side. Left at zero, with
+    // on_material_interface saying why. j_tet is the unambiguous one.
+    //
+    // A mid-edge node whose flag is 0 is safe to take from either endpoint: if
+    // its two endpoints were in different bodies, every tet holding that edge
+    // would hold both, so both endpoints would themselves be flagged.
+    std::vector<double> body_sigma(bound.bodies.size(), 0.0);
+    for (std::size_t b = 0; b < bound.bodies.size(); ++b) body_sigma[b] = bound.bodies[b].sigma;
+
     for (int i = 0; i < np; ++i) {
-        if (out.on_material_interface[static_cast<std::size_t>(i)] != 0) ++out.num_interface_nodes;
+        const std::size_t u = static_cast<std::size_t>(i);
+        if (out.on_material_interface[u] != 0) {
+            ++out.num_interface_nodes;
+            continue;
+        }
+        const int v = i < nv ? i : mesh.edges[static_cast<std::size_t>(i - nv)].first;
+        const int body = first_body[static_cast<std::size_t>(v)];
+        if (body < 0) continue;  // orphan: no incident tet, so no sigma either
+        const double s = body_sigma[static_cast<std::size_t>(body)];
+        for (int k = 0; k < 3; ++k) {
+            out.j_node[u][static_cast<std::size_t>(k)] = s * out.e_node[u][static_cast<std::size_t>(k)];
+        }
     }
 
     return out;
@@ -515,6 +546,7 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
         const bool w_b = all || which == FieldSet::B;
         const bool w_h = all || which == FieldSet::H;
         const bool w_e = all || which == FieldSet::E;
+        const bool w_j = all || which == FieldSet::J;
 
         buf.put("# ");
         buf.put(field_set_name(which));
@@ -565,6 +597,7 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
         if (w_b) buf.put("  Re(Bx) Im(Bx) Re(By) Im(By) Re(Bz) Im(Bz)");
         if (w_h) buf.put("  Re(Hx) Im(Hx) Re(Hy) Im(Hy) Re(Hz) Im(Hz)");
         if (w_e) buf.put("  Re(Ex) Im(Ex) Re(Ey) Im(Ey) Re(Ez) Im(Ez)");
+        if (w_j) buf.put("  Re(Jx) Im(Jx) Re(Jy) Im(Jy) Re(Jz) Im(Jz)");
         buf.put("  iface\n");
 
         auto put_vec = [&buf](const Vec3C& v) {
@@ -597,6 +630,7 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
             if (w_b) put_vec(fields.b_node[u]);
             if (w_h) put_vec(fields.h_node[u]);
             if (w_e) put_vec(fields.e_node[u]);
+            if (w_j) put_vec(fields.j_node[u]);
             buf.put(' ');
             buf.put(static_cast<int>(fields.on_material_interface[u]));
             buf.put('\n');
@@ -674,6 +708,7 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
         const bool w_b = all || which == FieldSet::B;
         const bool w_h = all || which == FieldSet::H;
         const bool w_e = all || which == FieldSet::E;
+        const bool w_j = all || which == FieldSet::J;
 
         buf.put("# vtk DataFile Version 3.0\n");
         buf.put("A-Phi ");
@@ -757,22 +792,14 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
             if (w_e) {
                 put_vectors(buf, "E_cell_real", fields->e_tet, nc, true);
                 put_vectors(buf, "E_cell_imag", fields->e_tet, nc, false);
-
-                // J = sigma E, formed per tet because that is where sigma is
-                // single-valued: at a node on a conductor/insulator interface it
-                // is not. Zero throughout an insulator, which is correct and not
-                // a gap. It travels with E because it IS E, scaled.
-                std::vector<Vec3C> j(static_cast<std::size_t>(nc), Vec3C{});
-                for (int t = 0; t < nc; ++t) {
-                    const std::size_t ut = static_cast<std::size_t>(t);
-                    const double s = fields->sigma_tet[ut];
-                    for (int k = 0; k < 3; ++k) {
-                        j[ut][static_cast<std::size_t>(k)] =
-                            s * fields->e_tet[ut][static_cast<std::size_t>(k)];
-                    }
-                }
-                put_vectors(buf, "J_real", j, nc, true);
-                put_vectors(buf, "J_imag", j, nc, false);
+            }
+            if (w_j) {
+                // Per tet is where `J` is unambiguous: `sigma` belongs to the
+                // body, so inside a tet there is one value and at a node on a
+                // material interface there are two. Integrate these, not the
+                // nodal ones.
+                put_vectors(buf, "J_cell_real", fields->j_tet, nc, true);
+                put_vectors(buf, "J_cell_imag", fields->j_tet, nc, false);
             }
         }
 
@@ -839,6 +866,14 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
                 put_vectors(buf, "E_real", fields->e_node, np, true);
                 put_vectors(buf, "E_imag", fields->e_node, np, false);
                 put_magnitude(buf, "E_magnitude", fields->e_node, np);
+            }
+            if (w_j) {
+                // Zero at every interface node, because sigma is two-valued
+                // there -- `material_interface` below marks exactly those, and
+                // `J_cell_*` above is the version with no such gap.
+                put_vectors(buf, "J_real", fields->j_node, np, true);
+                put_vectors(buf, "J_imag", fields->j_node, np, false);
+                put_magnitude(buf, "J_magnitude", fields->j_node, np);
             }
 
             // 1 where the nodal average straddles a material interface and the

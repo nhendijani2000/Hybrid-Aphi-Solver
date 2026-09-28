@@ -5,7 +5,7 @@
 Defaults are regression_tests/01_OneCylinder: a = 10 mm, L = 40 mm, a 36-gon,
 driven by 1 V at 50 Hz.
 
-Reads E_field.vtk, which carries the per-cell J. Per-cell is the only place J
+Reads J_field.vtk, which carries the per-cell J. Per-cell is the only place J
 is defined: sigma is single-valued inside a tet and is not at a node on a
 conductor/insulator boundary.
 
@@ -31,11 +31,11 @@ NGON = int(sys.argv[4]) if len(sys.argv) > 4 else 36
 VOLT = float(sys.argv[5]) if len(sys.argv) > 5 else 1.0
 FREQ = float(sys.argv[6]) if len(sys.argv) > 6 else 50.0
 
-vtk = os.path.join(HERE, "E_field.vtk")
+vtk = os.path.join(HERE, "J_field.vtk")
 if not os.path.exists(vtk):
     raise SystemExit("no such file: %s\nrun the case first" % vtk)
 
-src = LegacyVTKReader(registrationName="E", FileNames=[vtk])
+src = LegacyVTKReader(registrationName="J", FileNames=[vtk])
 wire = Threshold(registrationName="wire", Input=src)
 wire.Scalars = ["CELLS", "body_tag"]
 wire.LowerThreshold = 1.0
@@ -47,8 +47,8 @@ iv.DivideCellDataByVolume = 0
 data = sm.Fetch(iv)
 cd = data.GetCellData()
 vol = cd.GetArray("Volume").GetValue(0)
-jr = cd.GetArray("J_real").GetTuple(0)
-ji = cd.GetArray("J_imag").GetTuple(0)
+jr = cd.GetArray("J_cell_real").GetTuple(0)
+ji = cd.GetArray("J_cell_imag").GetTuple(0)
 
 a = A_MM * 1e-3
 L = L_MM * 1e-3

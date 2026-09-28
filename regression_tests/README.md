@@ -85,7 +85,8 @@ output/
   A_field.out    A_field.vtk       A   (gauge dependent -- see below)
   B_field.out    B_field.vtk       B,  plus the exact per-cell B_cell
   H_field.out    H_field.vtk       H
-  E_field.out    E_field.vtk       E,  plus E_cell and J = sigma E
+  E_field.out    E_field.vtk       E,  plus the exact per-cell E_cell
+  J_field.out    J_field.vtk       J = sigma E, nodal and per-cell
 ```
 
 One file per field. There is no combined file: to see two fields together,

@@ -204,7 +204,8 @@ int main(int argc, char** argv) {
             // up, and nothing has to be written twice to allow it.
             const std::string dir = stem.substr(0, stem.find_last_of("/\\") + 1);
             const std::string suffix = stem.substr(dir.size());
-            const FieldSet sets[] = {FieldSet::A, FieldSet::B, FieldSet::H, FieldSet::E};
+            const FieldSet sets[] = {FieldSet::A, FieldSet::B, FieldSet::H, FieldSet::E,
+                                     FieldSet::J};
             for (const FieldSet fset : sets) {
                 const std::string base =
                     dir + field_set_name(fset) + "_field" +
