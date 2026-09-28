@@ -685,3 +685,25 @@ mesh graded to the surface, which `tools/cylinder_box.geo` does not do.
 
 So: the shape is reproduced and the mechanism is right; the contrast is a mesh
 question, not a formulation one.
+
+### L and R across two frequencies, which validates both
+
+Running the same geometry at 1 Hz and 50 Hz gives two impedances, and the pair
+checks things neither alone could:
+
+    1 Hz    Z = 2.206449e-06 + 1.309408e-07j ohm    L = 20.8399 nH
+    50 Hz   Z = 2.263692e-06 + 6.539450e-06j ohm    L = 20.8157 nH
+
+**`L` agrees to 0.1 %** across a 50x change in frequency. `L` is a geometric
+quantity and must not depend on frequency, so this is the first real check on
+it -- the earlier 1.12 % comparison was against an approximate analytic target,
+which tested the target as much as the solver.
+
+**`R` at 1 Hz matches the DC exact value to 1.1e-05 relative**
+(2.206449e-06 against `l/(sigma A_poly)` = 2.206425e-06). At 1 Hz the skin
+effect is negligible (`a/delta = 0.15`), so `R` must equal `R_dc`, and it does
+to five figures.
+
+At 50 Hz `R` rises to 2.263692e-06, which is `R_ac/R_dc = 1.0260` against the
+Kelvin-function 1.0267. So the same two runs validate the DC resistance, the AC
+correction, and the frequency-independence of `L`.

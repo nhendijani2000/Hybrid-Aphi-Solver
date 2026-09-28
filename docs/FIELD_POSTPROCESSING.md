@@ -503,7 +503,7 @@ same solver, same gauge, changing only the frequency:
 
     f       omega*L/R    worst |Re(Phi) - z/L|    profile at z/L = .15 .35 .55 .75 .95
     1 Hz      0.059            0.0021            0.150  0.352  0.553  0.754  0.961
-    50 Hz     2.96             0.5420            0.021  0.048  0.633  0.973  0.994
+    50 Hz     2.889            0.5420            0.021  0.048  0.633  0.973  0.994
 
 At 1 Hz `Phi` is `z/l` to 0.2 %. At 50 Hz the same geometry is not a resistor:
 of the 1 V applied, 0.33 V is resistive drop and 0.94 V is inductive EMF, in
@@ -624,10 +624,31 @@ same way. From the Maxwell case's own reported terminal impedance,
 
                     a        a/delta @50Hz    omega*L/R
     Maxwell rods   ~1.26 mm      0.13           0.036
-    this case      10 mm         1.07           2.96
+    this case      10 mm         1.07           2.889
 
-Scaling by `a^2`: `(10/1.26)^2 = 63`, and `0.036 * 63 = 2.3` against the measured
-2.96. Both cases sit where their geometry puts them.
+Two independent routes to the Maxwell conductor's radius agree, which is the
+check worth making rather than the `a^2` extrapolation:
+
+    from R = 3.4575e-04 ohm and a ~100 mm length        1.26 mm
+    from the omega*L/R ratio and a^2 scaling            1.11 mm
+
+13 % apart, from inputs that share nothing -- one uses only resistance and
+geometry, the other only the impedance phase. Running the scaling the other way
+gives `0.0358 * (10/1.26)^2 = 2.26` against the measured 2.889, about 22 % out,
+which is the accuracy to expect when the length is a guess and the two
+geometries differ in their external-inductance factors. Order of magnitude is
+the claim; the radius agreement above is the evidence.
+
+**`omega*L/R` is `Im(Z)/Re(Z)`**, the phase of the terminal impedance, so it
+needs no inductance model -- which is why it can be quoted before `L` is
+validated. Both parts come from the same measured `Z = V/I`. An earlier version
+of this document quoted 2.96, which divided `Im(Z)` by the **DC** resistance
+while using the measured one for the Maxwell case: a mismatch that flattered the
+comparison. Consistently, both are `Im/Re`:
+
+    this case, 50 Hz    Z = 2.263692e-06 + 6.539450e-06j    Im/Re = 2.889
+    this case,  1 Hz    Z = 2.206449e-06 + 1.309408e-07j    Im/Re = 0.0593
+    Maxwell rods        Z = 3.4575e-04   + 1.2395e-05j      Im/Re = 0.0358
 
 **`a/delta` and `omega*L/R` are the same parameter.** Making the skin effect
 visible (`a/delta >~ 1`) necessarily makes the structure inductive

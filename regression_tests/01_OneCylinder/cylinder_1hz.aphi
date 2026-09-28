@@ -28,7 +28,7 @@
 # pi*a^2 = 314.16. Compare R against the POLYGON, not the circle.
 # WHY THIS CASE EXISTS
 #
-# The 50 Hz case has omega*L/R = 2.96: of the 1 V applied, 0.33 V is resistive
+# The 50 Hz case has omega*L/R = 2.889: of the 1 V applied, 0.33 V is resistive
 # drop and 0.94 V is inductive EMF, in quadrature. In that regime Phi is NOT
 # z/L, and the split between grad(Phi) and j*omega*A is fixed by the gauge --
 # change the spanning tree and Phi moves by 0.75 V while E moves by 1e-11.
