@@ -153,6 +153,9 @@ int main(int argc, char** argv) {
         std::cout << "A-Phi solver " << kVersion << " -- solve_mesh\n\n";
         std::cout << "input         " << argv[1] << "\n";
         std::cout << "mesh          " << p.mesh_file << "   " << mesh.num_tets() << " tets\n";
+        std::cout << "backend       " << solver_backend_keyword(p.backend)
+                  << (p.backend == SolverBackend::Internal ? "   (this project's LDL^T)\n"
+                                                           : "   (MUMPS)\n");
         std::cout << "conditioning  " << conditioning_keyword(p.conditioning)
                   << "   (symmetric, upper triangle stored)\n";
         std::cout << "unknowns      " << dofs.num_total << "   " << pattern.nnz()

@@ -42,6 +42,43 @@ target_include_directories(aphi_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
+
+# ---------------------------------------------------------------------------
+# Optional MUMPS backend. OFF by default, and that default is the point: a
+# clean checkout builds and runs the whole suite with nothing installed.
+# SOLVER_PLAN.md Sec. 12. With it OFF, `backend = mumps` in an input file is a
+# clear parse error rather than a silent fall back to the internal solver.
+#
+#     cmake -S . -B build -DAPHI_WITH_MUMPS=ON -DMUMPS_ROOT=<prefix>
+#
+# MUMPS is Fortran and needs BLAS/LAPACK, so this wants a Fortran toolchain
+# present. See docs/LINEAR_SOLVER.md for what that costs on Windows.
+option(APHI_WITH_MUMPS "Link the MUMPS sparse direct solver as an optional backend" OFF)
+if(APHI_WITH_MUMPS)
+    find_package(MUMPS COMPONENTS zmumps)
+    if(NOT MUMPS_FOUND)
+        find_library(MUMPS_ZMUMPS_LIB NAMES zmumps HINTS ${MUMPS_ROOT}/lib)
+        find_path(MUMPS_INCLUDE_DIR NAMES zmumps_c.h HINTS ${MUMPS_ROOT}/include)
+        if(NOT MUMPS_ZMUMPS_LIB OR NOT MUMPS_INCLUDE_DIR)
+            message(FATAL_ERROR
+                "APHI_WITH_MUMPS=ON but zmumps was not found. Set MUMPS_ROOT to the "
+                "install prefix that holds include/zmumps_c.h and lib/zmumps.*, or turn "
+                "the option back OFF to build with the internal solver only.")
+        endif()
+    endif()
+    target_compile_definitions(aphi_core PUBLIC APHI_WITH_MUMPS)
+    target_sources(aphi_core PRIVATE src/mumps_backend.cpp)
+    if(MUMPS_FOUND)
+        target_link_libraries(aphi_core PUBLIC MUMPS::zmumps)
+    else()
+        target_include_directories(aphi_core PUBLIC ${MUMPS_INCLUDE_DIR})
+        target_link_libraries(aphi_core PUBLIC ${MUMPS_ZMUMPS_LIB})
+    endif()
+    message(STATUS "MUMPS backend: ENABLED")
+else()
+    message(STATUS "MUMPS backend: off (internal solver only)")
+endif()
+
 # Command-line driver
 add_executable(aphi_solver src/main.cpp)
 target_link_libraries(aphi_solver PRIVATE aphi_core)

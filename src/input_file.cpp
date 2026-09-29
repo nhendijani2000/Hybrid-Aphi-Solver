@@ -456,7 +456,7 @@ void Parser::read_boundary(const Section& s) {
 }
 
 void Parser::read_solver(const Section& s) {
-    reject_unknown_keys(s, {"conditioning"});
+    reject_unknown_keys(s, {"conditioning", "backend"});
     if (const Entry* e = find(s, "conditioning")) {
         const std::string word = as_keyword(*e, {"natural", "row_scaled", "scaled_phi"});
         Conditioning picked = Conditioning::Natural;
@@ -465,6 +465,23 @@ void Parser::read_solver(const Section& s) {
         }
         result_.problem.conditioning = picked;
         conditioning_line_ = e->line;
+    }
+    if (const Entry* e = find(s, "backend")) {
+        const std::string word = as_keyword(*e, {"internal", "mumps"});
+        SolverBackend picked = SolverBackend::Internal;
+        if (!solver_backend_from_keyword(word, picked)) {
+            fail(e->line, "'backend = " + word + "' is not one I know");
+        }
+        // Refused at PARSE time rather than silently falling back. A run that
+        // quietly used a different factorization than the one asked for would
+        // invalidate any timing comparison made with it -- which is the main
+        // reason for having the option.
+        if (!solver_backend_available(picked)) {
+            fail(e->line, "'backend = " + word +
+                              "' needs a build configured with -DAPHI_WITH_MUMPS=ON; this one "
+                              "was not. Remove the line to use the internal solver.");
+        }
+        result_.problem.backend = picked;
     }
 }
 

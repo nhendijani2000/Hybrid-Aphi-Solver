@@ -69,6 +69,29 @@ bool conditioning_from_keyword(const std::string& word, Conditioning& out);
 /// True for the two that need `j*omega` and so cannot be used at DC.
 bool conditioning_needs_ac(Conditioning c);
 
+/// Which factorization does the work.
+///
+/// `Internal` is this project's own LDL^T and is the DEFAULT, deliberately:
+/// a clean checkout builds and runs the whole suite with nothing installed.
+/// See SOLVER_PLAN.md Sec. 12 -- having a library available as an option is a
+/// different thing from depending on one.
+///
+/// `Mumps` is only selectable in a build configured with `-DAPHI_WITH_MUMPS=ON`.
+/// Asking for it in a build without it is a clear error at load time, not a
+/// silent fall back to the internal solver: a run that quietly used a different
+/// factorization than the one asked for would invalidate any timing comparison
+/// made with it, which is the main reason to have the option at all.
+enum class SolverBackend {
+    Internal,  ///< this project's LDL^T. Always available.
+    Mumps      ///< MUMPS complex symmetric indefinite. Needs APHI_WITH_MUMPS.
+};
+
+const char* solver_backend_keyword(SolverBackend b);
+bool solver_backend_from_keyword(const std::string& word, SolverBackend& out);
+
+/// True when this build can actually run that backend.
+bool solver_backend_available(SolverBackend b);
+
 /// Treatment of the outer domain boundary. Only one value today; the enum
 /// exists so adding PEC and ABC later is a new enumerator rather than a
 /// change of representation.
@@ -184,6 +207,9 @@ struct Problem {
     /// and choosing between the three is a measurement nobody can make until
     /// a solver reports a condition number (ASSEMBLY_PLAN Sec. 9 item 5).
     Conditioning conditioning = Conditioning::Natural;
+
+    /// `[solver] backend`. Internal unless the file says otherwise.
+    SolverBackend backend = SolverBackend::Internal;
 
     std::vector<Body> bodies;
     std::vector<Port> ports;

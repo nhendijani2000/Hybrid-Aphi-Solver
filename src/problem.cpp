@@ -95,6 +95,34 @@ bool conditioning_from_keyword(const std::string& word, Conditioning& out) {
 
 bool conditioning_needs_ac(Conditioning c) { return c != Conditioning::Natural; }
 
+const char* solver_backend_keyword(SolverBackend b) {
+    switch (b) {
+        case SolverBackend::Internal: return "internal";
+        case SolverBackend::Mumps: return "mumps";
+    }
+    return "internal";
+}
+
+bool solver_backend_from_keyword(const std::string& word, SolverBackend& out) {
+    if (word == "internal") { out = SolverBackend::Internal; return true; }
+    if (word == "mumps") { out = SolverBackend::Mumps; return true; }
+    return false;
+}
+
+bool solver_backend_available(SolverBackend b) {
+    switch (b) {
+        case SolverBackend::Internal:
+            return true;  // always; that is the point of it being the default
+        case SolverBackend::Mumps:
+#ifdef APHI_WITH_MUMPS
+            return true;
+#else
+            return false;
+#endif
+    }
+    return false;
+}
+
 bool phi_on_conductors_only(const Problem& problem) {
     return problem.type == AnalysisType::DC || problem.formulation == Formulation::Reduced;
 }
