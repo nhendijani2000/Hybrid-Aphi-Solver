@@ -130,13 +130,43 @@ struct WriteStats {
     double milliseconds = 0.0;
 };
 
+/// What produced a result file.
+///
+/// Written into the header of every `.out` so a file says how it was made:
+/// which mesh and input, how many unknowns, how well the solve converged and
+/// what each stage cost. Without it a result file is undated and unattributed,
+/// and two runs on different meshes are indistinguishable once the console has
+/// scrolled away -- which is exactly the position a mesh comparison leaves you
+/// in.
+///
+/// Optional everywhere. Passing `nullptr` writes the old header unchanged, so
+/// the writers stay usable from tests that have no solve behind them.
+struct RunInfo {
+    std::string input_file;   ///< the .aphi that was run
+    std::string mesh_file;    ///< the .msh it named
+    std::string ordering;     ///< natural | rcm | amd
+    int num_tets = 0;
+    int unknowns = 0;         ///< the size of the linear system
+    int free_edges = 0;       ///< A degrees of freedom actually solved
+    int tree_edges = 0;       ///< zeroed by the tree-cotree gauge
+    int dirichlet_edges = 0;  ///< pinned by n x A = 0
+    std::size_t stored_nonzeros = 0;
+    std::size_t factor_nnz = 0;  ///< nnz(L); the fill-in, and the memory driver
+    double backward_error = 0.0;
+    double residual = 0.0;
+    double assemble_ms = 0.0;
+    double analyze_ms = 0.0;
+    double factorize_ms = 0.0;
+    double solve_ms = 0.0;
+};
+
 /// Writes the nodal potential to `path` -- `potential.out` by convention.
 ///
 /// One line per P2 node: index, position, `Re(Φ)`, `Im(Φ)`, and a one-character
 /// status so a reader can tell a solved value from a prescribed one, and can see
 /// which nodes are on a cut and therefore discontinuous.
 WriteStats write_potential(const std::string& path, const NodalPotential& potential,
-                           const Solution& solution);
+                           const Solution& solution, const RunInfo* run = nullptr);
 
 
 /// VTK's node order for a quadratic tetrahedron (`VTK_QUADRATIC_TETRA`, type
@@ -294,7 +324,7 @@ const char* field_set_name(FieldSet which);
 /// than as a picture.
 WriteStats write_solution(const std::string& path, const NodalPotential& potential,
                           const FieldOutput& fields, const Solution& solution,
-                          FieldSet which = FieldSet::All);
+                          FieldSet which = FieldSet::All, const RunInfo* run = nullptr);
 
 /// Writes a legacy VTK unstructured grid for ParaView.
 ///
@@ -322,6 +352,6 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
 /// insulator can be separated without consulting the input file.
 WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
                      const Solution& solution, const FieldOutput* fields = nullptr,
-                     FieldSet which = FieldSet::All);
+                     FieldSet which = FieldSet::All, const RunInfo* run = nullptr);
 
 }  // namespace aphi_solver

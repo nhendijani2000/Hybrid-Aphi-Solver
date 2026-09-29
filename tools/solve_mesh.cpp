@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    const Clock::time_point run_started = Clock::now();
     try {
         const ParseResult parsed = parse_input_file(argv[1]);
         const Problem& p = parsed.problem;
@@ -95,8 +96,8 @@ int main(int argc, char** argv) {
         // the gradient nullspace unpinned, so A can grow in those directions
         // while B = curl A stays correct and every residual looks fine.
         // A genuine spanning tree has exactly (nodes - components) edges.
+        int tree = 0, dirichlet = 0, free_edges = 0;   // kept for RunInfo
         {
-            int tree = 0, dirichlet = 0, free_edges = 0;
             std::vector<bool> on_dirichlet(static_cast<std::size_t>(mesh.num_nodes()), false);
             for (int e = 0; e < mesh.num_edges(); ++e) {
                 switch (dofs.edge_state[static_cast<std::size_t>(e)]) {
@@ -165,9 +166,13 @@ int main(int argc, char** argv) {
                   << std::setw(12) << "max |L|" << std::setw(11) << "factor ms" << "\n";
 
         int failures = 0;
+        double write_ms = 0.0, fields_total_ms = 0.0, assemble_total_ms = 0.0;
+        double factor_total_ms = 0.0, solve_total_ms = 0.0;
         for (double f : frequencies) {
             const double omega = 2.0 * 3.14159265358979323846 * f;
+            const Clock::time_point asm_t0 = Clock::now();
             refill(system, bound, mesh, dofs, pattern, omega, p.conditioning);
+            const double assemble_ms = ms(asm_t0, Clock::now());
 
             SolveOptions plain;
             plain.ordering = ordering;
@@ -204,6 +209,26 @@ int main(int argc, char** argv) {
             // The potential, written for every frequency. One file when there is
             // only one solve, numbered otherwise, so a sweep does not silently
             // overwrite itself.
+            // What produced the files about to be written. Built once the solve
+            // has reported, so it can carry the convergence numbers too.
+            RunInfo run;
+            run.input_file = argv[1];
+            run.mesh_file = p.mesh_file;
+            run.ordering = ordering_keyword(ordering);
+            run.num_tets = mesh.num_tets();
+            run.unknowns = dofs.num_total;
+            run.free_edges = free_edges;
+            run.tree_edges = tree;
+            run.dirichlet_edges = dirichlet;
+            run.stored_nonzeros = pattern.nnz();
+            run.factor_nnz = re.factor_nnz;
+            run.backward_error = re.backward_error;
+            run.residual = re.residual;
+            run.assemble_ms = assemble_ms;
+            run.analyze_ms = re.analyze_ms;
+            run.factorize_ms = re.factorize_ms;
+            run.solve_ms = re.solve_ms;
+
             Solution sol;
             sol.x = x_equil;
             sol.conditioning = p.conditioning;
@@ -214,17 +239,26 @@ int main(int argc, char** argv) {
                 out_path = "potential_" + std::to_string(&f - frequencies.data()) + ".out";
             }
             if (!p.output_dir.empty()) out_path = p.output_dir + "/" + out_path;
-            const WriteStats ws = write_potential(out_path, nodal, sol);
+            const WriteStats ws = write_potential(out_path, nodal, sol, &run);
+            write_ms += ws.milliseconds;
             const auto fields_started = std::chrono::steady_clock::now();
             const FieldOutput fields = compute_fields(mesh, bound, dofs, sol);
             const double fields_ms =
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
                                                           fields_started)
                     .count();
+            fields_total_ms += fields_ms;
+            assemble_total_ms += assemble_ms;
+            // Each frequency is factorized TWICE -- plain and equilibrated -- so the
+            // two residuals can sit side by side. Both cost real time, so both count;
+            // charging only the equilibrated one left half the runtime in "other".
+            factor_total_ms += rp.factorize_ms + re.factorize_ms;
+            solve_total_ms += rp.solve_ms + re.solve_ms;
             const std::string stem = out_path.substr(0, out_path.size() - 4);
             std::string vtk_path = stem + ".vtk";
             const WriteStats vs =
-                write_vtk(vtk_path, mesh, nodal, sol, &fields, FieldSet::Potential);
+                write_vtk(vtk_path, mesh, nodal, sol, &fields, FieldSet::Potential, &run);
+            write_ms += vs.milliseconds;
             std::cout << "                wrote " << out_path << "   " << ws.nodes << " nodes, "
                       << ws.bytes / 1024 << " KB, " << ws.milliseconds << " ms\n";
             std::cout << "                fields A,B,H,E at " << fields.num_nodes()
@@ -252,13 +286,40 @@ int main(int argc, char** argv) {
                 const std::string base =
                     dir + field_set_name(fset) + "_field" +
                     (suffix == "potential" ? "" : suffix.substr(std::strlen("potential")));
-                const WriteStats ts = write_solution(base + ".out", nodal, fields, sol, fset);
+                const WriteStats ts = write_solution(base + ".out", nodal, fields, sol, fset, &run);
                 const WriteStats vv =
-                    write_vtk(base + ".vtk", mesh, nodal, sol, &fields, fset);
+                    write_vtk(base + ".vtk", mesh, nodal, sol, &fields, fset, &run);
                 std::cout << "                wrote " << base << ".out / .vtk   "
                           << ts.bytes / 1024 << " + " << vv.bytes / 1024 << " KB, "
                           << (ts.milliseconds + vv.milliseconds) << " ms\n";
+                write_ms += ts.milliseconds + vv.milliseconds;
             }
+        }
+
+        // Where the time went. Printed unconditionally because a run that is
+        // slow for the wrong reason -- paging, or an ordering that blew up --
+        // looks identical to a healthy one in every other line of output.
+        {
+            const double total = ms(run_started, Clock::now());
+            const double accounted = assemble_total_ms + factor_total_ms + solve_total_ms +
+                                     fields_total_ms + write_ms;
+            std::cout << "\n" << std::left << std::setw(22) << "timing" << std::right
+                      << std::setw(12) << "seconds" << std::setw(10) << "percent" << "\n";
+            const auto row = [&](const char* name, double v) {
+                std::cout << std::left << std::setw(22) << name << std::right << std::fixed
+                          << std::setprecision(2) << std::setw(12) << v / 1000.0
+                          << std::setw(9) << (total > 0.0 ? 100.0 * v / total : 0.0) << " %\n";
+            };
+            row("  matrix assembly", assemble_total_ms);
+            row("  factorization x2", factor_total_ms);
+            row("  triangular solve", solve_total_ms);
+            row("  field computation", fields_total_ms);
+            row("  writing fields", write_ms);
+            row("  mesh, dofs, other", total - accounted);
+            std::cout << std::left << std::setw(22) << "  TOTAL" << std::right << std::fixed
+                      << std::setprecision(2) << std::setw(12) << total / 1000.0
+                      << std::setw(9) << 100.0 << " %\n"
+                      << std::defaultfloat;
         }
 
         std::cout << "\nNothing is EXTRACTED from these solutions yet: no currents, voltages, R or\n"

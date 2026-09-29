@@ -482,8 +482,49 @@ FieldOutput compute_fields(const Mesh& mesh, const BoundProblem& bound, const Do
     return out;
 }
 
+// Provenance block: what produced this file. Written only when solve_mesh
+// passes a RunInfo, so the writers stay callable from tests with no solve
+// behind them.
+static void put_run_info(TextBuffer& buf, const RunInfo* run) {
+    if (run == nullptr) return;
+    buf.put("#\n# --- run -------------------------------------------------------------\n");
+    buf.put("# input        ");
+    buf.put(run->input_file.c_str());
+    buf.put("\n# mesh         ");
+    buf.put(run->mesh_file.c_str());
+    buf.put("   ");
+    buf.put(run->num_tets);
+    buf.put(" tets\n# unknowns     ");
+    buf.put(run->unknowns);
+    buf.put("   (A: ");
+    buf.put(run->free_edges);
+    buf.put(" free edges, ");
+    buf.put(run->tree_edges);
+    buf.put(" gauged to zero, ");
+    buf.put(run->dirichlet_edges);
+    buf.put(" Dirichlet)\n# matrix       ");
+    buf.put(static_cast<double>(run->stored_nonzeros));
+    buf.put(" stored nonzeros, ordering ");
+    buf.put(run->ordering.c_str());
+    buf.put(", nnz(L) ");
+    buf.put(static_cast<double>(run->factor_nnz));
+    buf.put("\n# converged    backward error ");
+    buf.put(run->backward_error);
+    buf.put(", residual ");
+    buf.put(run->residual);
+    buf.put("\n# timing ms    assemble ");
+    buf.put(run->assemble_ms);
+    buf.put("   analyze ");
+    buf.put(run->analyze_ms);
+    buf.put("   factorize ");
+    buf.put(run->factorize_ms);
+    buf.put("   solve ");
+    buf.put(run->solve_ms);
+    buf.put("\n# ---------------------------------------------------------------------\n");
+}
+
 WriteStats write_potential(const std::string& path, const NodalPotential& potential,
-                           const Solution& solution) {
+                           const Solution& solution, const RunInfo* run) {
     const auto started = std::chrono::steady_clock::now();
 
     std::FILE* f = std::fopen(path.c_str(), "wb");
@@ -516,6 +557,7 @@ WriteStats write_potential(const std::string& path, const NodalPotential& potent
         buf.put("# positions in metres. Mid-edge values are EXACT P2 unknowns, not interpolated.\n");
         buf.put("# status  F free   T terminal   C cut (value is the PLUS side; Phi jumps here)"
                 "   P prescribed   A absent\n");
+        put_run_info(buf, run);
         buf.put("# index x y z Re(Phi) Im(Phi) status\n");
 
         const int n = potential.size();
@@ -551,7 +593,7 @@ WriteStats write_potential(const std::string& path, const NodalPotential& potent
 
 WriteStats write_solution(const std::string& path, const NodalPotential& potential,
                           const FieldOutput& fields, const Solution& solution,
-                          FieldSet which) {
+                          FieldSet which, const RunInfo* run) {
     const auto started = std::chrono::steady_clock::now();
     if (fields.num_nodes() != potential.size()) {
         throw std::invalid_argument(
@@ -622,6 +664,7 @@ WriteStats write_solution(const std::string& path, const NodalPotential& potenti
         // counts the two against each other: in a file this wide, adding a
         // column to one and not the other still parses, silently mislabelled
         // from that point on.
+        put_run_info(buf, run);
         buf.put("# index x y z");
         if (w_phi) buf.put("  Re(Phi) Im(Phi)");
         if (w_a) buf.put("  Re(Ax) Im(Ax) Re(Ay) Im(Ay) Re(Az) Im(Az)");
@@ -696,6 +739,7 @@ void put_vectors(TextBuffer& buf, const char* name, const std::vector<Vec3C>& v,
     }
 }
 
+
 void put_magnitude(TextBuffer& buf, const char* name, const std::vector<Vec3C>& v, int n) {
     buf.put("\nSCALARS ");
     buf.put(name);
@@ -712,7 +756,8 @@ void put_magnitude(TextBuffer& buf, const char* name, const std::vector<Vec3C>& 
 }  // namespace
 
 WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
-                     const Solution& solution, const FieldOutput* fields, FieldSet which) {
+                     const Solution& solution, const FieldOutput* fields, FieldSet which,
+                     const RunInfo* run) {
     const auto started = std::chrono::steady_clock::now();
     if (potential.size() != mesh.num_nodes() + mesh.num_edges()) {
         throw std::invalid_argument(
@@ -748,7 +793,16 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
         buf.put(conditioning_keyword(solution.conditioning));
         buf.put(", omega ");
         buf.put(solution.omega);
-        buf.put(" rad/s\n");
+        // Legacy VTK caps the title line at 256 characters, so this is a
+        // one-line summary, not the full provenance block the .out files get.
+        buf.put(" rad/s");
+        if (run != nullptr) {
+            buf.put(", ");
+            buf.put(run->unknowns);
+            buf.put(" unknowns, backward err ");
+            buf.put(run->backward_error);
+        }
+        buf.put("\n");
         buf.put("ASCII\nDATASET UNSTRUCTURED_GRID\n");
 
         buf.put("POINTS ");
