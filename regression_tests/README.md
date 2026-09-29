@@ -40,6 +40,58 @@ that, running from the repository root and from inside the case folder would
 scatter results in two places, and the second run would look as though it had
 produced nothing.
 
+### What you need installed
+
+| | why | checked how |
+|---|---|---|
+| Visual Studio (any recent) | to compile the solver | `build.bat` locates `vcvars64.bat` itself — no developer prompt needed |
+| gmsh | to turn `cylinder.geo` into `cylinder.msh` | `run_case.bat` finds the winget install automatically, or put `gmsh` on PATH |
+| ParaView | figures (`pvbatch`) | only needed for the plots, not for the solve |
+| Git Bash | `build_doc.sh` | only needed for the HTML/PDF documents |
+
+### After the solve: figures, then documents
+
+`run_case.bat` stops once the fields are written. Two more steps produce the
+pictures and the report:
+
+```
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_plots.py
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" pv_bcell.py
+sh build_doc.sh
+```
+
+`make_plots.py` writes the report figures, `pv_bcell.py` the per-cell-vs-nodal
+`B` study, and `build_doc.sh` rebuilds `CopperRodValidation.html` and `.pdf`
+with the new figures inlined. **Run `build_doc.sh` after regenerating figures**
+or the documents keep showing the previous run's pictures — the images are
+baked into them.
+
+The PDF step launches a headless browser. Some sandboxed shells block that; the
+HTML is still written and the script says it skipped the PDF.
+
+### Cost, and how to tell it worked
+
+`02_Ansys_Cylinder_50Hz` is the heavier of the two cases:
+
+    mesh          18994 nodes, 101873 tets, a few seconds
+    solve         240990 unknowns, about 8 min, 4.03 GB peak
+    figures       about 2 min
+
+The solve prints a line per frequency. These are the numbers to compare:
+
+    unknowns      240990
+    backward err  4.8e-21
+    gauge         complete
+
+Then `R` from `tools/pv_extract_rl.py` should read `9.796995e-05` ohm against
+`9.796863e-05` exact. If those match, the run reproduced.
+
+### Forcing a re-mesh
+
+`run_case.bat` only re-meshes when `cylinder.msh` is missing or older than
+`cylinder.geo`. Editing the `.geo` is therefore enough; to force it without an
+edit, delete `cylinder.msh`.
+
 ## 02_Ansys_Cylinder_50Hz
 
 Full write-up with figures: [02_Ansys_Cylinder_50Hz/REPORT.md](02_Ansys_Cylinder_50Hz/REPORT.md)
