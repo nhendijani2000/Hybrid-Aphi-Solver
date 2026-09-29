@@ -71,6 +71,12 @@ HTML is still written and the script says it skipped the PDF.
 
 ### Cost, and how to tell it worked
 
+By default each frequency is factorized **once**, equilibrated. Pass
+`--compare-plain` to also solve it unequilibrated and print the two residuals
+side by side -- that is a second full factorization and roughly doubles the
+runtime, since factorization is ~97 % of a large run. The answer written to
+disk is the equilibrated one either way.
+
 Every run writes `output/run_summary.txt` — the same timing table the console
 shows, plus the mesh, unknown count and fill-in. That file is the record of
 what a run cost; the per-stage timings are also stamped into the header of

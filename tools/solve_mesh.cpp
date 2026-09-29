@@ -44,20 +44,35 @@ double ms(Clock::time_point a, Clock::time_point b) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 2 || argc > 3) {
+    if (argc < 2) {
         std::cerr << "A-Phi solver " << kVersion << " -- assemble, factorize, solve one file\n\n"
-                  << "usage: solve_mesh <input-file> [natural|rcm|amd]\n\n"
+                  << "usage: solve_mesh <input-file> [natural|rcm|amd] [--compare-plain]\n\n"
                   << "The ordering defaults to amd. The conditioning comes from the file's\n"
                   << "[solver] section; only the symmetric ones can be solved yet, since the\n"
                   << "unsymmetric LU is step 8 of docs/SOLVER_PLAN.md.\n\n"
+                  << "--compare-plain solves each frequency a SECOND time without\n"
+                  << "equilibration, so the two residuals can be compared. That is a whole\n"
+                  << "extra factorization and it doubles the runtime; the answer written to\n"
+                  << "disk is the equilibrated one either way.\n\n"
                   << "try: solve_mesh examples/loop_sweep.aphi\n";
         return 2;
     }
 
+    // Equilibration is on for the solve that produces the answer. The
+    // unequilibrated one exists only to put `resid plain` beside `resid equil`,
+    // and it costs a second factorization -- 97 % of a large run is
+    // factorization, so that diagnostic doubles the wall time. Opt-in.
     Ordering ordering = Ordering::ApproximateMinimumDegree;
-    if (argc == 3 && !ordering_from_keyword(argv[2], ordering)) {
-        std::cerr << "unknown ordering '" << argv[2] << "'; expected natural, rcm or amd\n";
-        return 2;
+    bool compare_plain = false;
+    for (int i = 2; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--compare-plain") {
+            compare_plain = true;
+        } else if (!ordering_from_keyword(argv[i], ordering)) {
+            std::cerr << "unknown argument '" << arg
+                      << "'; expected natural, rcm, amd or --compare-plain\n";
+            return 2;
+        }
     }
 
     const Clock::time_point run_started = Clock::now();
@@ -185,7 +200,11 @@ int main(int argc, char** argv) {
             std::vector<Complex> x_equil;
             SolveReport rp;
             SolveReport re;
-            const bool ok_plain = solve_symmetric(system.matrix, system.rhs, x_plain, rp, plain);
+            // The second factorization, and the reason a run can take twice as
+            // long as it needs to. Skipped unless asked for.
+            const bool ok_plain =
+                !compare_plain ||
+                solve_symmetric(system.matrix, system.rhs, x_plain, rp, plain);
             const bool ok_equil = solve_symmetric(system.matrix, system.rhs, x_equil, re, equil);
 
             std::ostringstream label;
@@ -198,7 +217,12 @@ int main(int argc, char** argv) {
                 ++failures;
                 continue;
             }
-            std::cout << std::setw(14) << rp.residual << std::setw(14) << re.residual
+            if (compare_plain) {
+                std::cout << std::setw(14) << rp.residual;
+            } else {
+                std::cout << std::setw(14) << "--";
+            }
+            std::cout << std::setw(14) << re.residual
                       << std::setw(14) << re.backward_error
                       << std::setw(12) << re.equilibration_max / re.equilibration_min
                       << std::setw(13) << re.smallest_pivot << std::setw(13) << re.largest_pivot
@@ -252,8 +276,8 @@ int main(int argc, char** argv) {
             // Each frequency is factorized TWICE -- plain and equilibrated -- so the
             // two residuals can sit side by side. Both cost real time, so both count;
             // charging only the equilibrated one left half the runtime in "other".
-            factor_total_ms += rp.factorize_ms + re.factorize_ms;
-            solve_total_ms += rp.solve_ms + re.solve_ms;
+            factor_total_ms += (compare_plain ? rp.factorize_ms : 0.0) + re.factorize_ms;
+            solve_total_ms += (compare_plain ? rp.solve_ms : 0.0) + re.solve_ms;
             const std::string stem = out_path.substr(0, out_path.size() - 4);
             std::string vtk_path = stem + ".vtk";
             const WriteStats vs =
@@ -317,7 +341,7 @@ int main(int argc, char** argv) {
                   << std::setw(9) << (total > 0.0 ? 100.0 * v / total : 0.0) << " %\n";
             };
             row("  matrix assembly", assemble_total_ms);
-            row("  factorization x2", factor_total_ms);
+            row(compare_plain ? "  factorization x2" : "  factorization", factor_total_ms);
             row("  triangular solve", solve_total_ms);
             row("  field computation", fields_total_ms);
             row("  writing fields", write_ms);
@@ -325,9 +349,15 @@ int main(int argc, char** argv) {
             s << std::left << std::setw(22) << "  TOTAL" << std::right << std::fixed
               << std::setprecision(2) << std::setw(12) << total / 1000.0
               << std::setw(9) << 100.0 << " %\n" << std::defaultfloat;
-            s << "\n  factorization is counted TWICE per frequency: the solve is run plain\n"
-                 "  and equilibrated so the two residuals can be compared. Half of that\n"
-                 "  line is diagnostic, not needed for the answer.\n";
+            if (compare_plain) {
+                s << "\n  factorization is counted TWICE per frequency: --compare-plain ran\n"
+                     "  the solve plain as well as equilibrated so the two residuals could\n"
+                     "  be compared. Half of that line is diagnostic.\n";
+            } else {
+                s << "\n  the solve ran ONCE, equilibrated. Pass --compare-plain to also solve\n"
+                     "  it unequilibrated and compare residuals -- that is a second\n"
+                     "  factorization and roughly doubles the runtime.\n";
+            }
             std::cout << s.str();
 
             if (!p.output_dir.empty()) {
