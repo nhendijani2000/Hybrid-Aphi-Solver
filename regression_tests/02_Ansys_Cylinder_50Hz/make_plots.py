@@ -305,6 +305,48 @@ _l = GetColorTransferFunction("E_cell_magnitude")
 _l.MapControlPointsToLogSpace(); _l.UseLogScale = 1
 shot("05b_E_magnitude_zoom.png")
 
+
+# --- 5c/5d. |E| over the whole domain, NODAL -------------------------------
+# The same field as 05/05b, but from the point array instead of the cell array.
+# It renders far smoother, and MEASURED against the per-cell values it is also
+# faithful almost everywhere -- mean |E| by radius, nodal vs per cell:
+#
+#     band (mm)    nodal    per cell   difference
+#      0.0 - 1.5   24.934    24.934      0.00 %     inside the conductor
+#      1.5 - 2.0   29.972    37.882    -20.88 %     <-- the interface band
+#      2.0 - 3.0   29.866    29.775     +0.31 %
+#      3.0 - 5.0   21.507    21.493     +0.06 %
+#      5.0 - 8.0   14.807    14.690     +0.80 %
+#
+# ONE BAND IS WRONG, and only one. E's NORMAL component jumps at the wire
+# surface, so there is no single correct nodal value there; compute_fields
+# resolves it by taking the higher-conductivity side, which means every
+# interface node carries the COPPER value, 24.93 V/m. But the air just outside
+# genuinely carries 37.88 V/m -- |E| jumps UP crossing into the air, because a
+# radial component appears that the axial field inside does not have. Forcing
+# the copper value onto those nodes therefore makes the first band outside the
+# wire read 21 % LOW, not high.
+#
+# 45200 of 140532 nodes (32.2 %) are flagged `material_interface`, all at
+# r = 1.4954 to 1.5000 mm. Inside the conductor and from r = 2 mm outward the
+# nodal field is good to better than 1 %. Use 05/05b (per cell) when the value
+# at the surface matters; use these when the overall picture does.
+clear()
+look(0.5 * W * 1.05)
+surface(cut(e_src, [0, 0, 1], [0, 0, ZMID]), "E_magnitude", "POINTS",
+        "E magnitude (V/m)")
+_n = GetColorTransferFunction("E_magnitude")
+_n.MapControlPointsToLogSpace(); _n.UseLogScale = 1
+shot("05c_E_magnitude_nodal.png")
+
+clear()
+look(3.0 * A)
+surface(cut(e_src, [0, 0, 1], [0, 0, ZMID]), "E_magnitude", "POINTS",
+        "E magnitude (V/m)")
+_n2 = GetColorTransferFunction("E_magnitude")
+_n2.MapControlPointsToLogSpace(); _n2.UseLogScale = 1
+shot("05d_E_magnitude_nodal_zoom.png")
+
 # --- 6. |E| in the wire alone, nodal ----------------------------------------
 # NOTE ON THE COLOUR RANGE. Inside the conductor E is uniform at V/L = 24.935
 # V/m and the whole plotted span is about 9e-04 V/m, i.e. 4e-05 of the value.
