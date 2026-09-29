@@ -1,0 +1,254 @@
+<title>Copper Rod 1A Validation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#15181d; --ink-2:#4a5260; --ink-3:#6f7888;
+    --bg:#fbfaf8; --card:#ffffff; --rule:#e3e0da;
+    --accent:#8a3324; --accent-soft:#f6ece9;
+    --ok:#2c5f2d; --warn:#8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+      --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+      --accent:#e08b74; --accent-soft:#2a1f1c;
+      --ok:#8fc98f; --warn:#e0b467;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+    --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+    --accent:#e08b74; --accent-soft:#2a1f1c;
+    --ok:#8fc98f; --warn:#e0b467;
+    color-scheme: dark;
+  }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.6; margin:0;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding-inline:16px; padding-block:40px 72px;}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:clamp(1.9rem,5vw,2.6rem);
+     line-height:1.15; margin:0 0 .35em; text-wrap:balance; letter-spacing:-.01em;}
+  .sub{color:var(--ink-2); font-size:1.05rem; margin:0 0 .4em; max-width:62ch;}
+  .meta{color:var(--ink-3); font-size:.82rem; font-family:"IBM Plex Mono",monospace;}
+  h2{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:1.5rem;
+     margin:3rem 0 .2em; padding-top:1.6rem; border-top:1px solid var(--rule); text-wrap:balance;}
+  h3{font-size:1.02rem; font-weight:600; margin:2rem 0 .3em; color:var(--ink);}
+  p{margin:.7em 0; max-width:68ch;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.88em;
+       background:var(--accent-soft); color:var(--accent); padding:.08em .34em; border-radius:3px;}
+  .figs{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); margin:1.2rem 0 .4rem;}
+  figure{margin:0; background:var(--card); border:1px solid var(--rule); border-radius:8px; overflow:hidden;}
+  figure img{display:block; width:100%; height:auto; background:#fff;}
+  figcaption{font-size:.8rem; color:var(--ink-2); padding:.6rem .8rem; border-top:1px solid var(--rule);}
+  figcaption b{color:var(--ink); font-weight:600;}
+  .tw{overflow-x:auto; margin:1.1rem 0;}
+  table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.45rem .7rem; border-bottom:1px solid var(--rule); white-space:nowrap;}
+  th{font-weight:600; color:var(--ink-2); font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;}
+  td:first-child{white-space:normal;}
+  tbody tr:last-child td{border-bottom:none;}
+  .note{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--accent);
+        border-radius:6px; padding:.9rem 1.1rem; margin:1.3rem 0;}
+  .note p{margin:.35em 0;}
+  .note strong{color:var(--accent);}
+  .ok{color:var(--ok); font-weight:600;}
+  .warn{color:var(--warn); font-weight:600;}
+  ul{max-width:68ch; padding-left:1.15rem;}
+  li{margin:.35em 0;}
+
+  /* Print / PDF.
+     Protect ONLY what is ruined by being split: a figure, and a table. Long
+     prose blocks -- paragraphs, list items, the callout notes -- are allowed to
+     flow across a page break, because protecting them is what leaves half-empty
+     pages: any block too tall for the remaining space jumps whole and abandons
+     the rest. orphans/widows keep that tidy without reserving space.
+     `.figs` is also unprotected: it is a grid of two figures, and keeping the
+     pair whole would push both onto a fresh page. Breaking BETWEEN figures is
+     fine, breaking THROUGH one is not. */
+  @media print{
+    :root{ color-scheme: light; }
+    body{ background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+          orphans:3; widows:3; }
+    .wrap{ max-width:none; padding-block:0 .5rem; }
+    h1{ font-size:2rem; }
+    h2{ margin-top:1.2rem; padding-top:.7rem; font-size:1.3rem;
+        break-after:avoid; page-break-after:avoid; }
+    h3{ margin-top:.9rem; break-after:avoid; page-break-after:avoid; }
+    figure, .tw, table{ break-inside:avoid; page-break-inside:avoid; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    p, li, .note, ul{ break-inside:auto; page-break-inside:auto; }
+    /* Smaller figures pack far better: a pair at 11 cm leaves room for text
+       beside it on the same page instead of claiming one to itself. */
+    figure img{ max-height:11cm; object-fit:contain; }
+    .figs{ gap:12px; margin:.8rem 0 .3rem; }
+    figcaption{ padding:.4rem .6rem; }
+    a{ color:inherit; text-decoration:none; }
+  }
+</style>
+
+<div class="wrap">
+
+<h1>Copper rod at 50&nbsp;Hz, driven by 1&nbsp;A</h1>
+<p class="sub">Hybrid A&#8209;&Phi; finite-element solver, tree&#8209;cotree gauge. <b>The dual of the
+1&nbsp;V case</b>: the same conductor, the same mesh, the same frequency, driven with a 1&nbsp;A
+current source instead of a 1&nbsp;V terminal voltage.</p>
+<p class="meta">regression_tests/03_Cylinder_1A_50Hz &nbsp;·&nbsp; 240,990 unknowns &nbsp;·&nbsp; backward error 3.8e&#8209;21</p>
+
+<h2>0. Why this case exists</h2>
+<p>This is the first <b>current-driven</b> problem this solver has run. The port machinery for it
+had existed since the DOF map was written — a current port gets an unknown terminal potential
+instead of a fixed one, and its row is the terminal's current balance — but nothing had ever
+exercised it.</p>
+<div class="note">
+<p><strong>Port current self-consistency.</strong> Inject 1&nbsp;A at the top cap; exactly 1&nbsp;A
+must be collected at the bottom. Charge does not accumulate in a conductor, so any other answer
+means current is being created or destroyed inside the formulation. Measured:
+<b>1.000000&nbsp;A</b>.</p>
+</div>
+<p><strong>Does the dual agree?</strong> <code>R</code> and <code>L</code> belong to the geometry and
+the material, not to how the thing is driven, and the problem is linear. So driving 1&nbsp;A must
+return the same impedance as driving 1&nbsp;V:</p>
+<div class="tw"><table>
+<thead><tr><th></th><th>1 V case</th><th>1 A case</th></tr></thead>
+<tbody>
+<tr><td><code>I</code></td><td>10180.56 A</td><td><b>1.000000 −0.000000 j A</b></td></tr>
+<tr><td><code>V</code></td><td>1 V</td><td><b>9.796995e&#8209;05 +7.098621e&#8209;06 j V</b></td></tr>
+<tr><td><code>Z</code></td><td>9.796995e&#8209;05 +7.098621e&#8209;06 j Ω</td><td><b>9.796995e&#8209;05 +7.098621e&#8209;06 j Ω</b></td></tr>
+<tr><td><code>R</code></td><td>9.796995e&#8209;05 Ω</td><td>identical</td></tr>
+<tr><td><code>L</code></td><td>22.5956 nH</td><td>identical</td></tr>
+</tbody></table></div>
+<p>Identical to every digit printed.</p>
+<p><b>The terminal voltage is 98 microvolts</b>, because the rod is 98 micro-ohms. Every field below
+is correspondingly about 10⁴ times smaller than in the 1&nbsp;V case — <code>B</code> peaks at
+1.3e&#8209;04&nbsp;T rather than 1.34&nbsp;T. That is not a red flag; it is the same physics read
+from the other side, and reproducing the 1&nbsp;V case's <code>Z</code> from it is a genuine test of
+the scaling. A formulation that quietly lost a factor somewhere would not.</p>
+
+<h2>1. The case</h2>
+<div class="tw"><table><tbody>
+<tr><td>Conductor</td><td>copper, <code>σ = 5.8e7 S/m</code>, <code>a = 1.5 mm</code>, <code>L = 40 mm</code>, a 40&#8209;gon</td></tr>
+<tr><td>Domain</td><td>40&nbsp;mm cube of air, <code>n × A = 0</code> on the outer boundary</td></tr>
+<tr><td>Excitation</td><td><b>1.0 A into the top cap</b>, 0&nbsp;V reference on the bottom, 50&nbsp;Hz</td></tr>
+<tr><td>Skin depth</td><td><code>δ = 9.346 mm</code>, so <code>a/δ = 0.1605</code> — no skin effect</td></tr>
+<tr><td>Formulation</td><td>first-order Whitney edge <code>A</code>, second-order P2 nodal <code>Φ</code></td></tr>
+<tr><td>Mesh</td><td>the 1&nbsp;V case's, <b>referenced not copied</b> — 18,994 nodes, 101,873 tets, Netgen-optimised</td></tr>
+</tbody></table></div>
+
+<h2>2. Mesh</h2>
+<div class="figs">
+  <figure><img src="fig/mesh_domain.png" alt="Cross-section mesh of the whole domain">
+    <figcaption><b>Whole domain.</b> Graded from 0.25&nbsp;mm at the conductor to 6&nbsp;mm in the far air.</figcaption></figure>
+  <figure><img src="fig/mesh_wire.png" alt="Cross-section mesh of the wire">
+    <figcaption><b>The wire alone.</b> Roughly 6 elements across the radius.</figcaption></figure>
+</div>
+<p>Identical to the 1&nbsp;V case by construction — the input file points at that case's
+<code>cylinder.msh</code>. "Exactly the same mesh" is the whole point of the comparison, and a copy
+is a thing that can drift.</p>
+
+<h2>3. Potential</h2>
+<div class="figs">
+  <figure><img src="fig/phi_real.png" alt="Real part of the potential over the wire surface">
+    <figcaption><b>Re(Φ).</b> Range read from the field, not pinned to 1&nbsp;V.</figcaption></figure>
+  <figure><img src="fig/phi_mag.png" alt="Magnitude of the potential over the wire surface">
+    <figcaption><b>|Φ|.</b> Terminal potential 9.797e&#8209;05&nbsp;V, an unknown the solve returned.</figcaption></figure>
+</div>
+<p><b><code>Φ</code> is markedly more linear than in the 1&nbsp;V case</b>, and on the stricter of
+two metrics:</p>
+<div class="tw"><table>
+<thead><tr><th></th><th>absolute</th><th>normalised by V</th><th>pointwise relative</th></tr></thead>
+<tbody>
+<tr><td>1 V case</td><td>8.257e&#8209;04 V</td><td>8.257e&#8209;04</td><td>3.946e&#8209;03</td></tr>
+<tr><td><b>1 A case</b></td><td>3.778e&#8209;10 V</td><td><b>3.856e&#8209;06</b></td><td><b>4.301e&#8209;06</b></td></tr>
+</tbody></table></div>
+<p>A voltage port forces the whole cap to a single potential; a current port constrains only the
+total current and lets the cap relax to whatever the field wants. The prescribed equipotential is
+what bends <code>Φ</code> in the 1&nbsp;V case — the boundary condition doing its job, not an error.</p>
+
+<h2>4. Magnetic flux density</h2>
+<div class="figs">
+  <figure><img src="fig/b_domain.png" alt="Magnitude of B over the whole cross-section">
+    <figcaption><b>Whole domain.</b> <code>1/r</code> decay to the box wall.</figcaption></figure>
+  <figure><img src="fig/b_zoom.png" alt="Magnitude of B zoomed to three radii">
+    <figcaption><b>Zoomed to 3a.</b> Peak 1.3e&#8209;04&nbsp;T at <code>r = a</code>.</figcaption></figure>
+</div>
+<p>Zero on the axis, rising linearly inside the conductor, falling as <code>1/r</code> outside. The
+peak of <b>1.3e&#8209;04&nbsp;T</b> is the 1&nbsp;V case's 1.3385&nbsp;T divided by its 10180&nbsp;A,
+which is what driving 1&nbsp;A instead should give.</p>
+
+<h2>5. Electric field</h2>
+<div class="figs">
+  <figure><img src="fig/e_domain_nodal.png" alt="Nodal magnitude of E over the whole cross-section">
+    <figcaption><b>|E|, whole domain, per node.</b> Log scale.</figcaption></figure>
+  <figure><img src="fig/e_domain_nodal_zoom.png" alt="Nodal magnitude of E zoomed">
+    <figcaption><b>The same, zoomed to 3a.</b></figcaption></figure>
+</div>
+<p><code>E</code> is one order smoother than <code>B</code>, and structurally so:
+<code>E = −jωA − ∇Φ</code> is <b>linear</b> per tetrahedron because <code>∇Φ</code> comes from the P2
+space, while <code>B = curl A</code> is <b>constant</b> per tetrahedron.</p>
+
+<h3>5.1 Inside the wire, and a warning about colour ranges</h3>
+<div class="figs">
+  <figure><img src="fig/e_wire.png" alt="E inside the wire, auto colour range">
+    <figcaption><b>Auto colour range.</b> Spans about 0.004 % of the value.</figcaption></figure>
+  <figure><img src="fig/e_wire_true.png" alt="E inside the wire, pinned range">
+    <figcaption><b>Range pinned to 0 … V/L.</b> The same data.</figcaption></figure>
+</div>
+<div class="note">
+<p><code>E</code> inside the conductor is uniform at <code>V/L = 2.449e-03 V/m</code> — there is no
+skin effect at <code>a/δ = 0.16</code>. The left figure auto-rescales to the wire's own range, which
+spans about <b>0.004 %</b> of the value, so <strong>noise at the fifth significant figure fills the
+entire colour map</strong> and reads as a strong radial gradient. The right figure pins the range and
+the same data renders as the uniform disc it physically is. This is the single easiest way to misread
+these plots.</p>
+</div>
+
+<h2>6. Current density</h2>
+<div class="figs">
+  <figure><img src="fig/j_vectors.png" alt="Current density vectors inside the wire">
+    <figcaption><b>J = σE</b> on a longitudinal slice, arrows coloured by magnitude.</figcaption></figure>
+</div>
+<p><b>The view frames a section of the length rather than all 40&nbsp;mm.</b> The wire is 3&nbsp;mm
+across and 40&nbsp;mm long, and a view containing the whole thing renders the arrows as a smear two
+pixels wide — which earlier versions of this figure did. Nothing varies along <code>z</code>, so a
+section shows everything the full length would.</p>
+<p>Read the colours with the §5.1 warning in mind: the bar spans 142,054 to 142,060&nbsp;A/m², a
+range of <b>0.004 %</b>. <code>J</code> is uniform; those colours are the fifth digit. The nominal
+value is <code>I/A = 1 / 7.0635e-06 = 141,573 A/m²</code>, and the measured 142,05x sits 0.3 % above
+it because the current concentrates very slightly toward the surface even at
+<code>a/δ = 0.16</code>.</p>
+
+<h2>7. Validation</h2>
+<p>Nothing below fits a free parameter.</p>
+<div class="tw"><table><tbody>
+<tr><td><b>|I| collected vs injected</b></td><td><b>1.000000 A vs 1.0 A</b> — port self-consistency</td></tr>
+<tr><td><code>R</code></td><td>9.796995e&#8209;05 Ω against 9.796863e&#8209;05 exact — <span class="ok">1.3e&#8209;05</span></td></tr>
+<tr><td><code>L</code></td><td>22.5956 nH — identical to the 1 V case</td></tr>
+<tr><td><code>Φ</code> vs exact <code>z/L</code>, pointwise</td><td>4.301e&#8209;06</td></tr>
+<tr><td><code>J(0)/J(a)</code></td><td>0.999968 against the Bessel 0.999959</td></tr>
+</tbody></table></div>
+<p>All six are asserted automatically by <code>regression_tests/check.bat</code>, which runs this
+case and the 1&nbsp;V case together. They are duals, and <b>a change that breaks the duality shows up
+as the two disagreeing — which neither case alone can see.</b></p>
+
+<h2>8. Known limitations</h2>
+<ul>
+<li><b>Azimuthal scatter in <code>B</code> of 1.4–3.1&nbsp;% near the conductor.</b>
+<code>O(h)</code> element noise from <code>B</code> being constant per tetrahedron, the lowest-order
+quantity in the formulation.</li>
+<li><b>Nodal <code>B</code> reads low in the far field</b>, up to −7.5&nbsp;% at the box wall against
+−2&nbsp;% per cell. The volume-weighted nodal average is dominated by the larger outer elements on a
+rapidly coarsening mesh.</li>
+<li><b>Far-field accuracy was traded for near-field resolution</b> when the mesh was built: beyond
+<code>r = 3 mm</code> the error is ~2&nbsp;% rather than ~1&nbsp;%.</li>
+<li><b>Specific to this case: the relative residual is 1.4e&#8209;09</b> where the 1&nbsp;V case gives
+6e&#8209;13, while the backward error is as good — 3.8e&#8209;21 against 3.7e&#8209;21. That is
+exactly the situation <code>factorization.hpp</code> warns about: <code>‖Ax−b‖/‖b‖</code> misleads
+when <code>‖b‖</code> is small, and a 1&nbsp;A drive makes a far smaller right-hand side than a
+1&nbsp;V one. <b>Judge this case by the backward error.</b></li>
+</ul>
+
+</div>

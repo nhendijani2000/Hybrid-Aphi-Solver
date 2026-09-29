@@ -93,6 +93,15 @@ b_src = read("B_field.vtk")
 e_src = read("E_field.vtk")
 j_src = read("J_field.vtk")
 
+# The terminal voltage. Case 02 pins Phi to 0..1 V because 1 V is what it
+# PRESCRIBES; here the terminal potential is an unknown the solve returns
+# -- about 98 microvolts -- so the range is read from the field. Hard-coding
+# 1 V would render every Phi figure as a single flat colour.
+phi_src.UpdatePipeline()
+_pd = phi_src.GetPointDataInformation().GetArray("phi_real")
+VTOP = _pd.GetComponentRange(0)[1]
+print("  terminal voltage read from the field: %.6e V" % VTOP)
+
 view = GetActiveViewOrCreate("RenderView")
 view.ViewSize = [1000, 900]
 view.UseColorPaletteForBackground = 0
@@ -245,7 +254,7 @@ surface(wire3d, "phi_real", "POINTS", "Re(Phi)  (V)")
 # terminal voltages so the midpoint IS 0.5 rather than wherever the data lands.
 _p = GetColorTransferFunction("phi_real")
 _p.ApplyPreset("Cool to Warm", True)
-_p.RescaleTransferFunction(0.0, 1.0)
+_p.RescaleTransferFunction(0.0, VTOP)
 shot("03_phi_on_surface.png")
 
 clear()
@@ -253,7 +262,7 @@ look(0.62 * L, along="y")
 surface(wire3d, "phi_magnitude", "POINTS", "Phi magnitude (V)")
 _q = GetColorTransferFunction("phi_magnitude")
 _q.ApplyPreset("Cool to Warm", True)
-_q.RescaleTransferFunction(0.0, 1.0)
+_q.RescaleTransferFunction(0.0, VTOP)
 shot("03b_phi_magnitude_surface.png")
 
 # --- 4. |B|, LINEAR scale ----------------------------------------------------
@@ -353,7 +362,7 @@ shot("05d_E_magnitude_nodal_zoom.png")
 # Auto-rescaling therefore blows a 0.004 % variation up to the full colour
 # range, and the figure LOOKS like a strong radial gradient when it is noise.
 # 06 keeps the auto range so the structure is visible; 06b pins the range to
-# 0..25 V/m, where the same data reads as what it physically is: uniform.
+# 0..V/L, where the same data reads as what it physically is: uniform.
 clear()
 look(A * 1.25)
 surface(cut(e_src, [0, 0, 1], [0, 0, ZMID], only_wire=True), "E_magnitude", "POINTS",
@@ -364,7 +373,8 @@ clear()
 look(A * 1.25)
 surface(cut(e_src, [0, 0, 1], [0, 0, ZMID], only_wire=True), "E_magnitude", "POINTS",
         "E magnitude (V/m)")
-GetColorTransferFunction("E_magnitude").RescaleTransferFunction(0.0, 25.0)
+# E = V/L, and V here is the ~98 uV the solve returned, not a prescribed 1 V.
+GetColorTransferFunction("E_magnitude").RescaleTransferFunction(0.0, VTOP / L)
 shot("06b_E_in_wire_true_scale.png")
 
 # --- 7. J as vectors, coloured by magnitude ---------------------------------
@@ -430,43 +440,5 @@ shot("07_J_vectors.png")
 #
 # Every one carries a banner saying so, because a figure pulled into a slide
 # deck loses its filename. Read numbers off the unsmoothed figures above.
-SMOOTH_PRESENT = 1
-
-
-def banner(text):
-    t = Text(registrationName="banner_%d" % len(_shown))
-    t.Text = text
-    td = Show(t, view, "TextSourceRepresentation")
-    td.WindowLocation = "Upper Left Corner"
-    td.Color = [0.75, 0.05, 0.05]
-    td.FontSize = 15
-    td.Bold = 1
-    try:
-        td.Justification = "Left"    # each line centres on its own otherwise
-    except Exception:
-        pass
-    _shown.append(td)
-    return td
-
-
-_LABEL = ("SMOOTHED FOR PRESENTATION - %d pass - NOT solver output\n"
-          "peak B low by 3.2 pct, band error -0.4 pct to -1.8 pct"
-          % SMOOTH_PRESENT)
-
-clear()
-look(0.5 * W * 1.05)
-surface(cut(b_src, [0, 0, 1], [0, 0, ZMID], passes=SMOOTH_PRESENT),
-        "B_magnitude", "POINTS", "B magnitude (T)")
-GetColorTransferFunction("B_magnitude").MapControlPointsToLinearSpace()
-banner(_LABEL)
-shot("08_B_magnitude_SMOOTHED.png")
-
-clear()
-look(3.0 * A)
-surface(cut(b_src, [0, 0, 1], [0, 0, ZMID], passes=SMOOTH_PRESENT),
-        "B_magnitude", "POINTS", "B magnitude (T)")
-GetColorTransferFunction("B_magnitude").MapControlPointsToLinearSpace()
-banner(_LABEL)
-shot("08b_B_magnitude_zoom_SMOOTHED.png")
 
 print("\n  all figures in %s" % OUT)
