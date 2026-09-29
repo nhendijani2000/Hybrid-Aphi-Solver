@@ -15,18 +15,14 @@ Regenerate every figure here with:
 
 ## 0. How to read these figures
 
-**| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |very figure in this report comes from one single solve, on one mesh** — the
+**Every figure in this report comes from one single solve, on one mesh** — the
 Netgen-optimised mesh described in §1. "Netgen-optimised" is a property of that
 mesh, not a variant of any individual plot: there is no unoptimised figure here
 to compare against. What Netgen changed, and by how much, is in §2.
 
 Only one figure pair differs in *processing* rather than in what it shows: §4.2
 applies one smoothing pass, and those two files are the only ones with
-`_SMOOTH| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |D` in the name and a red banner burned into the image.
+`_SMOOTHED` in the name and a red banner burned into the image.
 
 | file | what it is | script |
 |---|---|---|
@@ -36,33 +32,21 @@ applies one smoothing pass, and those two files are the only ones with
 | `03b_phi_magnitude_surface.png` | `\|Phi\|`, same view | `make_plots.py` |
 | `04_B_magnitude.png` | **nodal** `\|B\|`, whole domain, **unsmoothed** | `make_plots.py` |
 | `04b_B_magnitude_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |
-| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |\|E\|`, whole domain, log scale | `make_plots.py` |
-| `05b_| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |_magnitude_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |
-| `06_| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |_in_wire.png` | nodal `\|E\|` in the wire, **auto colour range** | `make_plots.py` |
-| `06b_| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |_in_wire_true_scale.png` | the same data, range pinned `0–25 V/m` | `make_plots.py` |
+| `05_E_magnitude.png` | **per-cell** `\|E\|`, whole domain, log scale | `make_plots.py` |
+| `05b_E_magnitude_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |
+| `05c_E_magnitude_nodal.png` | **per-node** `\|E\|`, whole domain, log scale | `make_plots.py` |
+| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |
+| `06_E_in_wire.png` | nodal `\|E\|` in the wire, **auto colour range** | `make_plots.py` |
+| `06b_E_in_wire_true_scale.png` | the same data, range pinned `0–25 V/m` | `make_plots.py` |
 | `07_J_vectors.png` | `J` as coloured vectors, longitudinal cut | `make_plots.py` |
-| `08_B_magnitude_SMOOTH| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |D.png` | **04 with one smoothing pass** | `make_plots.py` |
-| `08b_B_magnitude_zoom_SMOOTH| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |D.png` | **04b with one smoothing pass** | `make_plots.py` |
+| `08_B_magnitude_SMOOTHED.png` | **04 with one smoothing pass** | `make_plots.py` |
+| `08b_B_magnitude_zoom_SMOOTHED.png` | **04b with one smoothing pass** | `make_plots.py` |
 | `09*_B_cell_*` / `09*_B_nodal_*` | per-cell vs nodal `B`, banded and continuous | `pv_bcell.py` |
 
 The `09_*` set is a separate study — it shows what the volume-averaging step in
 the post-processor does, by rendering the raw per-tetrahedron `B` beside the
 nodal one. It is not part of the validation and is documented in
-`docs/FI| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |LD_POSTPROCESSING.md`.
+`docs/FIELD_POSTPROCESSING.md`.
 
 ---
 
@@ -133,9 +117,7 @@ A clean `z/L` gradient from 0 to 1 V. Against the exact `z/L` over all 95149
 wire nodes: worst deviation **8.26e-04**, mean **2.51e-04**.
 
 `Phi` is gauge dependent — a different spanning tree shifts it by `-j*omega*psi`,
-almost purely imaginary. `| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |`, `B`, `H` and `J` are not.
+almost purely imaginary. `E`, `B`, `H` and `J` are not.
 
 ---
 
@@ -164,9 +146,7 @@ solver's output**, and each carries a red banner in the image saying so.
 
 | smoothed, whole domain | smoothed, zoomed to 3a |
 |---|---|
-| ![](output/plots/08_B_magnitude_SMOOTH| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |D.png) | ![](output/plots/08b_B_magnitude_zoom_SMOOTHED.png) |
+| ![](output/plots/08_B_magnitude_SMOOTHED.png) | ![](output/plots/08b_B_magnitude_zoom_SMOOTHED.png) |
 
 Measured cost of that one pass:
 
@@ -181,40 +161,28 @@ Measured cost of that one pass:
 mesh, where it cost 6.2 % for 14 %. The bias still grows while the scatter stops
 improving past one pass. Smoothing is not a route to a better answer; it is the
 control needed to compare like with like if the reference picture is itself
-smoothed. `SMOOTH_PASS| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |S` in `make_plots.py` stays **0**.
+smoothed. `SMOOTH_PASSES` in `make_plots.py` stays **0**.
 
 ---
 
-## 5. | `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |lectric field
+## 5. Electric field
 
 ### 5.1 Whole domain — per cell and per node
 
 | per cell (`05`) | **per node** (`05c`) |
 |---|---|
-| ![](output/plots/05_| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |_magnitude.png) | ![](output/plots/05c_E_magnitude_nodal.png) |
+| ![](output/plots/05_E_magnitude.png) | ![](output/plots/05c_E_magnitude_nodal.png) |
 
 Both are the same solve on the same mesh, same log scale `5 → 24.9 V/m`. The
-conductor is at the **top** of that range, which is correct: `| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |` is largest
+conductor is at the **top** of that range, which is correct: `E` is largest
 inside the copper and decays outward.
 
-**The per-cell figure is faceted by construction.** `| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |` is piecewise-linear per
+**The per-cell figure is faceted by construction.** `E` is piecewise-linear per
 tetrahedron, so ParaView renders one flat colour per cell, and the far-field
 mesh is coarse by design — only 3.8 % of elements sit beyond `r = 3 mm`.
 
 **The nodal figure is far smoother, and it is also faithful — except in one
-band.** Mean `|| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` ||` by radius, nodal against per cell:
+band.** Mean `|E|` by radius, nodal against per cell:
 
 | band (mm) | nodal | per cell | difference |
 |---|---|---|---|
@@ -226,31 +194,25 @@ band.** Mean `|| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log sc
 
 Inside the conductor the two agree exactly, and from `r = 2 mm` outward they
 agree to better than 1 %. **The single bad band is the one immediately outside
-the wire**, and the reason is the material interface: `| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |`'s *normal* component
+the wire**, and the reason is the material interface: `E`'s *normal* component
 jumps there, so no single nodal value is correct. `compute_fields` resolves the
 ambiguity by taking the higher-conductivity side, so every interface node
 carries the copper value, 24.93 V/m — but the air just outside genuinely
 carries 37.88 V/m, because a radial component appears there that the purely
-axial field inside does not have. `|| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` ||` jumps **up** crossing into the air, and
+axial field inside does not have. `|E|` jumps **up** crossing into the air, and
 forcing the copper value onto those nodes makes that first band read **21 %
 low**, not high.
 
 45200 of 140532 nodes (32.2 %) are flagged `material_interface`, all at
 `r = 1.4954–1.5000 mm`. Use the per-cell figure when the value at the surface
-matters; use the nodal one when the overall picture does. `05b`/`05d` are the
-same pair zoomed to `3a`.
+matters; use the nodal one when the overall picture does. `05b` and `05d` are
+the same pair zoomed to `3a`.
 
 ### 5.2 Inside the wire — and why the colours disagree with §5.1
 
 | auto colour range | range pinned to 0–25 V/m |
 |---|---|
-| ![](output/plots/06_| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |_in_wire.png) | ![](output/plots/06b_E_in_wire_true_scale.png) |
+| ![](output/plots/06_E_in_wire.png) | ![](output/plots/06b_E_in_wire_true_scale.png) |
 
 **This is the answer to "why is the centre red in one figure and blue in the
 other".** The two figures show the same number, ~24.935 V/m, against colour
@@ -265,9 +227,7 @@ are in fact numerical noise at the fifth significant figure.
 
 `06b` pins the range to `0–25 V/m` and the same data renders as a uniform disc,
 which is the physical truth: with `a/delta = 0.16` there is no skin effect, and
-`| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` | = V/L = 24.935 V/m` uniformly. The exact value is `1/0.040 = 25.0 V/m`; we
+`E = V/L = 24.935 V/m` uniformly. The exact value is `1/0.040 = 25.0 V/m`; we
 are **0.26 %** low, consistent with the polygon being 0.41 % smaller in area
 than the circle it approximates.
 
@@ -278,9 +238,7 @@ is kept only because the noise structure is occasionally worth seeing.
 
 ![](output/plots/07_J_vectors.png)
 
-`J = sigma*| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |` inside the conductor, drawn on a longitudinal slice — on a
+`J = sigma*E` inside the conductor, drawn on a longitudinal slice — on a
 mid-length cut every arrow points at the viewer and nothing is visible.
 
 ---
@@ -338,9 +296,7 @@ the error is ~2 % against ~1 % on a uniformly-graded mesh. That band holds
 it does degrade `tools/pv_ampere.py`.
 
 **What was tried and did not work**, all measured and documented in
-`docs/FI| `05_E_magnitude.png` | **per-cell** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05c_E_magnitude_nodal.png` | **per-node** `|E|`, whole domain, log scale | `make_plots.py` |
-| `05d_E_magnitude_nodal_zoom.png` | the same, zoomed to `3a` | `make_plots.py` |LD_POSTPROCESSING.md`: superconvergent patch recovery (made `B` more
+`docs/FIELD_POSTPROCESSING.md`: superconvergent patch recovery (made `B` more
 than twice as rough), plot smoothing (costs peak amplitude for modest gain),
 raising the polygon order alone (no effect on scatter, and slivers above
 `N = 48`), and coarsening the far field further (at most a few per cent of the
