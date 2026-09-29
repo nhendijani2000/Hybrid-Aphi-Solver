@@ -23,5 +23,6 @@ drive_current          1.0          1.0e-6
 R_rel_error_max        1.0e-4
 L_nH                   22.5956      0.05
 phi_vs_zL_worst_max    2.0e-3
+phi_pointwise_rel_max  5.0e-5
 J_ratio_exact          0.999959
 J_ratio_tol            5.0e-5

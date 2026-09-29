@@ -169,6 +169,20 @@ print("\nPhi")
 dev = np.abs(pr / V.real - z / L)
 check_max("Phi/V vs z/L, worst", float(dev.max()), exp["phi_vs_zL_worst_max"][0])
 
+# A second, STRICTER form: pointwise relative error against the exact linear
+# profile, rather than error normalised by the terminal voltage. The two differ
+# because the normalised form divides a worst-case deviation by the LARGEST
+# potential in the problem, so a deviation sitting near the low-potential end
+# is judged against a value it never approaches. The pointwise form asks what
+# it should: how wrong is Phi HERE, relative to what it should be HERE.
+#
+# Guarded to z > 0.1 L. The exact profile passes through zero at the reference
+# cap, and a relative error against zero is not a number.
+mrel = z > 0.1 * L
+exact = V.real * z / L
+point_rel = np.abs(pr[mrel] / exact[mrel] - 1.0)
+check_max("Phi pointwise rel, z>0.1L", float(point_rel.max()),
+          exp["phi_pointwise_rel_max"][0])
 # --- J(0)/J(a) against Bessel ---------------------------------------------
 print("\nJ profile")
 cc = CellCenters(Input=wire)

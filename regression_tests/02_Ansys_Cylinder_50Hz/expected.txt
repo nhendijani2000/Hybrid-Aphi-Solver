@@ -27,6 +27,7 @@ L_nH                   22.5956      0.05
 
 # Phi must be the z/L gradient. Worst-case over every wire node.
 phi_vs_zL_worst_max    2.0e-3
+phi_pointwise_rel_max  1.0e-2
 
 # J(0)/J(a) against the Bessel ratio at a/delta = 0.1605. The exact value is
 # 0.999959; we measure 0.999968. The tolerance is the gap plus headroom.
