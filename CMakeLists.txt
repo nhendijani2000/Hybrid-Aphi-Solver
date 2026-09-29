@@ -55,25 +55,15 @@ target_include_directories(aphi_core PUBLIC
 # present. See docs/LINEAR_SOLVER.md for what that costs on Windows.
 option(APHI_WITH_MUMPS "Link the MUMPS sparse direct solver as an optional backend" OFF)
 if(APHI_WITH_MUMPS)
-    find_package(MUMPS COMPONENTS zmumps)
-    if(NOT MUMPS_FOUND)
-        find_library(MUMPS_ZMUMPS_LIB NAMES zmumps HINTS ${MUMPS_ROOT}/lib)
-        find_path(MUMPS_INCLUDE_DIR NAMES zmumps_c.h HINTS ${MUMPS_ROOT}/include)
-        if(NOT MUMPS_ZMUMPS_LIB OR NOT MUMPS_INCLUDE_DIR)
-            message(FATAL_ERROR
-                "APHI_WITH_MUMPS=ON but zmumps was not found. Set MUMPS_ROOT to the "
-                "install prefix that holds include/zmumps_c.h and lib/zmumps.*, or turn "
-                "the option back OFF to build with the internal solver only.")
-        endif()
-    endif()
+    # The install tree ships a config package (third_party/mumps-install/cmake).
+    # Use it rather than find_library: zmumps.lib alone does NOT link -- it
+    # needs mumps_common, pord and the sequential MPI stub, and the umbrella
+    # target MUMPS::MUMPS carries that whole chain. Linking only zmumps gives
+    # unresolved MUMPS_ABORT and mumps_get_* symbols.
+    find_package(MUMPS CONFIG REQUIRED)
     target_compile_definitions(aphi_core PUBLIC APHI_WITH_MUMPS)
     target_sources(aphi_core PRIVATE src/mumps_backend.cpp)
-    if(MUMPS_FOUND)
-        target_link_libraries(aphi_core PUBLIC MUMPS::zmumps)
-    else()
-        target_include_directories(aphi_core PUBLIC ${MUMPS_INCLUDE_DIR})
-        target_link_libraries(aphi_core PUBLIC ${MUMPS_ZMUMPS_LIB})
-    endif()
+    target_link_libraries(aphi_core PUBLIC MUMPS::MUMPS)
     message(STATUS "MUMPS backend: ENABLED")
 else()
     message(STATUS "MUMPS backend: off (internal solver only)")

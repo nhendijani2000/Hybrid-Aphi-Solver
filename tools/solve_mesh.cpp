@@ -28,6 +28,7 @@
 #include "aphi_solver/factorization.hpp"
 #include "aphi_solver/gmsh_reader.hpp"
 #include "aphi_solver/input_file.hpp"
+#include "aphi_solver/mumps_backend.hpp"
 #include "aphi_solver/postprocess.hpp"
 #include "aphi_solver/version.hpp"
 
@@ -208,7 +209,14 @@ int main(int argc, char** argv) {
             const bool ok_plain =
                 !compare_plain ||
                 solve_symmetric(system.matrix, system.rhs, x_plain, rp, plain);
-            const bool ok_equil = solve_symmetric(system.matrix, system.rhs, x_equil, re, equil);
+            const bool ok_equil =
+                p.backend == SolverBackend::Mumps
+#ifdef APHI_WITH_MUMPS
+                    ? solve_symmetric_mumps(system.matrix, system.rhs, x_equil, re)
+#else
+                    ? false  // unreachable: rejected at parse time
+#endif
+                    : solve_symmetric(system.matrix, system.rhs, x_equil, re, equil);
 
             std::ostringstream label;
             label << std::setprecision(4) << f << " Hz";

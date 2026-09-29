@@ -107,3 +107,6 @@ examples/*_field.vtk
 examples/potential.out
 examples/potential.vtk
 examples/_tmpout/
+
+# The MUMPS-enabled build tree, configured separately from build/
+build-mumps/
