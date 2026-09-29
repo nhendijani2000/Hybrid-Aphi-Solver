@@ -71,6 +71,12 @@ HTML is still written and the script says it skipped the PDF.
 
 ### Cost, and how to tell it worked
 
+Every run writes `output/run_summary.txt` — the same timing table the console
+shows, plus the mesh, unknown count and fill-in. That file is the record of
+what a run cost; the per-stage timings are also stamped into the header of
+every `.out`. Nothing else has to be captured from the console.
+
+
 `02_Ansys_Cylinder_50Hz` is the heavier of the two cases:
 
     mesh          18994 nodes, 101873 tets, a few seconds

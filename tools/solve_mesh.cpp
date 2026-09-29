@@ -299,16 +299,22 @@ int main(int argc, char** argv) {
         // Where the time went. Printed unconditionally because a run that is
         // slow for the wrong reason -- paging, or an ordering that blew up --
         // looks identical to a healthy one in every other line of output.
+        //
+        // Built once into a string, then sent BOTH to the console and to
+        // output/run_summary.txt. Console-only was the first version, and it
+        // meant the one number people actually go looking for afterwards --
+        // where did the time go -- survived only as long as the scrollback.
         {
             const double total = ms(run_started, Clock::now());
             const double accounted = assemble_total_ms + factor_total_ms + solve_total_ms +
                                      fields_total_ms + write_ms;
-            std::cout << "\n" << std::left << std::setw(22) << "timing" << std::right
-                      << std::setw(12) << "seconds" << std::setw(10) << "percent" << "\n";
+            std::ostringstream s;
+            s << "\n" << std::left << std::setw(22) << "timing" << std::right
+              << std::setw(12) << "seconds" << std::setw(10) << "percent" << "\n";
             const auto row = [&](const char* name, double v) {
-                std::cout << std::left << std::setw(22) << name << std::right << std::fixed
-                          << std::setprecision(2) << std::setw(12) << v / 1000.0
-                          << std::setw(9) << (total > 0.0 ? 100.0 * v / total : 0.0) << " %\n";
+                s << std::left << std::setw(22) << name << std::right << std::fixed
+                  << std::setprecision(2) << std::setw(12) << v / 1000.0
+                  << std::setw(9) << (total > 0.0 ? 100.0 * v / total : 0.0) << " %\n";
             };
             row("  matrix assembly", assemble_total_ms);
             row("  factorization x2", factor_total_ms);
@@ -316,10 +322,37 @@ int main(int argc, char** argv) {
             row("  field computation", fields_total_ms);
             row("  writing fields", write_ms);
             row("  mesh, dofs, other", total - accounted);
-            std::cout << std::left << std::setw(22) << "  TOTAL" << std::right << std::fixed
-                      << std::setprecision(2) << std::setw(12) << total / 1000.0
-                      << std::setw(9) << 100.0 << " %\n"
-                      << std::defaultfloat;
+            s << std::left << std::setw(22) << "  TOTAL" << std::right << std::fixed
+              << std::setprecision(2) << std::setw(12) << total / 1000.0
+              << std::setw(9) << 100.0 << " %\n" << std::defaultfloat;
+            s << "\n  factorization is counted TWICE per frequency: the solve is run plain\n"
+                 "  and equilibrated so the two residuals can be compared. Half of that\n"
+                 "  line is diagnostic, not needed for the answer.\n";
+            std::cout << s.str();
+
+            if (!p.output_dir.empty()) {
+                const std::string sum_path = p.output_dir + "/run_summary.txt";
+                if (std::FILE* sf = std::fopen(sum_path.c_str(), "wb")) {
+                    std::ostringstream h;
+                    h << "A-Phi solver " << kVersion << " -- run summary\n\n"
+                      << "input         " << argv[1] << "\n"
+                      << "mesh          " << p.mesh_file << "   " << mesh.num_tets() << " tets\n"
+                      << "conditioning  " << conditioning_keyword(p.conditioning) << "\n"
+                      << "unknowns      " << dofs.num_total << "   (A: " << free_edges
+                      << " free edges, " << tree << " gauged to zero, " << dirichlet
+                      << " Dirichlet)\n"
+                      << "matrix        " << pattern.nnz() << " stored nonzeros, ordering "
+                      << ordering_keyword(ordering) << "\n"
+                      << "fill-in       nnz(L) = " << analysis.predicted_nnz << "   "
+                      << analysis.predicted_nnz * 20.0 / 1048576.0 << " MB\n";
+                    const std::string text = h.str() + s.str();
+                    std::fwrite(text.data(), 1, text.size(), sf);
+                    std::fclose(sf);
+                    std::cout << "\n                wrote " << sum_path << "\n";
+                } else {
+                    std::cout << "\n                could not write " << sum_path << "\n";
+                }
+            }
         }
 
         std::cout << "\nNothing is EXTRACTED from these solutions yet: no currents, voltages, R or\n"
