@@ -319,9 +319,38 @@ Each step verifiable before the next exists.
     that governed threading in `ASSEMBLY_PLAN` §8 step 8, where the measurement
     said the obvious candidate was the wrong one.
 
+**Step 11 answered, 2026-09-29: Stage 2 IS needed, and the item is
+supernodal factorization.** Timed at 33x behind MUMPS on the same matrix
+with the same ordering family, a gap fill cannot account for. Deferred
+behind the verification steps below by choice; see Sec. 10.
+
 ---
 
-## 10. Stage 2 — later, in-house, only if measured to be needed
+## 10. Stage 2 — DEFERRED, and now the largest known win
+
+> **SUPERNODAL FACTORIZATION IS THE NEXT PERFORMANCE WORK. Deferred
+> 2026-09-29 by decision, not by doubt — verification comes first.**
+>
+> The measurement that ranks it, case 02 at 240990 unknowns:
+>
+> | | fill | factorization |
+> |---|---|---|
+> | ours, after supervariables | 173.0 M | 335 s |
+> | MUMPS, same AMD family | 107.8 M | 10 s |
+> | ratio | 1.6x | **33x** |
+>
+> **Fill cannot explain a 33x gap.** 1.6x more fill is perhaps 2.5x more
+> floating-point work. The remaining ~13x is the inner loop: ours is scalar,
+> MUMPS's is blocked and goes through BLAS3. Both of the cheap ordering wins
+> have now been taken — supervariables gave 18 % less fill and 39 % less time,
+> aggressive absorption gave nothing — so there is no further ordering work
+> queued and this is what is left.
+>
+> It is also the only remaining item that would close the gap **without a
+> dependency**: MUMPS already does the job for anyone willing to install a
+> Fortran toolchain, and `backend = mumps` is there for exactly that. Stage 2
+> is for the default build.
+
 
 Everything here is a **performance or robustness** upgrade, not a new
 capability. None of it is required for a correct answer, and none of it needs a
