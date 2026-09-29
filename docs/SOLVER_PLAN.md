@@ -635,6 +635,32 @@ Faster to compute AND better quality, so the original claim was wrong in both
 directions. R and L are unchanged: 9.796995e-05 ohm, 22.5956 nH.
 
 Still 1.6x MUMPS's fill, down from 2.0x. Aggressive absorption is the next
+
+**Aggressive absorption: implemented, measured, removed (2026-09-29).**
+The other item on the omissions list. `external[e]` is already `|L_e \ L_p|` for
+the degree bound, so absorbing an element the moment that reaches zero -- rather
+than waiting until it is adjacent to some later pivot -- is about ten lines and
+free to test.
+
+It **fired once**. Once in ordering 37368 variables, and once again in ordering
+240990. Fill was bit-identical either way (23502407 and 172951131), and the
+ordering time moved within noise.
+
+The likely reason is that supervariables already collect the redundancy: exact
+containment `L_e` subset of `L_p` is rare once indistinguishable variables have
+been merged, and the existing absorption of `E_p` catches the common case. That
+explanation was not isolated -- disabling supervariables to see whether the
+count rises was not run -- so it is a hypothesis, while the counts and the
+identical fill are measurements.
+
+Reverted rather than kept. Ten correct lines that fire once in 240990
+eliminations are dead code, and dead code in the middle of the degree-update
+loop is a thing to read past forever. Recorded here so it is not re-attempted
+as an obvious win.
+
+**What remains of the gap is the factorization, not the ordering.** Ours is
+1.6x MUMPS's fill but 33x its factorization time. Fill cannot explain that;
+a scalar inner loop against blocked BLAS3 kernels can. That is Stage 2, Sec. 10.
 candidate for the remainder.
 
 **Why AMD was safe to write at this stage:** an ordering cannot be *wrong*, only
