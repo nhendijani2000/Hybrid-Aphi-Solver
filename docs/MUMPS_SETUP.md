@@ -36,15 +36,26 @@ https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneapi-toolkit-do
 checks for it and integrates with it. This machine has VS 18 Community, which
 is what `build.bat` already uses, so that is satisfied.
 
-**A custom install is worth the extra minute.** The full toolkit is far more
-than this project needs — it carries SYCL, VTune, Advisor, the DPC++ compiler
-and more. In the installer choose **Custom** and select only:
+**Take the Recommended installation.** An earlier draft of this file advised a
+custom install to trim the toolkit; that advice was written before seeing the
+installer's own numbers and is withdrawn.
 
-- Intel Fortran Compiler
-- Intel oneAPI Math Kernel Library
+    installation size   8.5 GB
+    location            C:\Program Files (x86)\Intel\oneAPI
 
-That keeps the install down substantially and avoids the Visual Studio
-integration for components you will never use.
+Three reasons Recommended is the better choice:
+
+- 8.5 GB against ~800 GB free is not a saving worth optimising for.
+- **VTune Profiler is bundled**, and it is the right tool for the open question
+  at the bottom of this file -- where the 550 s of factorization actually goes.
+  A trimmed install would have dropped it.
+- The risk is asymmetric. Deselecting something the MUMPS build turns out to
+  need -- a runtime, a threading layer, an OpenMP library -- surfaces as a
+  confusing link error an hour into step 2. oneMKL in particular has
+  threading-layer dependencies that are not obvious from the component names.
+
+The two components that matter are both in the Recommended set: **Intel Fortran
+Compiler** and **Intel oneAPI Math Kernel Library**.
 
 **Silent install**, if you prefer the command line — Intel's parameter list is
 at `Command Line Installation Parameters` on the download page:
