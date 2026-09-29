@@ -1,0 +1,316 @@
+<title>Copper Rod Validation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#15181d; --ink-2:#4a5260; --ink-3:#6f7888;
+    --bg:#fbfaf8; --card:#ffffff; --rule:#e3e0da;
+    --accent:#8a3324; --accent-soft:#f6ece9;
+    --ok:#2c5f2d; --warn:#8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+      --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+      --accent:#e08b74; --accent-soft:#2a1f1c;
+      --ok:#8fc98f; --warn:#e0b467;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+    --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+    --accent:#e08b74; --accent-soft:#2a1f1c;
+    --ok:#8fc98f; --warn:#e0b467;
+    color-scheme: dark;
+  }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.6; margin:0;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding-inline:16px; padding-block:40px 72px;}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:clamp(1.9rem,5vw,2.6rem);
+     line-height:1.15; margin:0 0 .35em; text-wrap:balance; letter-spacing:-.01em;}
+  .sub{color:var(--ink-2); font-size:1.05rem; margin:0 0 .4em; max-width:62ch;}
+  .meta{color:var(--ink-3); font-size:.82rem; font-family:"IBM Plex Mono",monospace;}
+  h2{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:1.5rem;
+     margin:3rem 0 .2em; padding-top:1.6rem; border-top:1px solid var(--rule); text-wrap:balance;}
+  h3{font-size:1.02rem; font-weight:600; margin:2rem 0 .3em; color:var(--ink);}
+  p{margin:.7em 0; max-width:68ch;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.88em;
+       background:var(--accent-soft); color:var(--accent); padding:.08em .34em; border-radius:3px;}
+  .figs{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); margin:1.2rem 0 .4rem;}
+  figure{margin:0; background:var(--card); border:1px solid var(--rule); border-radius:8px; overflow:hidden;}
+  figure img{display:block; width:100%; height:auto; background:#fff;}
+  figcaption{font-size:.8rem; color:var(--ink-2); padding:.6rem .8rem; border-top:1px solid var(--rule);}
+  figcaption b{color:var(--ink); font-weight:600;}
+  .tw{overflow-x:auto; margin:1.1rem 0;}
+  table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.45rem .7rem; border-bottom:1px solid var(--rule); white-space:nowrap;}
+  th{font-weight:600; color:var(--ink-2); font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;}
+  td:first-child{white-space:normal;}
+  tbody tr:last-child td{border-bottom:none;}
+  .note{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--accent);
+        border-radius:6px; padding:.9rem 1.1rem; margin:1.3rem 0;}
+  .note p{margin:.35em 0;}
+  .note strong{color:var(--accent);}
+  .ok{color:var(--ok); font-weight:600;}
+  .warn{color:var(--warn); font-weight:600;}
+  ul{max-width:68ch; padding-left:1.15rem;}
+  li{margin:.35em 0;}
+</style>
+
+<div class="wrap">
+
+<h1>Copper rod at 50&nbsp;Hz</h1>
+<p class="sub">Hybrid A&#8209;&Phi; finite-element solver, tree&#8209;cotree gauge. A slender copper
+conductor driven by a 1&nbsp;V terminal voltage, validated against the exact axisymmetric solution.</p>
+<p class="meta">regression_tests/02_Ansys_Cylinder_50Hz &nbsp;·&nbsp; 240,990 unknowns &nbsp;·&nbsp; backward error 4.8e&#8209;21</p>
+
+<h2>0. How to read these figures</h2>
+<p><b>Every figure here comes from one solve, on one mesh</b> — the Netgen-optimised mesh in §1.
+"Netgen-optimised" is a property of that mesh, not a variant of any individual plot: there is no
+unoptimised figure here to compare against. What Netgen changed, and by how much, is in §2.1.</p>
+<p>Only one pair differs in <em>processing</em> rather than in what it shows: §4.2 applies one
+smoothing pass, and those are the only two images with a red banner burned into them.</p>
+<div class="tw"><table>
+<thead><tr><th>section</th><th>what the figure is</th></tr></thead>
+<tbody>
+<tr><td>§2</td><td>cross-section mesh, whole domain and the wire alone</td></tr>
+<tr><td>§3</td><td><code>Re(Φ)</code> and <code>|Φ|</code> on the wire's lateral surface</td></tr>
+<tr><td>§4.1</td><td><b>nodal <code>|B|</code>, unsmoothed</b> — the solver's output</td></tr>
+<tr><td>§4.2</td><td><b>the same data, one smoothing pass</b> — not solver output</td></tr>
+<tr><td>§5.1</td><td><b>per-node <code>|E|</code></b>, whole domain, log scale</td></tr>
+<tr><td>§5.1.1</td><td>where the nodal field is not to be trusted (no figure)</td></tr>
+<tr><td>§5.2</td><td>nodal <code>|E|</code> in the wire, auto range beside pinned range</td></tr>
+<tr><td>§5.3</td><td><code>J</code> as coloured vectors, longitudinal cut</td></tr>
+</tbody></table></div>
+
+<h2>1. The case</h2>
+<div class="tw"><table><tbody>
+<tr><td>Conductor</td><td>copper, <code>σ = 5.8e7 S/m</code>, <code>a = 1.5 mm</code>, <code>L = 40 mm</code>, a 40&#8209;gon</td></tr>
+<tr><td>Domain</td><td>40&nbsp;mm cube of air, <code>n × A = 0</code> on the outer boundary</td></tr>
+<tr><td>Excitation</td><td>1.0&nbsp;V top face, 0.0&nbsp;V bottom face, 50&nbsp;Hz</td></tr>
+<tr><td>Skin depth</td><td><code>δ = 9.346 mm</code>, so <code>a/δ = 0.1605</code> — no skin effect</td></tr>
+<tr><td>Regime</td><td><code>ωL/R = 0.0725</code>, resistance dominated, so &Phi; is readable</td></tr>
+<tr><td>Formulation</td><td>first-order Whitney edge <code>A</code>, second-order P2 nodal <code>Φ</code></td></tr>
+<tr><td>Mesh</td><td>18,994 nodes, 101,873 tets, <b>Netgen-optimised</b>, 0.25&nbsp;mm at the surface, 0.4&nbsp;mm in the core</td></tr>
+<tr><td>Solve</td><td>240,990 unknowns, 503&nbsp;s, 4.03&nbsp;GB</td></tr>
+</tbody></table></div>
+<p><code>a/δ</code> and <code>ωL/R</code> are the same parameter, both scaling as <code>ω a²</code>. A case
+cannot show a strong skin effect and a readable potential at once; this one takes the resistive branch.</p>
+
+<h2>2. Mesh</h2>
+<div class="figs">
+  <figure><img src="fig/mesh_domain.png" alt="Cross-section mesh of the whole domain">
+    <figcaption><b>Whole domain.</b> Graded from 0.25&nbsp;mm at the conductor to 6&nbsp;mm in the far air.</figcaption></figure>
+  <figure><img src="fig/mesh_wire.png" alt="Cross-section mesh of the wire">
+    <figcaption><b>The wire alone.</b> Roughly 6 elements across the radius.</figcaption></figure>
+</div>
+<p>The element budget sits where the field is: <b>6.7&nbsp;%</b> inside <code>r = 1 mm</code>,
+<b>84.8&nbsp;%</b> in the band <code>1.0–2.0 mm</code>, and <b>3.8&nbsp;%</b> beyond <code>r = 3 mm</code>.</p>
+
+<h3>2.1 What Netgen optimisation bought</h3>
+<p>It changes element <em>shape</em> at fixed element size. Measured against the same mesh generated
+without it — same geometry file, same sizes, only the flag changed:</p>
+<div class="tw"><table>
+<thead><tr><th></th><th>without</th><th>with Netgen</th><th></th></tr></thead>
+<tbody>
+<tr><td>tets</td><td>105,715</td><td>101,873</td><td>CombineImprove merges elements</td></tr>
+<tr><td>unknowns</td><td>248,294</td><td>240,990</td><td></td></tr>
+<tr><td>factorise</td><td>681 s, 4.56 GB</td><td><b>503 s, 4.03 GB</b></td><td>26 % faster, 12 % less memory</td></tr>
+<tr><td>scatter at the peak</td><td>0.0181</td><td><b>0.0138</b></td><td>−24 %</td></tr>
+<tr><td>scatter near the core</td><td>0.0309</td><td><b>0.0210</b></td><td>−32 %</td></tr>
+<tr><td>azimuthal purity</td><td>0.9996</td><td><b>0.9999</b></td><td></td></tr>
+</tbody></table></div>
+<p>Better-shaped elements give the sparse ordering less fill-in, so the quality gain pays for itself
+twice. For comparison, the last <em>refinement</em> step bought 0.0215 → 0.0181 for 1.6× the unknowns
+and 2.8× the time. Netgen bought 0.0181 → 0.0138 for nothing.</p>
+
+<h2>3. Potential</h2>
+<p>&Phi; over the lateral surface of the wire, seen side on — not a cross-section, because the
+potential is driven along the axis.</p>
+<div class="figs">
+  <figure><img src="fig/phi_real.png" alt="Real part of the potential over the wire surface">
+    <figcaption><b>Re(Φ).</b> A clean <code>z/L</code> gradient, 0 to 1&nbsp;V.</figcaption></figure>
+  <figure><img src="fig/phi_mag.png" alt="Magnitude of the potential over the wire surface">
+    <figcaption><b>|Φ|.</b> Same gradient; the imaginary part is negligible in this regime.</figcaption></figure>
+</div>
+<p>Against the exact <code>z/L</code> over all 95,149 wire nodes: worst deviation
+<span class="ok">8.26e&#8209;04</span>, mean <span class="ok">2.51e&#8209;04</span>.
+&Phi; is gauge dependent — a different spanning tree shifts it by <code>−jωψ</code>, almost purely
+imaginary. <code>E</code>, <code>B</code>, <code>H</code> and <code>J</code> are not.</p>
+
+<h2>4. Magnetic flux density</h2>
+
+<h3>4.1 The solver's output</h3>
+<p>Nodal <code>|B|</code>, mid-length cross-section, <b>no smoothing</b>. Linear colour scale — a log
+ramp compresses the <code>1/r</code> decay into the top few colours and hides the ring entirely.
+These are the figures to read numbers off.</p>
+<div class="figs">
+  <figure><img src="fig/b_domain.png" alt="Magnitude of B over the whole cross-section">
+    <figcaption><b>Whole domain.</b> <code>1/r</code> decay to the box wall. Peak 1.3385&nbsp;T.</figcaption></figure>
+  <figure><img src="fig/b_zoom.png" alt="Magnitude of B zoomed to three radii">
+    <figcaption><b>Zoomed to 3a.</b> Zero on the axis, linear inside, peak at <code>r = a</code>.</figcaption></figure>
+</div>
+
+<h3>4.2 The same data with one smoothing pass</h3>
+<div class="note">
+<p><strong>The only difference from §4.1 is one point-to-cell-to-point averaging round trip.</strong>
+Same solve, same mesh, same colour map. Commercial tools smooth plotted fields by default, which is
+the leading explanation for why their <code>|B|</code> cross-sections look cleaner, so these exist to
+compare like with like. <strong>They are not the solver's output</strong>, and each carries a red
+banner saying so.</p>
+</div>
+<div class="figs">
+  <figure><img src="fig/b_domain_smoothed.png" alt="Smoothed B, whole domain">
+    <figcaption><b>Smoothed, 1 pass</b>, whole domain.</figcaption></figure>
+  <figure><img src="fig/b_zoom_smoothed.png" alt="Smoothed B, zoomed">
+    <figcaption><b>Smoothed, 1 pass</b>, zoomed. Peak 1.2954&nbsp;T, down 3.2&nbsp;%.</figcaption></figure>
+</div>
+<div class="tw"><table>
+<thead><tr><th></th><th>unsmoothed (§4.1)</th><th>1 pass (§4.2)</th><th>2 passes</th><th>4 passes</th></tr></thead>
+<tbody>
+<tr><td>scatter, 1.20–1.49&nbsp;mm</td><td>0.0296</td><td>0.0183</td><td>0.0179</td><td>0.0225</td></tr>
+<tr><td>error, 1.20–1.49&nbsp;mm</td><td>−0.39&nbsp;%</td><td>−1.84&nbsp;%</td><td>−2.43&nbsp;%</td><td>−3.48&nbsp;%</td></tr>
+<tr><td>displayed peak (T)</td><td>1.3385</td><td>1.2954</td><td>1.2716</td><td>1.2387</td></tr>
+<tr><td>peak change</td><td>—</td><td>−3.2&nbsp;%</td><td>−5.0&nbsp;%</td><td>−7.5&nbsp;%</td></tr>
+</tbody></table></div>
+<p>38&nbsp;% less scatter for 3.2&nbsp;% of the peak — a better trade than on the pre-Netgen mesh,
+where it cost 6.2&nbsp;% for 14&nbsp;%. The bias still grows while the scatter stops improving past
+one pass. Smoothing is not a route to a better answer; it is the control needed to compare like with
+like if the reference picture is itself smoothed.</p>
+
+<h2>5. Electric field</h2>
+
+<h3>5.1 Whole domain, per node</h3>
+<div class="figs">
+  <figure><img src="fig/e_domain_nodal.png" alt="Nodal magnitude of E over the whole cross-section">
+    <figcaption><b>|E|, whole domain, per node.</b> Log scale, 5 → 24.9&nbsp;V/m.</figcaption></figure>
+  <figure><img src="fig/e_domain_nodal_zoom.png" alt="Nodal magnitude of E zoomed to three radii">
+    <figcaption><b>The same, zoomed to 3a.</b></figcaption></figure>
+</div>
+<p>The scale is logarithmic, <code>5 → 24.9 V/m</code>. The conductor is at the <b>top</b> of that
+range, which is correct: <code>E</code> is largest inside the copper and decays outward.</p>
+
+<h3>5.1.1 Where the nodal field is not to be trusted</h3>
+<p>The post-processor also writes a per-cell <code>E</code>, one constant value per tetrahedron. It
+is not plotted here — it renders as a mosaic and reads badly — but it is the reference the nodal
+field is checked against, because it is exact at the material interface where the nodal field is
+not. Mean <code>|E|</code> by radius, nodal against per cell:</p>
+<div class="tw"><table>
+<thead><tr><th>band (mm)</th><th>nodal</th><th>per cell</th><th>difference</th></tr></thead>
+<tbody>
+<tr><td>0.0 – 1.5</td><td>24.934</td><td>24.934</td><td>0.00 %</td></tr>
+<tr><td>1.5 – 2.0</td><td>29.972</td><td>37.882</td><td><b>−20.88 %</b></td></tr>
+<tr><td>2.0 – 3.0</td><td>29.866</td><td>29.775</td><td>+0.31 %</td></tr>
+<tr><td>3.0 – 5.0</td><td>21.507</td><td>21.493</td><td>+0.06 %</td></tr>
+<tr><td>5.0 – 8.0</td><td>14.807</td><td>14.690</td><td>+0.80 %</td></tr>
+</tbody></table></div>
+<div class="note">
+<p>Inside the conductor the two agree exactly, and from <code>r = 2 mm</code> outward to better than
+1&nbsp;%. <strong>Exactly one band differs — the one immediately outside the wire.</strong>
+<code>E</code>'s <em>normal</em> component jumps at the material interface, so no single nodal value
+is correct there. The post-processor resolves the ambiguity by taking the higher-conductivity side,
+so every interface node carries the copper value, 24.93&nbsp;V/m — but the air just outside genuinely
+carries 37.88&nbsp;V/m, because a radial component appears there that the purely axial field inside
+does not have. <code>|E|</code> jumps <b>up</b> crossing into the air, so forcing the copper value
+onto those nodes makes that first band read <b>21&nbsp;% low</b>, not high.</p>
+<p>45,200 of 140,532 nodes (32.2&nbsp;%) are flagged as interface nodes, all at
+<code>r = 1.4954–1.5000 mm</code>. Use the per-cell figure when the value at the surface matters;
+use the nodal one when the overall picture does.</p>
+</div>
+
+<h3>5.2 Inside the wire — and why the colours disagree with §5.1</h3>
+<div class="figs">
+  <figure><img src="fig/e_wire.png" alt="Magnitude of E inside the wire, auto colour range">
+    <figcaption><b>Auto colour range.</b> Range 24.9342 → 24.9351&nbsp;V/m.</figcaption></figure>
+  <figure><img src="fig/e_wire_true.png" alt="Magnitude of E inside the wire, pinned range">
+    <figcaption><b>Range pinned 0–25&nbsp;V/m.</b> The same data.</figcaption></figure>
+</div>
+<div class="note">
+<p><strong>This answers why the centre reads red in one figure and blue in the other.</strong> Both
+show the same number, about 24.935&nbsp;V/m, against colour ranges that differ by a factor of roughly
+20,000.</p>
+<p>In §5.1 the range is <code>5 → 24.9 V/m</code> across the whole box, so the conductor sits at the
+top and renders dark red. In the left figure above, ParaView rescaled to the wire's <em>own</em>
+range — <b>24.9342 → 24.9351 V/m</b>, a total span of <code>9e-04 V/m</code>, or <b>0.004 %</b> of the
+value. Auto-rescaling blew that up to the full colour map, producing a red ring and blue core that
+look like a strong radial gradient and are in fact noise at the fifth significant figure.</p>
+<p>The right figure pins the range to <code>0–25 V/m</code> and the same data renders as a uniform
+disc — the physical truth. With <code>a/δ = 0.16</code> there is no skin effect and
+<code>E = V/L</code> uniformly. The exact value is 25.0&nbsp;V/m; we are <b>0.26 %</b> low, consistent
+with the 40-gon being 0.41 % smaller in area than the circle it approximates.</p>
+</div>
+
+<h3>5.3 Current density</h3>
+<div class="figs">
+  <figure><img src="fig/j_vectors.png" alt="Current density vectors inside the wire">
+    <figcaption><b>J = σE</b>, on a longitudinal slice. On a mid-length cut every arrow points at
+    the viewer and nothing is visible.</figcaption></figure>
+</div>
+
+<h2>6. Validation</h2>
+<p>Nothing below fits a free parameter. The current follows from <code>R_dc</code> under the 1&nbsp;V
+drive: <code>I = 10207.3 A</code>, <code>B(a) = 1.3610 T</code>.</p>
+<div class="tw"><table><tbody>
+<tr><td><code>R</code></td><td>9.796995e&#8209;05 Ω against 9.796863e&#8209;05 exact — <span class="ok">1.3e&#8209;05</span></td></tr>
+<tr><td><code>L</code> from <code>Im(Z)/ω</code></td><td>22.60 nH</td></tr>
+<tr><td><code>J(0)/J(a)</code></td><td>0.999968 against the Bessel 0.999959</td></tr>
+<tr><td><code>Φ</code> vs exact <code>z/L</code></td><td>worst 8.26e&#8209;04, mean 2.51e&#8209;04</td></tr>
+<tr><td><code>B</code> direction at the peak</td><td>azimuthal component 0.9999 of the total — <span class="ok">0.01&nbsp;%</span> off</td></tr>
+<tr><td><code>B</code> inside the conductor</td><td>every band within <span class="ok">0.5&nbsp;%</span></td></tr>
+</tbody></table></div>
+<div class="tw"><table>
+<thead><tr><th>band (mm)</th><th>mean, T</th><th>exact, T</th><th>error</th><th>azimuthal scatter</th></tr></thead>
+<tbody>
+<tr><td>0.30 – 0.60</td><td>0.4167</td><td>0.4163</td><td>+0.24 %</td><td>0.0477</td></tr>
+<tr><td>0.60 – 0.90</td><td>0.6914</td><td>0.6884</td><td>+0.40 %</td><td>0.0309</td></tr>
+<tr><td>0.90 – 1.20</td><td>0.9906</td><td>0.9929</td><td>−0.22 %</td><td>0.0210</td></tr>
+<tr><td>1.20 – 1.49</td><td>1.2734</td><td>1.2722</td><td>+0.10 %</td><td>0.0138</td></tr>
+<tr><td>1.49 – 2.00</td><td>1.2380</td><td>1.2633</td><td>−1.99 %</td><td>0.0307</td></tr>
+<tr><td>2.00 – 3.00</td><td>0.8776</td><td>0.8869</td><td>−1.15 %</td><td>0.0559</td></tr>
+<tr><td>3.00 – 5.00</td><td>0.5490</td><td>0.5601</td><td>−2.01 %</td><td>0.0768</td></tr>
+<tr><td>5.00 – 8.00</td><td>0.3267</td><td>0.3349</td><td>−2.37 %</td><td>0.0868</td></tr>
+</tbody></table></div>
+<p>Linear rise inside, <code>1/r</code> outside, correct absolute scale, over a 25× span in radius.
+Inside the conductor every band is within 0.5&nbsp;%.</p>
+
+<h2>7. Known limitations</h2>
+<ul>
+<li><b>Azimuthal scatter in <code>B</code> of 1.4–3.1&nbsp;% near the conductor.</b> The problem is
+axisymmetric, so this is error. It is <code>O(h)</code> element noise from <code>B</code> being
+constant per tetrahedron — the lowest-order quantity in the formulation.</li>
+<li><b>Nodal <code>B</code> reads low in the far field — the figures in §4, not the numbers in
+§6.</b> §4 plots the nodal array; §6 is computed from the per-cell one. Against the exact solution
+at each sample's own radius: <code>0.30–1.49 mm</code> nodal −0.4 to −1.5&nbsp;% against per-cell
++0.1 to +0.4&nbsp;%; then <code>1.49–2.00</code> −4.29 vs −2.01&nbsp;%, <code>3.00–5.00</code>
+−6.15 vs −2.12&nbsp;%, <code>5.00–8.00</code> <b>−7.50</b> vs −2.19&nbsp;%. Inside the conductor and
+at the peak both are within 1.5&nbsp;%, so the 1.3385&nbsp;T peak is sound; beyond the wire the
+nodal colours under-read. Likely cause, reasoned rather than separately measured: the nodal value is
+a volume-weighted average over each node's element patch, the mesh coarsens rapidly outward, and the
+patch is therefore dominated by the larger outer elements where <code>|B| ~ 1/r</code> is smaller.
+Unlike <code>E</code>, <code>B</code> has <b>no</b> material-interface problem here, because
+<code>μ<sub>r</sub> = 1</code> on both sides — the band that is <code>E</code>'s worst is
+<code>B</code>'s best. A magnetic material would change that.</li>
+<li><b>A coherent polygon harmonic is now visible, at 0.31&nbsp;%.</b> Fourier analysis at
+<code>r = a</code> finds a peak at <code>m = 40</code>, the polygon order. No earlier mesh showed one —
+it was buried under element-quality noise, and Netgen removed enough of that to expose it. At
+0.31&nbsp;% against 1.4&nbsp;% total scatter it is not what the eye sees, but it means raising
+<code>N</code> becomes worthwhile once quality noise falls further.</li>
+<li><b>Far-field accuracy was traded for near-field resolution.</b> Beyond <code>r = 3 mm</code> the
+error is <span class="warn">~2&nbsp;%</span> against ~1&nbsp;% on a uniformly-graded mesh. That band
+holds 3.8&nbsp;% of the elements and does not affect <code>R</code>, <code>L</code> or the conductor
+fields.</li>
+<li><b>Tried and rejected, all measured:</b> superconvergent patch recovery (made <code>B</code> more
+than twice as rough), plot smoothing (costs peak amplitude for modest gain), raising the polygon
+order alone (no effect on scatter, and slivers above <code>N = 48</code>), coarsening the far field
+further (a few per cent of the mesh to reclaim).</li>
+<li><b>Uniform refinement is reaching its limit.</b> <code>lc_skin</code> 0.7 → 0.35 → 0.25 gave
+peak-band scatter 0.029 → 0.0215 → 0.0181, ratios ×0.74 and ×0.84 where <code>O(h)</code> allows
+×0.50 and ×0.71. Netgen then took it to <b>0.0138 for free</b> — a larger gain than the last
+refinement step bought. Element <em>shape</em> was the cheaper lever all along.</li>
+</ul>
+
+</div>
