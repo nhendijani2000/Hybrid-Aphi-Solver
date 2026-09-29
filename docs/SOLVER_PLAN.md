@@ -604,10 +604,38 @@ measured threshold, with what it separates written beside it.
 AMD's approximate external degree, selected through degree buckets.
 
 **Deliberately left out**, per Stage 1's correctness-over-speed brief:
-supervariables (indistinguishable-vertex detection by hashing), aggressive
-absorption, and the paper's packed integer workspace with garbage collection —
-replaced by per-vertex vectors, which cost memory and locality and are far
-easier to be sure of. All three are speed, not quality.
+aggressive absorption, and the paper's packed integer workspace with garbage
+collection — replaced by per-vertex vectors, which cost memory and locality and
+are far easier to be sure of.
+
+**CORRECTED 2026-09-29.** Supervariables were on that list too, described --
+along with the other two -- as "all three are speed, not quality". **That was
+wrong, and measurably so.** Comparing our fill against MUMPS's on the same
+matrix with the same ordering family exposed it:
+
+    case 02, nnz(L)          ours     MUMPS (AMD)
+    without supervariables   211.5 M     107.8 M
+    with supervariables      173.0 M     107.8 M
+
+Eliminating indistinguishable variables one at a time updates every degree
+using stale information about the others, so the greedy choice is made on worse
+data and the ORDERING degrades, not just the runtime. Finite-element meshes are
+full of indistinguishable vertices, which is why the effect here was a factor
+of two rather than marginal.
+
+Implemented 2026-09-29. Measured on case 02:
+
+    nnz(L)          211483290 -> 172951131    -18.2 %
+    ordering time      8982 ms ->   3953 ms    2.3x faster
+    factorization      550.3 s ->   335.3 s    -39 %
+    total run          568.8 s ->   342.2 s    -40 %
+    backward error    4.80e-21 -> 3.69e-21     better
+
+Faster to compute AND better quality, so the original claim was wrong in both
+directions. R and L are unchanged: 9.796995e-05 ohm, 22.5956 nH.
+
+Still 1.6x MUMPS's fill, down from 2.0x. Aggressive absorption is the next
+candidate for the remainder.
 
 **Why AMD was safe to write at this stage:** an ordering cannot be *wrong*, only
 worse. Any permutation gives a correct factorization, so a defect shows up as

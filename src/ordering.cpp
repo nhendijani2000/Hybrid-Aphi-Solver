@@ -197,7 +197,12 @@ int pseudo_peripheral(const SymmetricAdjacency& adj, int start, std::vector<char
 /// **What this implementation leaves out of the paper**, deliberately, per
 /// Stage 1's correctness-over-speed brief:
 ///
-///  - **Supervariables** (detecting indistinguishable variables by hashing and
+///  - ~~Supervariables~~ -- IMPLEMENTED 2026-09-29. Was listed here as "mostly
+///    a speed optimisation", which was wrong: it cut case 02 fill 211.5 M to
+///    173.0 M and the factorization 550 s to 335 s. Eliminating
+///    indistinguishable variables separately updates degrees from stale data,
+///    so the ordering itself degrades. (Old note follows.)
+///  - Supervariables (detecting indistinguishable variables by hashing and
 ///    eliminating them together). Mostly a speed optimisation, and FEM meshes
 ///    do have many indistinguishable vertices, so this is where the time goes
 ///    if it ever becomes a problem.
@@ -220,6 +225,23 @@ std::vector<int> approximate_minimum_degree(const SymmetricAdjacency& adj, int n
     std::vector<std::vector<int>> elems(static_cast<std::size_t>(n)); // E_i: adjacent elements
     std::vector<std::vector<int>> members(static_cast<std::size_t>(n));  // L_e for an element
     std::vector<int> degree(static_cast<std::size_t>(n), 0);
+
+    // --- supervariables ----------------------------------------------------
+    // `nv[i]` is how many ORIGINAL variables the principal variable i stands
+    // for, and `merged[i]` names them. Two variables are indistinguishable when
+    // their adjacency is identical; eliminating them together is not merely
+    // faster, it orders BETTER, because eliminating them one at a time updates
+    // every degree using stale information about the other. Finite-element
+    // meshes are full of indistinguishable vertices, which is why leaving this
+    // out cost a factor of two in fill here -- see SOLVER_PLAN.md Sec. 15.
+    std::vector<int> nv(static_cast<std::size_t>(n), 1);
+    std::vector<std::vector<int>> merged(static_cast<std::size_t>(n));
+    // Weighted |L_e|, in original variables. Set when an element is created and
+    // valid for its lifetime: a merge moves weight between two members that are
+    // BOTH in the element (indistinguishable variables share their elements), so
+    // the total does not move; and a variable's elimination absorbs every
+    // element it belonged to.
+    std::vector<int> elem_weight(static_cast<std::size_t>(n), 0);
 
     for (int i = 0; i < n; ++i) {
         vars[static_cast<std::size_t>(i)].assign(
@@ -265,17 +287,31 @@ std::vector<int> approximate_minimum_degree(const SymmetricAdjacency& adj, int n
     std::vector<int> external(static_cast<std::size_t>(n), 0);  // |L_e \ L_p| per element
     std::vector<int> touched_elements;
     std::vector<int> pivot_list;
+    // Scratch for supervariable detection, allocated once.
+    std::vector<long long> hash_of(static_cast<std::size_t>(n), 0);
+    std::vector<int> hash_head(static_cast<std::size_t>(n), -1);
+    std::vector<int> hash_next(static_cast<std::size_t>(n), -1);
+    std::vector<int> hash_used;
+    std::vector<int> mark(static_cast<std::size_t>(n), -1);
     int min_degree = 0;
+    int eliminated = 0;
+    int step = 0;
 
-    for (int k = 0; k < n; ++k) {
+    while (eliminated < n) {
         // --- pick a variable of least (approximate) degree --------------
         while (min_degree <= n && head[static_cast<std::size_t>(min_degree)] < 0) ++min_degree;
         if (min_degree > n) break;  // nothing left, which happens only if n == 0
         const int p = head[static_cast<std::size_t>(min_degree)];
         bucket_remove(p);
-        order.push_back(p);
 
-        // --- L_p: the pivot's neighbourhood, variables only -------------
+        // A supervariable is eliminated as a block: it and everything merged
+        // into it leave together, in that order.
+        order.push_back(p);
+        for (int q : merged[static_cast<std::size_t>(p)]) order.push_back(q);
+        eliminated += nv[static_cast<std::size_t>(p)];
+        const int k = step++;
+
+        // --- L_p: the pivot's neighbourhood, principal variables only ---
         pivot_list.clear();
         for (int j : vars[static_cast<std::size_t>(p)]) {
             if (state[static_cast<std::size_t>(j)] != State::Variable) continue;
@@ -330,47 +366,53 @@ std::vector<int> approximate_minimum_degree(const SymmetricAdjacency& adj, int n
         }
 
         // --- |L_e \ L_p| for every element still adjacent to L_p --------
-        // The standard trick: start each at |L_e|, then decrement once per
-        // member that is also in L_p. Every i in L_p belongs to every element
-        // in its own E_i, so one pass over L_p suffices.
+        // Weighted, in original variables. Start each at the element's weight,
+        // then subtract nv[i] once per member that is also in L_p. Every i in
+        // L_p belongs to every element in its own E_i, so one pass suffices.
         touched_elements.clear();
         for (int i : pivot_list) {
             for (int e : elems[static_cast<std::size_t>(i)]) {
                 if (e == p) continue;
                 if (stamp[static_cast<std::size_t>(e)] != -2 - k) {
                     stamp[static_cast<std::size_t>(e)] = -2 - k;
-                    external[static_cast<std::size_t>(e)] =
-                        static_cast<int>(members[static_cast<std::size_t>(e)].size());
+                    external[static_cast<std::size_t>(e)] = elem_weight[static_cast<std::size_t>(e)];
                     touched_elements.push_back(e);
                 }
-                --external[static_cast<std::size_t>(e)];
+                external[static_cast<std::size_t>(e)] -= nv[static_cast<std::size_t>(i)];
             }
         }
 
         // --- the approximate degree ------------------------------------
-        const int lp = static_cast<int>(pivot_list.size());
+        // Every count is weighted: a degree is a number of ORIGINAL variables,
+        // not of supervariables, or the bucket order would compare unlike
+        // things.
+        long long lp_weight = 0;
+        for (int i : pivot_list) lp_weight += nv[static_cast<std::size_t>(i)];
+
         for (int i : pivot_list) {
             long long sum = 0;
             for (int e : elems[static_cast<std::size_t>(i)]) {
                 if (e == p) continue;
                 sum += std::max(0, external[static_cast<std::size_t>(e)]);
             }
-            const long long approx =
-                static_cast<long long>(vars[static_cast<std::size_t>(i)].size()) + (lp - 1) + sum;
+            long long ai_weight = 0;
+            for (int j : vars[static_cast<std::size_t>(i)]) {
+                if (state[static_cast<std::size_t>(j)] == State::Variable) {
+                    ai_weight += nv[static_cast<std::size_t>(j)];
+                }
+            }
+            const long long approx = ai_weight + (lp_weight - nv[static_cast<std::size_t>(i)]) + sum;
 
             // Three bounds, whichever is tightest. The first two are exact
             // facts about any elimination graph; the third is AMD's estimate.
-            const long long remaining = static_cast<long long>(n) - k - 1;
-            const long long grew = static_cast<long long>(degree[static_cast<std::size_t>(i)]) + lp - 1;
+            const long long remaining = static_cast<long long>(n) - eliminated;
+            const long long grew = static_cast<long long>(degree[static_cast<std::size_t>(i)]) +
+                                   lp_weight - nv[static_cast<std::size_t>(i)];
             const long long d = std::min(remaining, std::min(grew, approx));
 
             bucket_remove(i);
             degree[static_cast<std::size_t>(i)] = static_cast<int>(std::max(0LL, d));
             bucket_insert(i);
-            // This is the only place `min_degree` can fall: a variable not adjacent
-            // to the pivot keeps its degree, and the scan above already established
-            // that nothing was lower. An extra reset to 0 after this loop would be
-            // redundant -- removing one changed neither the fill nor the time.
             min_degree = std::min(min_degree, degree[static_cast<std::size_t>(i)]);
         }
         for (int e : touched_elements) stamp[static_cast<std::size_t>(e)] = -1;
@@ -378,10 +420,83 @@ std::vector<int> approximate_minimum_degree(const SymmetricAdjacency& adj, int n
         // --- the pivot becomes an element ------------------------------
         state[static_cast<std::size_t>(p)] = State::Element;
         members[static_cast<std::size_t>(p)] = pivot_list;
+        elem_weight[static_cast<std::size_t>(p)] = static_cast<int>(lp_weight);
         vars[static_cast<std::size_t>(p)].clear();
         vars[static_cast<std::size_t>(p)].shrink_to_fit();
         elems[static_cast<std::size_t>(p)].clear();
         elems[static_cast<std::size_t>(p)].shrink_to_fit();
+
+        // --- supervariable detection within L_p -------------------------
+        // Only variables in L_p can have become indistinguishable this step:
+        // nothing outside it had its adjacency changed. Hash (A_i union E_i),
+        // then compare exactly within a hash bucket -- the hash only narrows
+        // the candidates, it never decides a merge on its own.
+        hash_used.clear();
+        for (int i : pivot_list) {
+            if (state[static_cast<std::size_t>(i)] != State::Variable) continue;
+            long long h = 0;
+            for (int j : vars[static_cast<std::size_t>(i)]) h += j;
+            for (int e : elems[static_cast<std::size_t>(i)]) h += e;
+            h %= n;
+            hash_of[static_cast<std::size_t>(i)] = h;
+            const std::size_t hb = static_cast<std::size_t>(h);
+            if (hash_head[hb] < 0) hash_used.push_back(static_cast<int>(h));
+            hash_next[static_cast<std::size_t>(i)] = hash_head[hb];
+            hash_head[hb] = i;
+        }
+
+        for (int h : hash_used) {
+            for (int i = hash_head[static_cast<std::size_t>(h)]; i >= 0;
+                 i = hash_next[static_cast<std::size_t>(i)]) {
+                if (state[static_cast<std::size_t>(i)] != State::Variable) continue;
+
+                // Mark i's neighbourhood once, then test each later candidate
+                // against it. Comparing counts first rejects most pairs before
+                // any set work.
+                for (int j : vars[static_cast<std::size_t>(i)]) mark[static_cast<std::size_t>(j)] = i;
+                for (int e : elems[static_cast<std::size_t>(i)]) mark[static_cast<std::size_t>(e)] = i;
+
+                for (int j = hash_next[static_cast<std::size_t>(i)]; j >= 0;
+                     j = hash_next[static_cast<std::size_t>(j)]) {
+                    if (state[static_cast<std::size_t>(j)] != State::Variable) continue;
+                    if (vars[static_cast<std::size_t>(j)].size() !=
+                            vars[static_cast<std::size_t>(i)].size() ||
+                        elems[static_cast<std::size_t>(j)].size() !=
+                            elems[static_cast<std::size_t>(i)].size()) {
+                        continue;
+                    }
+                    bool same = true;
+                    for (int q : vars[static_cast<std::size_t>(j)]) {
+                        if (mark[static_cast<std::size_t>(q)] != i) { same = false; break; }
+                    }
+                    if (same) {
+                        for (int e : elems[static_cast<std::size_t>(j)]) {
+                            if (mark[static_cast<std::size_t>(e)] != i) { same = false; break; }
+                        }
+                    }
+                    if (!same) continue;
+
+                    // Absorb j into i. j leaves the graph; every list that
+                    // names it skips it on the State check, exactly as it
+                    // already does for eliminated variables.
+                    bucket_remove(j);
+                    nv[static_cast<std::size_t>(i)] += nv[static_cast<std::size_t>(j)];
+                    merged[static_cast<std::size_t>(i)].push_back(j);
+                    for (int q : merged[static_cast<std::size_t>(j)]) {
+                        merged[static_cast<std::size_t>(i)].push_back(q);
+                    }
+                    merged[static_cast<std::size_t>(j)].clear();
+                    merged[static_cast<std::size_t>(j)].shrink_to_fit();
+                    nv[static_cast<std::size_t>(j)] = 0;
+                    state[static_cast<std::size_t>(j)] = State::Absorbed;
+                    vars[static_cast<std::size_t>(j)].clear();
+                    vars[static_cast<std::size_t>(j)].shrink_to_fit();
+                    elems[static_cast<std::size_t>(j)].clear();
+                    elems[static_cast<std::size_t>(j)].shrink_to_fit();
+                }
+            }
+            hash_head[static_cast<std::size_t>(h)] = -1;
+        }
     }
 
     // Any variable never selected -- which cannot happen, but a silent
