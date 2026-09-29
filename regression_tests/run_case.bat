@@ -36,15 +36,34 @@ rem --- build, unless SKIP_BUILD is set ---------------------------------------
 rem build.bat does `cd /d %~dp0` and does not come back, so the case folder has
 rem to be restored afterwards or every relative path below resolves against the
 rem repository root instead.
-if defined SKIP_BUILD goto :built
-echo === building
+rem The build output goes to a log rather than the console -- a full compile is
+rem dozens of lines and would bury the solve. But it is SUMMARISED afterwards:
+rem silence here used to mean either "recompiled everything" or "did nothing",
+rem with no way to tell them apart, which reads as a broken build step.
+if defined SKIP_BUILD (
+  echo === build      skipped ^(SKIP_BUILD is set^)
+  goto :built
+)
+set "BUILD_LOG=%TEMP%\aphi_build.log"
 pushd "%CD%"
-call "%REPO%\build.bat" >nul 2>&1
+call "%REPO%\build.bat" > "%BUILD_LOG%" 2>&1
 set "BUILD_RC=%ERRORLEVEL%"
 popd
 if not "%BUILD_RC%"=="0" (
-  echo error: build failed. Run build.bat directly to see why.
+  echo === build      FAILED. First errors:
+  echo.
+  findstr /i /c:"error" "%BUILD_LOG%"
+  echo.
+  echo   full output: %BUILD_LOG%
   exit /b 1
+)
+findstr /c:"ninja: no work to do" "%BUILD_LOG%" >nul 2>&1
+if not errorlevel 1 (
+  echo === build      already up to date
+) else (
+  set "NBUILT=0"
+  for /f %%N in ('findstr /c:"Building CXX" "%BUILD_LOG%" 2^>nul ^| find /c /v ""') do set "NBUILT=%%N"
+  echo === build      recompiled !NBUILT! file^(s^)
 )
 :built
 
