@@ -205,7 +205,12 @@ struct SolveReport {
 /// hit a pivot at or below `options.pivot_floor`.
 bool solve_symmetric(const SparseSymmetricZ& a, const std::vector<std::complex<double>>& b,
                      std::vector<std::complex<double>>& x, SolveReport& report,
-                     const SolveOptions& options = {});
+                     const SolveOptions& options = {},
+                     /// Already-analysed structure for this exact pattern, to avoid
+                     /// repeating the ordering. `analyze` reads only the pattern, and
+                     /// scaling does not change it, so reuse is exact -- not an
+                     /// approximation. nullptr analyses internally as before.
+                     const SolverAnalysis* precomputed = nullptr);
 
 /// `L D Lᵀ` expanded back to a full matrix, for checking. Only for tests and
 /// diagnostics -- it is quadratic in a column's length and defeats the whole

@@ -240,3 +240,41 @@ That is 9 seconds of AMD ordering whose result MUMPS never uses -- it does its
 own analysis. It is now LARGER than the factorization it precedes. Skipping
 `analyze()` when the backend is MUMPS would take case 02 from ~22 s to ~13 s.
 Not yet done.
+
+---
+
+## The redundant analysis, removed
+
+`solve_mesh` analysed the pattern to print `nnz(L)`, and `solve_symmetric` then
+analysed it again internally to actually factorize. **Two AMD orderings per
+run, of which one only ever produced a progress line.** It went unnoticed
+because on the internal solver it is 9 s out of 568 -- 1.6 %. Against MUMPS's
+13 s of real work it was 40 %.
+
+`analyze()` takes a `SparsityPattern`, not values, and equilibration changes
+values but not structure. So the two analyses were provably identical, and
+reuse is exact rather than an approximation.
+
+Two changes:
+
+- `solve_symmetric` takes an optional `const SolverAnalysis*`. When given, it
+  skips its own. `solve_mesh` passes the one it already computed.
+- For MUMPS the analysis is **skipped entirely** -- MUMPS does its own and
+  never sees ours. The ordering line says so, and `run_summary.txt` reports
+  MUMPS's real fill-in from `INFOG(29)` instead of our prediction.
+
+Case 02, MUMPS + METIS + OpenMP at 8 threads:
+
+    TOTAL   22.56 s  ->  10.40 s      -54 %
+      our analysis    8.98 s -> 0
+      factorization   6.05 s -> 5.79 s   (unchanged; noise)
+      other           7.53 s -> 4.61 s
+
+The internal solver's answer is **bit-identical** after the change:
+backward error 2.54489e-22 and residual 5.28263e-13 on
+`examples/cylinder_50hz.aphi`, the same digits as before. `R` and `L` from the
+MUMPS run are unchanged too.
+
+`INFOG(29) = 112610391` against our AMD prediction of 211483290 -- MUMPS's
+ordering produces roughly **half the fill-in**, which is most of where its
+speed comes from.

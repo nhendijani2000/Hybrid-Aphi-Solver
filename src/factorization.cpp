@@ -330,7 +330,8 @@ double relative_residual(const SparseSymmetricZ& a, const std::vector<Complex>& 
 
 
 bool solve_symmetric(const SparseSymmetricZ& a, const std::vector<Complex>& b,
-                     std::vector<Complex>& x, SolveReport& report, const SolveOptions& options) {
+                     std::vector<Complex>& x, SolveReport& report, const SolveOptions& options,
+                     const SolverAnalysis* precomputed) {
     const int n = a.rows();
     if (static_cast<int>(b.size()) != n) {
         throw std::invalid_argument("solve_symmetric: the right-hand side has " +
@@ -355,10 +356,15 @@ bool solve_symmetric(const SparseSymmetricZ& a, const std::vector<Complex>& b,
         options.equilibration_iterations > 0 ? scale_rhs(b, d) : b;
 
     // --- order and factorize --------------------------------------------
-    // The pattern is unchanged by scaling, so this could be hoisted across a
-    // frequency sweep; `solve_symmetric` is the one-shot convenience form.
+    // The pattern is unchanged by scaling, and `analyze` reads only the
+    // pattern -- so a caller that has already analysed this system can hand
+    // the result in and skip it. `solve_mesh` does, because it analyses once
+    // to report nnz(L) and would otherwise pay for the same AMD ordering
+    // twice on every run: 9 s each on case 02.
     auto t0 = std::chrono::steady_clock::now();
-    const SolverAnalysis analysis = analyze(scaled, options.ordering);
+    SolverAnalysis owned;
+    if (precomputed == nullptr) owned = analyze(scaled, options.ordering);
+    const SolverAnalysis& analysis = precomputed != nullptr ? *precomputed : owned;
     auto t1 = std::chrono::steady_clock::now();
     report.analyze_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 

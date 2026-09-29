@@ -164,13 +164,28 @@ int main(int argc, char** argv) {
         for (const std::string& w : bound.warnings) std::cout << "warning       " << w << "\n";
 
         // Symbolic, once: it does not depend on frequency.
-        auto t0 = Clock::now();
-        const SolverAnalysis analysis = analyze(pattern, ordering);
-        auto t1 = Clock::now();
-        std::cout << "\nordering      " << ordering_keyword(ordering) << "   nnz(L) = "
-                  << analysis.predicted_nnz << "   "
-                  << analysis.predicted_nnz * 20.0 / 1048576.0 << " MB   [" << ms(t0, t1)
-                  << " ms]\n\n";
+        //
+        // SKIPPED ENTIRELY for MUMPS, which does its own analysis and never
+        // sees ours. On case 02 this ordering costs 9 s -- more than MUMPS's
+        // whole factorization -- so computing it only to print nnz(L) would be
+        // 40 % of the run. MUMPS's real fill-in comes back in INFOG(29).
+        //
+        // For the internal solver it is computed once here and PASSED IN, so
+        // solve_symmetric does not repeat it. It used to be done twice on
+        // every run: once for this progress line, once inside the solver.
+        const bool need_analysis = p.backend != SolverBackend::Mumps;
+        SolverAnalysis analysis;
+        if (need_analysis) {
+            auto t0 = Clock::now();
+            analysis = analyze(pattern, ordering);
+            auto t1 = Clock::now();
+            std::cout << "\nordering      " << ordering_keyword(ordering) << "   nnz(L) = "
+                      << analysis.predicted_nnz << "   "
+                      << analysis.predicted_nnz * 20.0 / 1048576.0 << " MB   [" << ms(t0, t1)
+                      << " ms]\n\n";
+        } else {
+            std::cout << "\nordering      by MUMPS; ours skipped (it would be discarded)\n\n";
+        }
 
         SymmetricSystem system = make_symmetric_system(pattern, dofs.num_total);
         const std::vector<double> frequencies =
@@ -186,6 +201,7 @@ int main(int argc, char** argv) {
 
         int failures = 0;
         double write_ms = 0.0, fields_total_ms = 0.0, assemble_total_ms = 0.0;
+        std::size_t last_factor_nnz = 0;  // MUMPS INFOG(29); ours comes from analysis
         double factor_total_ms = 0.0, solve_total_ms = 0.0;
         for (double f : frequencies) {
             const double omega = 2.0 * 3.14159265358979323846 * f;
@@ -208,7 +224,7 @@ int main(int argc, char** argv) {
             // long as it needs to. Skipped unless asked for.
             const bool ok_plain =
                 !compare_plain ||
-                solve_symmetric(system.matrix, system.rhs, x_plain, rp, plain);
+                solve_symmetric(system.matrix, system.rhs, x_plain, rp, plain, &analysis);
             const bool ok_equil =
                 p.backend == SolverBackend::Mumps
 #ifdef APHI_WITH_MUMPS
@@ -216,7 +232,7 @@ int main(int argc, char** argv) {
 #else
                     ? false  // unreachable: rejected at parse time
 #endif
-                    : solve_symmetric(system.matrix, system.rhs, x_equil, re, equil);
+                    : solve_symmetric(system.matrix, system.rhs, x_equil, re, equil, &analysis);
 
             std::ostringstream label;
             label << std::setprecision(4) << f << " Hz";
@@ -282,6 +298,7 @@ int main(int argc, char** argv) {
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
                                                           fields_started)
                     .count();
+            last_factor_nnz = re.factor_nnz;
             fields_total_ms += fields_ms;
             assemble_total_ms += assemble_ms;
             // Each frequency is factorized TWICE -- plain and equilibrated -- so the
@@ -384,8 +401,9 @@ int main(int argc, char** argv) {
                       << " Dirichlet)\n"
                       << "matrix        " << pattern.nnz() << " stored nonzeros, ordering "
                       << ordering_keyword(ordering) << "\n"
-                      << "fill-in       nnz(L) = " << analysis.predicted_nnz << "   "
-                      << analysis.predicted_nnz * 20.0 / 1048576.0 << " MB\n";
+                      << "fill-in       "
+                      << (need_analysis ? "nnz(L) = " : "by MUMPS, INFOG(29) = ")
+                      << (need_analysis ? analysis.predicted_nnz : last_factor_nnz) << "\n";
                     const std::string text = h.str() + s.str();
                     std::fwrite(text.data(), 1, text.size(), sf);
                     std::fclose(sf);
