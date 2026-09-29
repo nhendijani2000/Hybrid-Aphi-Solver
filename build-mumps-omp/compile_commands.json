@@ -1,0 +1,152 @@
+[
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\complex_matrix.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\complex_matrix.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/complex_matrix.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/complex_matrix.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\conditioning.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\conditioning.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/conditioning.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/conditioning.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\equilibration.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\equilibration.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/equilibration.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/equilibration.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\mesh.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\mesh.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/mesh.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/mesh.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\problem.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\problem.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/problem.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/problem.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\input_file.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\input_file.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/input_file.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/input_file.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\problem_binding.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\problem_binding.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/problem_binding.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/problem_binding.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\dof_map.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\dof_map.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/dof_map.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/dof_map.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\quadrature.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\quadrature.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/quadrature.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/quadrature.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\element_matrix.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\element_matrix.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/element_matrix.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/element_matrix.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\sparsity.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\sparsity.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/sparsity.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/sparsity.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\assembly.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\assembly.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/assembly.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/assembly.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\ordering.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\ordering.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/ordering.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/ordering.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\symbolic.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\symbolic.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/symbolic.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/symbolic.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\factorization.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\factorization.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/factorization.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/factorization.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\postprocess.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\postprocess.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/postprocess.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/postprocess.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\gmsh_reader.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\gmsh_reader.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/gmsh_reader.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/gmsh_reader.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\incidence.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\incidence.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/incidence.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/incidence.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\basis_functions.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\basis_functions.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/basis_functions.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/basis_functions.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\tree_cotree.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\tree_cotree.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/tree_cotree.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/tree_cotree.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\gauge_variants.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\gauge_variants.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/gauge_variants.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/gauge_variants.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_core.dir\\src\\mumps_backend.cpp.obj /FdCMakeFiles\\aphi_core.dir\\aphi_core.pdb -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\mumps_backend.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/mumps_backend.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_core.dir/src/mumps_backend.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\aphi_solver.dir\\src\\main.cpp.obj /FdCMakeFiles\\aphi_solver.dir\\ -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\src\\main.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/src/main.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/aphi_solver.dir/src/main.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\compare_gauges.dir\\tools\\compare_gauges.cpp.obj /FdCMakeFiles\\compare_gauges.dir\\ -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\tools\\compare_gauges.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/tools/compare_gauges.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/compare_gauges.dir/tools/compare_gauges.cpp.obj"
+},
+{
+  "directory": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp",
+  "command": "C:\\PROGRA~2\\Intel\\oneAPI\\compiler\\latest\\bin\\icx.exe  /nologo /TP -DAPHI_WITH_MUMPS -D_USE_MATH_DEFINES -IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\include -external:IC:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\third_party\\mumps-install-omp\\include -external:I\"C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest\\include\" -external:W0 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG -Qstd:c++17 -MD /FoCMakeFiles\\solve_mesh.dir\\tools\\solve_mesh.cpp.obj /FdCMakeFiles\\solve_mesh.dir\\ -c C:\\Research\\APhi_Solver_Project_LowFrequency_EDA\\APhi_Solver\\tools\\solve_mesh.cpp",
+  "file": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/tools/solve_mesh.cpp",
+  "output": "C:/Research/APhi_Solver_Project_LowFrequency_EDA/APhi_Solver/build-mumps-omp/CMakeFiles/solve_mesh.dir/tools/solve_mesh.cpp.obj"
+}
+]

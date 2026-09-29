@@ -60,10 +60,31 @@ if(APHI_WITH_MUMPS)
     # needs mumps_common, pord and the sequential MPI stub, and the umbrella
     # target MUMPS::MUMPS carries that whole chain. Linking only zmumps gives
     # unresolved MUMPS_ABORT and mumps_get_* symbols.
+    # A MUMPS built with OpenMP exports a dependency on OpenMP's C *and
+    # Fortran* components. find_package(OpenMP COMPONENTS Fortran) cannot
+    # succeed in a project that has not enabled Fortran, so the config package
+    # fails with "Could NOT find OpenMP (missing: OpenMP_Fortran_FOUND)" even
+    # though the compiler is right there. Enabling the language costs nothing
+    # here -- we compile no Fortran, but linking MUMPS pulls its runtime in
+    # regardless, so requiring the compiler when this option is ON is honest.
+    # C as well as Fortran: the config asks for OpenMP COMPONENTS C Fortran, and
+    # this project is C++ only, so neither is enabled by default.
+    enable_language(C)
+    enable_language(Fortran)
     find_package(MUMPS CONFIG REQUIRED)
     target_compile_definitions(aphi_core PUBLIC APHI_WITH_MUMPS)
     target_sources(aphi_core PRIVATE src/mumps_backend.cpp)
     target_link_libraries(aphi_core PUBLIC MUMPS::MUMPS)
+    # A METIS-enabled MUMPS needs GKlib, METIS's support library. The install
+    # ships lib/GKlib.lib but the exported METIS dependency does not name it,
+    # so linking MUMPS::MUMPS alone leaves gk_malloc_init and friends
+    # unresolved. Found and added here rather than patching the upstream
+    # wrapper; harmless when METIS is off, since the library is then absent.
+    find_library(APHI_GKLIB NAMES GKlib HINTS "${MUMPS_ROOT}/lib")
+    if(APHI_GKLIB)
+        target_link_libraries(aphi_core PUBLIC "${APHI_GKLIB}")
+        message(STATUS "MUMPS backend: linking GKlib ${APHI_GKLIB}")
+    endif()
     message(STATUS "MUMPS backend: ENABLED")
 else()
     message(STATUS "MUMPS backend: off (internal solver only)")

@@ -198,3 +198,45 @@ and the case must ask for it:
 conditioning = row_scaled
 backend      = mumps
 ```
+
+---
+
+## OpenMP and METIS: measured 2026-09-29
+
+A second MUMPS was built with both enabled (`third_party/build_mumps_omp.bat`,
+installing to `mumps-install-omp`) so the sequential build stays available for
+comparison. Case 02, 240990 unknowns, **factorization time only**:
+
+| build | threads | factorization | vs internal |
+|---|---|---|---|
+| internal LDL^T | 1 | 550.29 s | — |
+| MUMPS, AMD, no OpenMP | 1 | 10.67 s | 51.6x |
+| MUMPS + METIS + OpenMP | 1 | 12.67 s | 43.4x |
+| MUMPS + METIS + OpenMP | 8 | **6.05 s** | **91.0x** |
+| MUMPS + METIS + OpenMP | 24 | 8.65 s | 63.6x |
+
+**24 threads is worse than 8.** The machine has 24 logical cores and the best
+result is at a third of them. A factorization of this size does not have enough
+parallel work to feed 24 threads, and past the knee the synchronisation and
+memory traffic cost more than the extra cores return. Anyone quoting a thread
+count should measure it rather than assume more is better.
+
+**METIS did not help here.** At one thread the METIS build is *slower* than the
+AMD one, 12.67 s against 10.67 s. Part of that is OpenMP runtime overhead
+present even at one thread, so the two are not a clean isolation of the
+ordering -- but there is certainly no METIS win to collect on this problem.
+Nested dissection pays off on larger, less regular systems than this.
+
+**The answers are unchanged**: `R = 9.796995e-05 ohm`, `L = 22.5956 nH`, same
+as both the internal solver and the sequential MUMPS build.
+
+### A real inefficiency this exposed
+
+The MUMPS path still runs **our** symbolic analysis first:
+
+    ordering      amd   nnz(L) = 211483290   4033.72 MB   [8982.16 ms]
+
+That is 9 seconds of AMD ordering whose result MUMPS never uses -- it does its
+own analysis. It is now LARGER than the factorization it precedes. Skipping
+`analyze()` when the backend is MUMPS would take case 02 from ~22 s to ~13 s.
+Not yet done.
