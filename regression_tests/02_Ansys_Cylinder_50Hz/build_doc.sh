@@ -69,3 +69,25 @@ awk -v d="$TMP" '
 n=$(grep -o 'data:image/png;base64,' "$OUT" | wc -l)
 r=$(grep -c 'src="fig/' "$OUT" || true)
 echo "wrote $OUT: $n figures inlined, $r unresolved, $(wc -c < "$OUT") bytes"
+
+# --- PDF -------------------------------------------------------------------
+# Printed from the self-contained HTML with headless Edge, so the PDF picks up
+# the inlined figures and needs nothing beside it either. Edge writes noisy
+# task-manager and sync errors to stderr even on success; the exit code and the
+# output file are what matter.
+EDGE="/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+if [ -x "$EDGE" ]; then
+  ABS=$(pwd -W 2>/dev/null || pwd)
+  rm -f CopperRodValidation.pdf
+  "$EDGE" --headless=new --disable-gpu --no-first-run --no-pdf-header-footer \
+          --user-data-dir="${TMPDIR:-/tmp}/edgepdf" --virtual-time-budget=30000 \
+          --print-to-pdf="$ABS/CopperRodValidation.pdf" \
+          "file:///$ABS/CopperRodValidation.html" >/dev/null 2>&1 || true
+  if [ -f CopperRodValidation.pdf ]; then
+    echo "wrote CopperRodValidation.pdf: $(wc -c < CopperRodValidation.pdf) bytes"
+  else
+    echo "PDF step failed; the HTML above is still good"
+  fi
+else
+  echo "Edge not found, skipping the PDF"
+fi
