@@ -523,6 +523,29 @@ static void put_run_info(TextBuffer& buf, const RunInfo* run) {
     buf.put("\n# ---------------------------------------------------------------------\n");
 }
 
+std::complex<double> terminal_current(const Mesh& mesh, const FieldOutput& fields,
+                                      const Vec3& axis, double length) {
+    if (length <= 0.0) {
+        throw std::invalid_argument("terminal_current: length must be positive");
+    }
+    if (static_cast<int>(fields.j_tet.size()) != mesh.num_tets() ||
+        static_cast<int>(fields.sigma_tet.size()) != mesh.num_tets()) {
+        throw std::invalid_argument(
+            "terminal_current: the fields were computed for a different mesh");
+    }
+
+    std::complex<double> flux(0.0, 0.0);
+    for (int t = 0; t < mesh.num_tets(); ++t) {
+        const std::size_t ut = static_cast<std::size_t>(t);
+        if (!(fields.sigma_tet[ut] > 0.0)) continue;  // no current outside a conductor
+        // The volume is signed by vertex order; only its magnitude is wanted.
+        const double vol = std::abs(mesh.signed_tet_volume(t));
+        const Vec3C& j = fields.j_tet[ut];
+        flux += (j[0] * axis.x + j[1] * axis.y + j[2] * axis.z) * vol;
+    }
+    return -flux / length;
+}
+
 WriteStats write_potential(const std::string& path, const NodalPotential& potential,
                            const Solution& solution, const RunInfo* run) {
     const auto started = std::chrono::steady_clock::now();

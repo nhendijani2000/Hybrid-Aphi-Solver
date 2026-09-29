@@ -165,6 +165,7 @@ struct RunInfo {
 /// One line per P2 node: index, position, `Re(Φ)`, `Im(Φ)`, and a one-character
 /// status so a reader can tell a solved value from a prescribed one, and can see
 /// which nodes are on a cut and therefore discontinuous.
+
 WriteStats write_potential(const std::string& path, const NodalPotential& potential,
                            const Solution& solution, const RunInfo* run = nullptr);
 
@@ -322,6 +323,40 @@ const char* field_set_name(FieldSet which);
 /// same nodal values **plus** the per-cell ones, which are the exact,
 /// unaveraged quantities. Use this when the values are wanted as numbers rather
 /// than as a picture.
+
+/// Terminal current, from the volume integral of `J` along an axis.
+///
+///     I = -(1/length) * integral_conductor  J . axis  dV
+///
+/// This is the standard volume form of the terminal current, and it is used in
+/// preference to a surface integral over the terminal face for a concrete
+/// reason: `J = sigma E` is exact per tetrahedron and has no material interface
+/// to straddle, whereas a face integral would need `J` at nodes lying exactly
+/// on the conductor boundary, where its normal component jumps. See Sec. 12 of
+/// docs/FIELD_POSTPROCESSING.md.
+///
+/// The conductor is every tet with `sigma > 0`; current cannot flow elsewhere,
+/// so no body tag is needed.
+///
+/// The SIGN is current flowing OUT of the high-potential terminal, which is the
+/// convention that makes `Z = V/I` positive for a passive load. `axis` points
+/// from the low-potential terminal to the high one and need not be normalised
+/// beyond being a unit vector; `length` is the conductor's extent along it.
+///
+/// `axis` and `length` are geometry and cannot be inferred from the fields, so
+/// they are arguments rather than guesses.
+std::complex<double> terminal_current(const Mesh& mesh, const FieldOutput& fields,
+                                      const Vec3& axis, double length);
+
+/// `Z = V / I`, for a case driven by a known terminal voltage.
+///
+/// `Re(Z)` is the resistance and `Im(Z)/omega` the inductance. Trivial, but
+/// written once here so every caller divides the same way round -- inverting it
+/// is a mistake that produces a plausible-looking number.
+inline std::complex<double> impedance(double voltage, std::complex<double> current) {
+    return std::complex<double>(voltage, 0.0) / current;
+}
+
 WriteStats write_solution(const std::string& path, const NodalPotential& potential,
                           const FieldOutput& fields, const Solution& solution,
                           FieldSet which = FieldSet::All, const RunInfo* run = nullptr);
