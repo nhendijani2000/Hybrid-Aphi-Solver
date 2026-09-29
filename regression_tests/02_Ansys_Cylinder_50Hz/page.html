@@ -59,6 +59,25 @@
   .warn{color:var(--warn); font-weight:600;}
   ul{max-width:68ch; padding-left:1.15rem;}
   li{margin:.35em 0;}
+
+  /* Print / PDF. Figures and tables must not be split across a page break;
+     a heading must not be orphaned at the foot of one. `.figs` is deliberately
+     NOT protected -- it is a grid of two figures and keeping it whole would
+     push large pairs onto a fresh page. Breaking BETWEEN figures is fine,
+     breaking THROUGH one is not. */
+  @media print{
+    :root{ color-scheme: light; }
+    body{ background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .wrap{ max-width:none; padding-block:0 .5rem; }
+    h1{ font-size:2rem; }
+    h2{ margin-top:1.5rem; padding-top:.8rem; font-size:1.3rem;
+        break-after:avoid; page-break-after:avoid; }
+    h3{ margin-top:1.1rem; break-after:avoid; page-break-after:avoid; }
+    figure, .tw, table, .note, p, li, tr{
+        break-inside:avoid; page-break-inside:avoid; }
+    figure img{ max-height:19cm; object-fit:contain; }
+    a{ color:inherit; text-decoration:none; }
+  }
 </style>
 
 <div class="wrap">

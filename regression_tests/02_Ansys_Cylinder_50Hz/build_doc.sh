@@ -91,3 +91,7 @@ if [ -x "$EDGE" ]; then
 else
   echo "Edge not found, skipping the PDF"
 fi
+#
+# NOTE: the PDF step launches a browser, which some sandboxed shells block --
+# the HTML is still written and the script reports the skip. Run it from an
+# ordinary terminal, or print the HTML from a browser yourself, if that happens.
