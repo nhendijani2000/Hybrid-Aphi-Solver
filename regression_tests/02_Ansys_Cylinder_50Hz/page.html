@@ -60,22 +60,32 @@
   ul{max-width:68ch; padding-left:1.15rem;}
   li{margin:.35em 0;}
 
-  /* Print / PDF. Figures and tables must not be split across a page break;
-     a heading must not be orphaned at the foot of one. `.figs` is deliberately
-     NOT protected -- it is a grid of two figures and keeping it whole would
-     push large pairs onto a fresh page. Breaking BETWEEN figures is fine,
-     breaking THROUGH one is not. */
+  /* Print / PDF.
+     Protect ONLY what is ruined by being split: a figure, and a table. Long
+     prose blocks -- paragraphs, list items, the callout notes -- are allowed to
+     flow across a page break, because protecting them is what leaves half-empty
+     pages: any block too tall for the remaining space jumps whole and abandons
+     the rest. orphans/widows keep that tidy without reserving space.
+     `.figs` is also unprotected: it is a grid of two figures, and keeping the
+     pair whole would push both onto a fresh page. Breaking BETWEEN figures is
+     fine, breaking THROUGH one is not. */
   @media print{
     :root{ color-scheme: light; }
-    body{ background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    body{ background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+          orphans:3; widows:3; }
     .wrap{ max-width:none; padding-block:0 .5rem; }
     h1{ font-size:2rem; }
-    h2{ margin-top:1.5rem; padding-top:.8rem; font-size:1.3rem;
+    h2{ margin-top:1.2rem; padding-top:.7rem; font-size:1.3rem;
         break-after:avoid; page-break-after:avoid; }
-    h3{ margin-top:1.1rem; break-after:avoid; page-break-after:avoid; }
-    figure, .tw, table, .note, p, li, tr{
-        break-inside:avoid; page-break-inside:avoid; }
-    figure img{ max-height:19cm; object-fit:contain; }
+    h3{ margin-top:.9rem; break-after:avoid; page-break-after:avoid; }
+    figure, .tw, table{ break-inside:avoid; page-break-inside:avoid; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    p, li, .note, ul{ break-inside:auto; page-break-inside:auto; }
+    /* Smaller figures pack far better: a pair at 11 cm leaves room for text
+       beside it on the same page instead of claiming one to itself. */
+    figure img{ max-height:11cm; object-fit:contain; }
+    .figs{ gap:12px; margin:.8rem 0 .3rem; }
+    figcaption{ padding:.4rem .6rem; }
     a{ color:inherit; text-decoration:none; }
   }
 </style>
