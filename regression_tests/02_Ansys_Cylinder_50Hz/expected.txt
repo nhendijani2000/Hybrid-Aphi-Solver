@@ -1,0 +1,34 @@
+# Known-good physics for 02_Ansys_Cylinder_50Hz, asserted by ../verify.py.
+#
+# These are not targets chosen by hand -- every one was MEASURED on a run that
+# was independently checked against an exact or analytic value, and the
+# tolerance is set by what the discretisation can actually hold, not by what
+# happens to pass today. A tolerance loose enough to never fail is not a test.
+#
+#   key                value        tol      what sets the tolerance
+# ---------------------------------------------------------------------------
+# geometry, needed to compute the exact comparisons
+a_mm                   1.5
+length_mm              40.0
+ngon                   40
+sigma                  5.8e7
+voltage                1.0
+frequency              50.0
+
+# R against the EXACT L/(sigma*A_poly) for the meshed polygon, not the circle.
+# 1.4e-05 is what the solver reproducibly achieves; it held across the
+# supervariable rewrite, the analysis reuse and both MUMPS backends, so a
+# regression past 1e-04 means something real changed.
+R_rel_error_max        1.0e-4
+
+# L is not compared against an exact value -- there is no closed form for a
+# finite box. It is pinned to the measured value so a CHANGE is caught.
+L_nH                   22.5956      0.05
+
+# Phi must be the z/L gradient. Worst-case over every wire node.
+phi_vs_zL_worst_max    2.0e-3
+
+# J(0)/J(a) against the Bessel ratio at a/delta = 0.1605. The exact value is
+# 0.999959; we measure 0.999968. The tolerance is the gap plus headroom.
+J_ratio_exact          0.999959
+J_ratio_tol            5.0e-5
