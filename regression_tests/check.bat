@@ -22,6 +22,12 @@ rem Different cadence, different command.
 rem
 rem WHAT THE CASES COVER, and why running both matters:
 rem
+rem   01_OneCylinder           10 mm radius at 50 Hz, so a/delta = 1.07 -- REAL
+rem                            SKIN EFFECT, and the only case that checks it
+rem                            against theory (Kelvin's R_ac/R_dc). It is also
+rem                            inductive, omega*L/R = 2.89, where Phi is gauge
+rem                            dominated; its expected.txt omits the two Phi
+rem                            checks for that reason and says so.
 rem   02_Ansys_Cylinder_50Hz   1 V drive. Reads the current out.
 rem   03_Cylinder_1A_50Hz      1 A drive, the SAME mesh. Reads the voltage out,
 rem                            and checks that exactly 1 A is collected at the
@@ -84,11 +90,27 @@ echo.
 echo === %C%
 if /i "%MODE%"=="verify-only" goto :one_verify
 
-rem The .aphi to run: the case's own, preferring one that is not a backend
-rem variant, so `check.bat` exercises the default solver.
+rem The .aphi to run. A case whose expected.txt names one with an `input` line
+rem gets that one -- necessary whenever a folder holds several inputs, where
+rem guessing picks whichever comes last alphabetically. 01_OneCylinder holds a
+rem 1 Hz case, a 50 Hz case and a 4-frequency sweep, and the sweep would write
+rem a different frequency into the same output directory that verify.py reads.
+rem Otherwise: the case's own, preferring one that is not a backend variant, so
+rem `check.bat` exercises the default solver.
 set "APHI="
-for %%F in ("%C%\*.aphi") do (
-  echo %%~nF | findstr /i "mumps" >nul || set "APHI=%%~nxF"
+for /f "tokens=2" %%V in ('findstr /r /c:"^input[ 	]" "%C%\expected.txt"') do set "APHI=%%V"
+if defined APHI (
+  if not exist "%C%\!APHI!" (
+    echo     expected.txt names input "!APHI!" but %C%\!APHI! does not exist
+    set "FAILED=!FAILED! %C%(bad-input)"
+    goto :eof
+  )
+  echo     input !APHI! ^(from expected.txt^)
+)
+if not defined APHI (
+  for %%F in ("%C%\*.aphi") do (
+    echo %%~nF | findstr /i "mumps" >nul || set "APHI=%%~nxF"
+  )
 )
 if not defined APHI (
   echo     no .aphi found in %C%

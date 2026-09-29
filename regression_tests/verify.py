@@ -80,7 +80,15 @@ for line in open(exp_path):
     if not line:
         continue
     parts = line.split()
-    exp[parts[0]] = [float(v) for v in parts[1:]]
+    # Values are numeric except `input`, which names the .aphi check.bat should
+    # run. Keep a non-numeric value as a string rather than refusing the file.
+    vals = []
+    for v in parts[1:]:
+        try:
+            vals.append(float(v))
+        except ValueError:
+            vals.append(v)
+    exp[parts[0]] = vals
 
 a = exp["a_mm"][0] * 1e-3
 L = exp["length_mm"][0] * 1e-3
@@ -155,34 +163,46 @@ if drive_i is not None:
 else:
     check("|V| measured vs prescribed", abs(V), drive_v[0], drive_v[1])
 
+def skip(name, why):
+    print("  %-30s SKIPPED -- %s" % (name, why))
+
+
 # --- R and L ---------------------------------------------------------------
+# Which R check applies depends on the REGIME, and the two are mutually
+# exclusive. A resistive case (a/delta << 1) has R = R_dc and is checked against
+# it. A case with real skin effect does NOT: the current crowds outward and R
+# rises, so comparing against R_dc would fail by the size of the skin effect.
+# There the meaningful analytic value is Kelvin's R_ac/R_dc.
 print("\nR and L")
 area = 0.5 * ngon * a * a * math.sin(2.0 * math.pi / ngon)
 R_exact = L / (sigma * area)
-check_max("R rel error vs exact", abs(Z.real - R_exact) / R_exact, exp["R_rel_error_max"][0])
+if "R_rel_error_max" in exp:
+    check_max("R rel error vs R_dc", abs(Z.real - R_exact) / R_exact, exp["R_rel_error_max"][0])
+if "R_over_Rdc" in exp:
+    check("R/R_dc vs Kelvin", Z.real / R_exact, exp["R_over_Rdc"][0], exp["R_over_Rdc"][1])
+if "R_rel_error_max" not in exp and "R_over_Rdc" not in exp:
+    skip("R", "neither R_rel_error_max nor R_over_Rdc given")
 check("L (nH)", Z.imag / omega * 1e9, exp["L_nH"][0], exp["L_nH"][1])
 
 # --- Phi against the exact z/L --------------------------------------------
-# Normalised by the real terminal voltage, so the same limit applies whether
-# the case is driven with 1 V or with a current that produces 98 microvolts.
+# Only meaningful where omega*L/R << 1. Above that the tree-cotree gauge
+# dominates Phi and it is NOT a z/L gradient -- which is a property of the
+# formulation, not a defect, and is exactly what 01_OneCylinder exists to show.
+# A case that omits these keys is asserting that it is in the other regime.
 print("\nPhi")
-dev = np.abs(pr / V.real - z / L)
-check_max("Phi/V vs z/L, worst", float(dev.max()), exp["phi_vs_zL_worst_max"][0])
-
-# A second, STRICTER form: pointwise relative error against the exact linear
-# profile, rather than error normalised by the terminal voltage. The two differ
-# because the normalised form divides a worst-case deviation by the LARGEST
-# potential in the problem, so a deviation sitting near the low-potential end
-# is judged against a value it never approaches. The pointwise form asks what
-# it should: how wrong is Phi HERE, relative to what it should be HERE.
-#
-# Guarded to z > 0.1 L. The exact profile passes through zero at the reference
-# cap, and a relative error against zero is not a number.
-mrel = z > 0.1 * L
-exact = V.real * z / L
-point_rel = np.abs(pr[mrel] / exact[mrel] - 1.0)
-check_max("Phi pointwise rel, z>0.1L", float(point_rel.max()),
-          exp["phi_pointwise_rel_max"][0])
+if "phi_vs_zL_worst_max" in exp:
+    dev = np.abs(pr / V.real - z / L)
+    check_max("Phi/V vs z/L, worst", float(dev.max()), exp["phi_vs_zL_worst_max"][0])
+else:
+    skip("Phi/V vs z/L", "gauge dominated at this omega*L/R; not a z/L gradient")
+if "phi_pointwise_rel_max" in exp:
+    mrel = z > 0.1 * L
+    exact = V.real * z / L
+    point_rel = np.abs(pr[mrel] / exact[mrel] - 1.0)
+    check_max("Phi pointwise rel, z>0.1L", float(point_rel.max()),
+              exp["phi_pointwise_rel_max"][0])
+else:
+    skip("Phi pointwise rel", "same reason")
 # --- J(0)/J(a) against Bessel ---------------------------------------------
 print("\nJ profile")
 cc = CellCenters(Input=wire)
@@ -202,7 +222,15 @@ core = mid & (r < 0.25 * a)
 surf = mid & (r > 0.90 * a)
 if core.sum() < 5 or surf.sum() < 5:
     raise SystemExit("too few J samples: core %d, surface %d" % (core.sum(), surf.sum()))
-check("J(0)/J(a)", float(jz[core].mean() / jz[surf].mean()),
+# NOTE ON THE REFERENCE. This is a mesh average over r < 0.25a divided by one
+# over r > 0.90a -- NOT J(0)/J(a). Where the profile is flat (a/delta << 1) the
+# difference is immaterial and J_ratio_exact is the r=0 Bessel ratio. Where it
+# is not flat it matters a great deal: for 01_OneCylinder at a/delta = 1.07 the
+# core cells sit at r = 0.19a on average, and the r=0 ratio is 0.9265 while the
+# same-radii average is 0.9409 -- a 1.5 % difference that would read as solver
+# error. So a case with real skin effect must set J_ratio_exact from the Bessel
+# function evaluated AT THE SAMPLED RADII.
+check("<J>core/<J>surf", float(jz[core].mean() / jz[surf].mean()),
       exp["J_ratio_exact"][0], exp["J_ratio_tol"][0])
 
 # --- verdict ---------------------------------------------------------------

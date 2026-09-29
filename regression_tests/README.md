@@ -6,11 +6,15 @@ own `output/`. Nothing here writes outside its own folder.
 ```
 regression_tests/
   run_case.bat            the runner
+  check.bat               solve every case and assert its physics
+  verify.py               the assertions, run by check.bat
   01_OneCylinder/
     cylinder.geo          geometry
     cylinder.msh          generated from the .geo
-    cylinder_50hz.aphi    one frequency
+    cylinder_1hz.aphi     1 Hz
+    cylinder_50hz.aphi    50 Hz -- the one check.bat runs
     cylinder_sweep.aphi   50 Hz to 500 Hz
+    expected.txt          the known-good physics, and which .aphi to run
     output/               everything the solver writes
 ```
 
@@ -31,12 +35,39 @@ It runs every case folder containing an `expected.txt`, and exits non-zero
 naming the ones that drifted. About 6 minutes per case with the internal
 solver; seconds in `verify-only`.
 
-**Run both cases, not one.** They are duals -- 02 drives 1 V and reads the
-current out, 03 drives 1 A on the same mesh and reads the voltage out -- and
-they must report the same `R` and `L`, because those belong to the geometry and
-the material rather than to how the thing is driven. **A change that breaks
-that duality shows up as the two disagreeing, which neither case alone can
-see.** Case 03 also checks that exactly 1 A is collected at the far terminal.
+**Run all three, not one.** Each covers something the others cannot.
+
+| case | drive | `a/delta` | what only this case can catch |
+|---|---|---|---|
+| `01_OneCylinder` | 1 V | **1.07** | the **skin effect against theory** — `R_ac/R_dc` vs Kelvin |
+| `02_Ansys_Cylinder_50Hz` | 1 V | 0.16 | `R` against the exact DC value; `Phi` as a clean `z/L` gradient |
+| `03_Cylinder_1A_50Hz` | **1 A** | 0.16 | port current self-consistency; the same mesh as 02 |
+
+02 and 03 are **duals** — 02 drives 1 V and reads the current out, 03 drives
+1 A on the same mesh and reads the voltage out — and they must report the same
+`R` and `L`, because those belong to the geometry and the material rather than
+to how the thing is driven. **A change that breaks that duality shows up as the
+two disagreeing, which neither case alone can see.**
+
+01 sits in the other regime entirely, and that is why it is worth the runtime:
+at `a/delta = 1.07` the current genuinely crowds outward, so it is the only
+case where the skin effect is large enough to check against an analytic value.
+02 and 03 are at `a/delta = 0.16`, where the profile is flat to five digits and
+a bug in the skin-effect physics would be invisible.
+
+**A case may omit a check, and the omission is a claim.** `verify.py` skips any
+check whose key is absent from `expected.txt` and prints `SKIPPED` with the
+reason. Case 01 omits both `Phi` checks because at `omega*L/R = 2.89` the
+tree-cotree gauge dominates `Phi` and it is *not* a `z/L` gradient — asserting
+one there would be asserting something false. It omits `R_rel_error_max` for
+the same kind of reason: `R` is 2.6 % above `R_dc` because of the skin effect,
+so it is checked against Kelvin's `R_ac/R_dc` instead. Each omission is
+documented in the `expected.txt` that makes it.
+
+**`expected.txt` may also name the input to run,** with an `input` line. Case 01
+needs this because its folder holds three `.aphi` files — 1 Hz, 50 Hz and a
+4-frequency sweep — and without it `check.bat` would pick the sweep, which
+writes a different frequency into the output directory `verify.py` reads.
 
 The suggested sequence around any change to the solver, the assembly or the
 post-processing:
@@ -241,6 +272,14 @@ Copy the shape of `01_OneCylinder`: a `.geo`, a `.aphi` naming it, an
 should be and how you know. A case whose expected answer is not written down
 is not a regression test.
 
+Then add an `expected.txt` so `check.bat` picks the case up — it runs every
+folder that has one and ignores every folder that does not. Copy the shape of
+`02_Ansys_Cylinder_50Hz/expected.txt` for a resistive case or
+`01_OneCylinder/expected.txt` for one with a real skin effect, and **say what
+sets each tolerance**. A tolerance loose enough never to fail is not a test; the
+way to confirm one is a test is to perturb the expected value, watch the check
+fail, and put it back.
+
 ### Measured, on the mesh in this folder
 
 `tools/pv_extract_rl.py output` and `tools/pv_ampere.py output`:
@@ -253,8 +292,29 @@ is not a regression test.
 
 `R` is **2.60 % above DC**, against **2.67 %** from the exact Kelvin-function
 result `R_ac/R_dc = (u/2)[ber bei' - bei ber']/(ber'^2 + bei'^2)` at
-`u = sqrt(2) a/delta`. That agreement is the point of the geometry: on the old
-0.2 mm wire this rise was about 1e-7 and indistinguishable from nothing.
+`u = sqrt(2) a/delta = 1.5132`: measured **1.02596** against **1.02676**, low by
+**0.078 %**. That agreement is the point of the geometry: on the old 0.2 mm wire
+this rise was about 1e-7 and indistinguishable from nothing. It is asserted by
+`check.bat` as `R_over_Rdc`, and it is the **only** place in the suite where the
+skin effect itself is checked against theory.
+
+The `J` profile is checked too, and the reference needs care. `verify.py`
+measures a mesh average over `r < 0.25a` divided by one over `r > 0.90a`. Where
+the profile is flat that is the same as `J(0)/J(a)`; here it is not, because the
+28 core cells sit at `r = 0.19a` on average rather than at the axis:
+
+| | |
+|---|---|
+| Bessel at `r = 0` over `r = a` | 0.926497 &nbsp; ← **not** the right comparison |
+| Bessel averaged over **the radii the mesh actually sampled** | **0.940888** |
+| measured | 0.945436, high by **0.48 %** |
+
+Comparing against the `r = 0` value would read as 2 % solver error when the
+solver is within half a percent. The 0.48 % that remains is the coarse core:
+**28 cells out of 1245** in the mid-length band, because this case still has the
+core-sizing mesh defect that was fixed in case 02 — the `Distance` field grades
+from the conductor surface and never constrains the interior. Fixing it should
+tighten both this and the `R` agreement.
 
 `|B|` against Ampere's law, per cell, ratio across the whole domain:
 

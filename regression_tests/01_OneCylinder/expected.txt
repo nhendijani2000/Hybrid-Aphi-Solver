@@ -1,0 +1,82 @@
+# Known-good physics for 01_OneCylinder, asserted by ../verify.py.
+#
+# THIS CASE IS A DIFFERENT REGIME FROM 02 AND 03, and that is why it is worth
+# checking. Those have a/delta = 0.16 -- no skin effect, R = R_dc, Phi a clean
+# z/L gradient. This one has a 10 mm radius at 50 Hz, so a/delta = 1.07: the
+# current genuinely crowds outward, R rises above R_dc, and omega*L/R = 2.89
+# means the case is inductive rather than resistive. Two of the checks that
+# cases 02 and 03 use do not apply here, and verify.py skips a check whose key
+# is absent -- see the notes on each below. An omitted key is a claim about the
+# physics, not an exemption.
+#
+# This case ALSO still carries the core-sizing mesh defect that was fixed in
+# case 02 (see ../02_Ansys_Cylinder_50Hz/cylinder.geo): the Distance field
+# grades from the surface and never constrains the interior, so the core is
+# sampled by only 28 cells out of 1245 in the mid-length band. The tolerances
+# below reflect what THIS mesh holds. Fixing the mesh should tighten them.
+#
+#   key                value        tol      what sets the tolerance
+# ---------------------------------------------------------------------------
+# Which input to run. Needed here because the folder holds three .aphi files
+# -- 1 Hz, 50 Hz and a 4-frequency sweep -- and without this check.bat would
+# pick the sweep, which writes a different frequency into the same output dir.
+input                  cylinder_50hz.aphi
+
+# geometry, needed to compute the exact comparisons
+a_mm                   10.0
+length_mm              40.0
+ngon                   36
+sigma                  5.8e7
+drive_voltage          1.0          1.0e-9
+frequency              50.0
+
+# R AGAINST KELVIN, NOT AGAINST R_dc. At a/delta = 1.07 the exact AC resistance
+# is above the DC value, so `R_rel_error_max` -- which cases 02 and 03 use --
+# is the wrong check and is deliberately absent: it would fail by the whole
+# size of the skin effect, 2.6 %, and calling that an error would be backwards.
+#
+# The analytic value is Kelvin's, from the Bessel functions of the first kind:
+#
+#     u = sqrt(2) a/delta = 1.5132
+#     R_ac/R_dc = (u/2) * (ber(u) bei'(u) - bei(u) ber'(u))
+#                       / (ber'(u)^2 + bei'(u)^2)          = 1.02676
+#
+# and we measure 1.02596 -- 0.078 % low. The tolerance is that gap plus
+# headroom. This is the only place in the suite where the skin effect itself is
+# checked against theory; cases 02 and 03 cannot see it.
+R_over_Rdc             1.02676      0.002
+
+# L has no closed form for a finite box, so it is pinned to catch CHANGE. Note
+# it is 20.8 nH against case 02's 22.6 nH -- a different conductor radius, not
+# a discrepancy.
+L_nH                   20.8157      0.05
+
+# PHI IS GAUGE DOMINATED HERE, so both Phi checks are deliberately absent.
+#
+# At omega*L/R = 2.89 the reactance dominates, and under the tree-cotree gauge
+# Phi is not the z/L gradient -- it differs by -j*omega*psi, which is the
+# larger term. Measured, Phi/V deviates from z/L by 0.54 and pointwise by 0.98,
+# against 2e-3 and 1e-2 in case 02. That is the formulation behaving correctly
+# in a regime where Phi is gauge dependent and E, B, H and J are not, and it is
+# a large part of why this case exists. Asserting a z/L gradient here would be
+# asserting something false. The gauge-independent quantities carry the load:
+# R against Kelvin above, and J below.
+#
+# (phi_vs_zL_worst_max and phi_pointwise_rel_max intentionally omitted.)
+
+# THE J PROFILE, and why the reference is not the r=0 Bessel value. verify.py
+# measures a mesh average over r < 0.25a divided by one over r > 0.90a. Where
+# the profile is flat that is the same thing as J(0)/J(a); here it is not. The
+# 28 core cells sit at r = 0.19a on average, where Bessel gives a higher value
+# than at r = 0, so the honest reference is the Bessel function averaged over
+# THE SAME RADII the mesh sampled:
+#
+#     J(0)/J(a) at r=0 exactly      0.926497   <- NOT the right comparison
+#     Bessel at the sampled radii   0.940888   <- this one
+#     measured                      0.945436   -- 0.48 % high
+#
+# 0.48 % is the coarse core: 28 cells cannot resolve a profile that varies. The
+# tolerance is that gap plus headroom, and it should tighten when the core
+# sizing is fixed.
+J_ratio_exact          0.940888
+J_ratio_tol            6.0e-3
