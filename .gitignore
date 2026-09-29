@@ -98,3 +98,12 @@ regression_tests/*/output/plots/*
 # change every number the case asserts -- so the comparison is only a
 # regression if the mesh is byte-identical.
 !regression_tests/*/*.msh
+
+# Running an example from inside examples/ writes its fields there, since those
+# inputs name no [output] directory. Scratch, never committed -- five of them
+# were, once, by a `git add -A` that swept them up.
+examples/*_field.out
+examples/*_field.vtk
+examples/potential.out
+examples/potential.vtk
+examples/_tmpout/
