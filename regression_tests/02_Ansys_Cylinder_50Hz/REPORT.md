@@ -278,6 +278,28 @@ radius. Inside the conductor every band is within 0.5 %.
 
 ## 7. Known limitations
 
+- **Nodal `B` reads low in the far field — the figures in §4, not the numbers in
+  §6.** `04`/`04b` plot the nodal array; §6 is computed from the per-cell array.
+  Tested against the exact solution at each sample's own radius:
+
+  | band (mm) | nodal error | per-cell error |
+  |---|---|---|
+  | 0.30 – 1.49 | −0.4 % to −1.5 % | +0.1 % to +0.4 % |
+  | 1.49 – 2.00 | −4.29 % | −2.01 % |
+  | 2.00 – 3.00 | −3.91 % | −1.10 % |
+  | 3.00 – 5.00 | −6.15 % | −2.12 % |
+  | 5.00 – 8.00 | **−7.50 %** | −2.19 % |
+
+  Inside the conductor and at the peak both are within 1.5 %, so the 1.3385 T
+  peak read off `04b` is sound. Beyond the wire the nodal colours under-read,
+  reaching 7.5 % at the box wall. The likely cause, reasoned rather than
+  separately measured: the nodal value is a volume-weighted average over each
+  node's element patch, the mesh coarsens rapidly outward, and the patch is
+  therefore dominated by the larger outer elements where `|B|` is smaller — the
+  bias grows with radius as the grading steepens. Unlike `E`, `B` has **no**
+  material-interface problem here, because `mu_r = 1` on both sides: the band
+  that is `E`'s worst is `B`'s best, +0.58 % nodal against per cell.
+
 **Azimuthal scatter in `B` of 1.4–3.1 % near the conductor.** The problem is
 axisymmetric, so this is error. It is `O(h)` element noise from `B` being
 constant per tetrahedron — the lowest-order quantity in the formulation.

@@ -1143,3 +1143,40 @@ comparable to the volume size.
 38 % less scatter (0.0296 -> 0.0183) for 3.2 % of the peak (1.3385 -> 1.2954 T),
 against 14 % for 6.2 % before. The bias still grows and the scatter still stops
 improving past one pass, so `SMOOTH_PASSES` stays 0.
+
+### Nodal `B` is biased low on a graded mesh
+
+Prompted by a simple question -- is the plotted `B` nodal? It is, and testing it
+against the exact axisymmetric solution at each sample's own radius shows the
+nodal and per-cell arrays part company outside the conductor:
+
+    band (mm)      nodal err   scatter      per-cell err   scatter
+    0.30 - 0.60     -0.95 %    0.0732        +0.25 %       0.0473
+    0.60 - 0.90     -0.61 %    0.0468        +0.42 %       0.0310
+    0.90 - 1.20     -1.53 %    0.0430        -0.22 %       0.0211
+    1.20 - 1.49     -0.39 %    0.0296        +0.10 %       0.0137
+    1.49 - 2.00     -4.29 %    0.0339        -2.01 %       0.0308
+    2.00 - 3.00     -3.91 %    0.0579        -1.10 %       0.0559
+    3.00 - 5.00     -6.15 %    0.0769        -2.12 %       0.0756
+    5.00 - 8.00     -7.50 %    0.0880        -2.19 %       0.0891
+
+Inside the conductor and at the peak both are within 1.5 %. **Beyond the wire
+the nodal array reads systematically low, reaching 7.5 % at the box wall, while
+per cell stays near 2 %.**
+
+Likely cause, reasoned rather than separately measured: `b_node` is the
+volume-weighted average over each node's element patch (the lumped-mass L2
+projection, Sec. 8). The mesh coarsens rapidly outward -- `lc_skin` 0.25 to
+`lc_far` 6.0 over `d_far` 4 mm -- so a node's patch is dominated by the larger
+outer elements, where `|B| ~ 1/r` is smaller. The bias grows with radius exactly
+as the grading steepens, which is what the table shows.
+
+**Consequence for the figures.** `04`/`04b` plot the nodal array and under-read
+the far field; the validation tables are computed from the per-cell array and
+are unaffected. Quantitative far-field work should use `B_cell_*`.
+
+**`B` has no material-interface problem in these cases**, unlike `E`. `b_node`
+accumulates only from tets at `mu_max`, but `mu_r = 1` in both copper and air,
+so the guard never fires and every tet contributes. The band immediately outside
+the wire is `E`'s worst (-20.9 %) and `B`'s best (+0.58 % nodal against per
+cell). A case with magnetic material would behave like `E` instead.
