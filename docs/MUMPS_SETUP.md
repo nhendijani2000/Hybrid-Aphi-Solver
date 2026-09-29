@@ -146,3 +146,55 @@ So MUMPS may turn out to be a comparison that tells us our inner loop is the
 problem, rather than a solution in itself. Profiling where those 550 seconds go
 costs nothing and needs no installs, and would make this decision an informed
 one. Recorded here because it is the first thing to check if MUMPS disappoints.
+
+---
+
+## Result: 51x on case 02
+
+Measured 2026-09-29, both solvers single-threaded (MUMPS built without OpenMP
+precisely so this comparison is like for like).
+
+`02_Ansys_Cylinder_50Hz`, 240990 unknowns:
+
+|  | internal | MUMPS | |
+|---|---|---|---|
+| factorization | 550.29 s | **10.67 s** | **51.6x** |
+| total run | 568.79 s | **22.95 s** | 24.8x |
+| backward error | 4.80e-21 | **1.19e-21** | |
+| residual | 6.01e-13 | **1.49e-13** | |
+
+`examples/cylinder_50hz.aphi`, 37368 unknowns: 55.25 s -> 1.60 s, **34x**.
+
+**The answers are identical.** `tools/pv_extract_rl.py` on both output
+directories gives `R = 9.796995e-05 ohm` and `L = 22.5956 nH` to every digit
+printed. MUMPS is not trading accuracy for speed -- its backward error is four
+times better.
+
+**What this settles.** The question behind the whole option was whether the gap
+to commercial tools is the formulation or the linear algebra. It is the linear
+algebra: same mesh, same matrix, same ordering family, same answer, 51x. The
+internal solver's scalar LDL^T is the bottleneck, and `SOLVER_PLAN.md` §10's
+Stage 2 -- supernodal, BLAS3 -- is what would close it without a dependency.
+
+**What has NOT been measured**: MUMPS with OpenMP, or with METIS ordering.
+Both were deliberately left off for this first comparison. Either could make
+the gap wider still; neither changes the conclusion.
+
+### Running it
+
+The built executable needs the Intel Fortran runtime (`libifcoremd.dll`), so it
+must run with the compiler environment loaded:
+
+```
+call "C:\Program Files (x86)\Intel\oneAPI\compiler\latest\env\vars.bat"
+call "C:\Program Files (x86)\Intel\oneAPI\mkl\latest\env\vars.bat"
+build-mumps\solve_mesh.exe <case>.aphi
+```
+
+and the case must ask for it:
+
+```
+[solver]
+conditioning = row_scaled
+backend      = mumps
+```
