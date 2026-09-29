@@ -240,3 +240,46 @@ Linear in `r` inside, `1/r` outside, within 1-3 % throughout.
 against `mu0 |I| / (2 pi r)` gives a ratio of 0.33 at every radius and looks
 like the field is three times too small. It is not -- the two sides are
 different quantities. This bit once and is worth not repeating.
+
+## 03_Cylinder_1A_50Hz
+
+The **dual** of case 02: the same conductor, the same mesh, the same frequency,
+driven with **1 A** instead of 1 V. It is the first current-driven case this
+project has solved -- the port machinery for it had existed since the DOF map
+was written but nothing had ever exercised it.
+
+It answers two things a voltage-driven case cannot.
+
+**Port current self-consistency** (`SOLVER_PLAN.md` §8, item 7). Inject 1 A at
+the top cap and exactly 1 A must be collected; charge does not accumulate in a
+conductor. Measured **1.000000 A**.
+
+**Does the dual agree?** `R` and `L` belong to the geometry and the material,
+not to how it is driven, and the problem is linear:
+
+| | case 02, 1 V | case 03, 1 A |
+|---|---|---|
+| `I` | 10180.56 A | **1.000000 A** |
+| `V` | 1 V | **9.796995e-05 +7.098621e-06 j V** |
+| `Z` | 9.796995e-05 +7.098621e-06 j | **9.796995e-05 +7.098621e-06 j** |
+| `R` | 9.796995e-05 ohm | identical |
+| `L` | 22.5956 nH | identical |
+
+Identical to every digit printed.
+
+**Two things worth knowing about it.**
+
+`Phi` is *more* linear here than in case 02 -- worst deviation from `z/L` of
+3.9e-06 against 8.3e-04, two hundred times better. A voltage port forces the
+whole cap to one potential; a current port constrains only the total current
+and lets the cap relax to whatever the field wants. The prescribed equipotential
+is the thing bending `Phi` in case 02, not an error.
+
+The **relative residual is 1.4e-09** where case 02 gives 6e-13, while the
+backward error is 3.8e-21 against 3.7e-21 -- as good. That is exactly the case
+`factorization.hpp` warns about: `||Ax-b||/||b||` is misleading when `||b||` is
+small, and a 1 A drive makes a far smaller right-hand side than a 1 V one.
+Judge this case by the backward error.
+
+The mesh is **referenced, not copied**: `file = ../02_Ansys_Cylinder_50Hz/cylinder.msh`.
+"Exactly the same mesh" is the point of the comparison, and a copy can drift.

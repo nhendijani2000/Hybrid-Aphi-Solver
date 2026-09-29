@@ -1,0 +1,27 @@
+# Known-good physics for 03_Cylinder_1A_50Hz, asserted by ../verify.py.
+#
+# The DUAL of case 02: the same conductor, the same mesh, driven with 1 A
+# instead of 1 V. R and L are properties of the geometry and the material, not
+# of how it is driven, so they must come back identical. They do, to every
+# digit printed.
+#
+# Geometry, identical to case 02 because it IS case 02's mesh.
+a_mm                   1.5
+length_mm              40.0
+ngon                   40
+sigma                  5.8e7
+frequency              50.0
+
+# The drive, and the self-consistency check (SOLVER_PLAN.md Sec. 8, item 7).
+# 1 A is injected at the top cap; exactly 1 A must be collected. Charge does
+# not accumulate in a conductor, so any other answer means current is being
+# created or destroyed in the formulation. Measured: 1.000000 A, which is why
+# the tolerance is tight -- this is an identity, not a convergent quantity.
+drive_current          1.0          1.0e-6
+
+# Identical to case 02's, deliberately: same limits, same numbers.
+R_rel_error_max        1.0e-4
+L_nH                   22.5956      0.05
+phi_vs_zL_worst_max    2.0e-3
+J_ratio_exact          0.999959
+J_ratio_tol            5.0e-5

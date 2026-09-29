@@ -12,7 +12,7 @@ a_mm                   1.5
 length_mm              40.0
 ngon                   40
 sigma                  5.8e7
-voltage                1.0
+drive_voltage          1.0          1.0e-9
 frequency              50.0
 
 # R against the EXACT L/(sigma*A_poly) for the meshed polygon, not the circle.
