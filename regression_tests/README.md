@@ -14,6 +14,37 @@ regression_tests/
     output/               everything the solver writes
 ```
 
+
+## Checking the physics before and after a change
+
+`run-tests.bat` is unit tests and finishes in seconds. It does **not** solve
+anything, so it cannot tell you that a change moved `R`, `L`, `Phi` or `J`.
+That is what this is for:
+
+```
+regression_tests\check.bat                  solve every case and assert its physics
+regression_tests\check.bat all verify-only  re-check existing output, seconds
+regression_tests\check.bat 03_Cylinder_1A_50Hz    just one
+```
+
+It runs every case folder containing an `expected.txt`, and exits non-zero
+naming the ones that drifted. About 6 minutes per case with the internal
+solver; seconds in `verify-only`.
+
+**Run both cases, not one.** They are duals -- 02 drives 1 V and reads the
+current out, 03 drives 1 A on the same mesh and reads the voltage out -- and
+they must report the same `R` and `L`, because those belong to the geometry and
+the material rather than to how the thing is driven. **A change that breaks
+that duality shows up as the two disagreeing, which neither case alone can
+see.** Case 03 also checks that exactly 1 A is collected at the far terminal.
+
+The suggested sequence around any change to the solver, the assembly or the
+post-processing:
+
+```
+build.bat  &&  run-tests.bat  &&  regression_tests\check.bat
+```
+
 ## Running one
 
 From inside the case folder:
