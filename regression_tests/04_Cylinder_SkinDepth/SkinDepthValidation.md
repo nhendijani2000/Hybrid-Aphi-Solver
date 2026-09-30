@@ -297,15 +297,69 @@ section, so the visible structure is physics rather than noise in the fifth digi
 **38,294 cells, one point each**, against `J₀(kr)/J₀(ka)` evaluated at the radii actually sampled.
 Top: magnitude. Middle: phase. Bottom: both errors.
 
-> **There is no radial probe line.** Every point is one tetrahedron plotted at its centroid radius,
-> over **all azimuths** and all `z` in `0.3L` to `0.7L`. A line would have allowed a lucky azimuth
-> to be chosen and would have sampled about 30 cells instead of 38,294. The vertical spread at fixed
-> `r` *is* the azimuthal scatter and element noise, shown rather than averaged away. The values are
-> the per-cell `J`, exact per tetrahedron, not the volume-averaged nodal field.
+### 4.2.1 How `J_z(r)` is sampled, and what is averaged
 
-Both curves are normalised by the *same* reference — the mean over cells with `r > 0.95a` — so
-amplitude and the drive's own phase cancel and only shape is compared. Amplitude is checked
-separately by `R`, which is an integral of the same field.
+**The scatter and the error curve are built differently, and the difference matters.** The scatter
+is not averaged at all; the error curve and every per-band number in this report are. Each step,
+with real values from this run:
+
+**1. What one tetrahedron carries.** The solver evaluates `E = −jωA − ∇Φ` at each tet's **centroid**
+and stores `J = σE` there — one complex vector per tet (`src/postprocess.cpp:388`). So every
+tetrahedron in the conductor holds exactly *one* `J_z` number. Nothing is interpolated, and this is
+the per-cell field, not the volume-averaged nodal one — the nodal average straddles the conductor
+surface and is meaningless there.
+
+**2. "Mid cross-section" is a slab, not a plane.** Of the **98,204** tets in the conductor,
+**38,294** have their centroid in `0.3L` to `0.7L` — a band **16 mm tall**, containing many layers of
+tets stacked along `z`, at every azimuth. Dropping the outer 30 % at each end avoids the end caps;
+everything else is kept.
+
+**3. The scatter: one dot per tetrahedron, no averaging.** Take a thin annulus, `r/a` between 0.500
+and 0.510. **304 tets** fall in it:
+
+| tet # | x mm | y mm | z mm | \|J_z\| A/m² |
+|---|---|---|---|---|
+| 461 | 4.4576 | 2.2736 | 22.5560 | 47,757,469 |
+| 643 | −1.3930 | 4.8828 | 23.6917 | 48,309,852 |
+| 682 | −5.0177 | −0.8934 | 12.5640 | 48,388,009 |
+| 839 | 2.6615 | −4.2978 | 21.2980 | 48,020,578 |
+| … | *296 more* | | | |
+
+Different azimuths — the `x, y` run all around a circle of radius 5 mm — and different heights, `z`
+from 12 to 24 mm. **All 304 are plotted as 304 separate dots**, at essentially the same horizontal
+position `r/a ≈ 0.505`, each at its own height on the vertical axis. That column spans:
+
+```
+min  47,569,609     max  48,462,524     mean  48,015,084
+                          ->  spread = 1.86 % of the mean
+```
+
+**That 1.86 % is the visible thickness of the blue band.** It is genuine azimuthal variation plus
+element noise. Averaging would collapse it to a single dot and the reader would never know it was
+there, which is exactly why it is not averaged. A radial probe line would have been worse still: it
+would have permitted a lucky azimuth to be chosen, and would have sampled about 30 cells rather than
+38,294.
+
+**4. The error curve and the tables: binned means.** Bessel gives one value per radius and the mesh
+gives 304, so a comparison has to reduce them. Those bin by radius and average inside each bin:
+
+| `r/a` bin | tets | mean \|J_z\| | normalised |
+|---|---|---|---|
+| 0.00–0.05 | 85 | 37,363,065 | 0.2717 |
+| 0.40–0.45 | 1318 | 42,933,836 | 0.3122 |
+| 0.60–0.65 | 1832 | 60,312,699 | 0.4386 |
+| 0.95–1.00 | 10033 | 137,525,167 | 1.0000 |
+
+**5. The reference is itself a mean.** Everything is divided by the average over the **10,033** tets
+with `r > 0.95a`, which is why the curve sits at exactly 1.000 there by construction. Both magnitude
+and phase use that same reference, so the drive's amplitude and its phase both cancel and only
+*shape* is compared. Amplitude is checked separately by `R`, an integral of the same field. And
+**the Bessel values in every comparison are averaged over the same sampled radii**, so the two sides
+are reduced identically — see the note in §5 on why that reference moves when the mesh moves.
+
+> **In one line.** The scatter is 38,294 raw per-tet values with nothing done to them. The curves
+> and tables are those same values binned in `r` and averaged. The scatter shows what the solver
+> produced; the bins are what can be compared against a formula.
 
 | `r/a` | cells | \|J\| measured | \|J\| exact | err | phase err |
 |---|---|---|---|---|---|
