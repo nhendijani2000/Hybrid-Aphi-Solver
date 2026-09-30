@@ -12,7 +12,10 @@
 # This case ALSO still carries the core-sizing mesh defect that was fixed in
 # case 02 (see ../02_Ansys_Cylinder_50Hz/cylinder.geo): the Distance field
 # grades from the surface and never constrains the interior, so the core is
-# sampled by only 28 cells out of 1245 in the mid-length band. The tolerances
+# sampled by only 28 cells out of 2658 in the mid-length band -- 1.1 % of the
+# cells for 6.2 % of the cross-section area, with NO cells at all inside
+# r < 0.1a. Elements there are 4.5 mm against 1.74 mm at the rim, and the error
+# tracks that: +1.03 % in the core against +0.52 % at the surface. The tolerances
 # below reflect what THIS mesh holds. Fixing the mesh should tighten them.
 #
 #   key                value        tol      what sets the tolerance

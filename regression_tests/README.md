@@ -311,7 +311,9 @@ the profile is flat that is the same as `J(0)/J(a)`; here it is not, because the
 
 Comparing against the `r = 0` value would read as 2 % solver error when the
 solver is within half a percent. The 0.48 % that remains is the coarse core:
-**28 cells out of 1245** in the mid-length band, because this case still has the
+**28 cells out of 2658** in the mid-length band -- 1.1 % of them for 6.2 % of the
+cross-section area, and NO cells at all inside r < 0.1a -- because this case
+still has the
 core-sizing mesh defect that was fixed in case 02 — the `Distance` field grades
 from the conductor surface and never constrains the interior. Fixing it should
 tighten both this and the `R` agreement.
