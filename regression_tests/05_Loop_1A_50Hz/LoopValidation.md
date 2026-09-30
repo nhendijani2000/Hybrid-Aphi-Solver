@@ -33,6 +33,17 @@ and in no other case in the suite.
 
 ## 1. The case
 
+![The modelled geometry: copper torus inside the air cylinder](fig/geometry.png)
+
+**What was modelled.** The copper ring at mid height inside the air cylinder, drawn transparent.
+Loop radius 6.5 mm and tube radius 0.8 mm against a domain 30 mm in radius and 30 mm tall — the ring
+is **small** in it, which is the point of §5.2's boundary test.
+
+![The same, cut in half](fig/geometry_cut.png)
+
+**Cut at `y = 0`**, the plane the port sits on, so the ring is visible rather than seen through the
+domain.
+
 | | |
 |---|---|
 | Conductor | copper, `σ = 5.8e7 S/m`; loop radius `R = 6.5 mm`, tube circumradius `a = 0.8 mm`, a **20-gon** cross-section revolved about `z` |

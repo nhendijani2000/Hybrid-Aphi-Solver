@@ -301,4 +301,49 @@ dmr.EdgeColor = [0.15, 0.17, 0.22]
 dmr.SetScalarBarVisibility(view, False)
 shot("mesh_ring.png")
 
+
+# ---------------------------------------------------------------------------
+# 6. THE GEOMETRY ITSELF -- the ring inside the air domain
+# ---------------------------------------------------------------------------
+# What was actually modelled, which every other figure only shows a slice of.
+# The domain boundary is drawn transparent so the ring inside is visible;
+# ExtractSurface on the FULL dataset returns only the outer faces, because the
+# ring is interior to the mesh and its faces are shared.
+def geometry(name, clip_half, elev_scale):
+    clear()
+    dom = ExtractSurface(Input=src("J_field.vtk"))
+    if clip_half:
+        c = Clip(Input=dom)
+        c.ClipType = "Plane"
+        c.ClipType.Origin = [0.0, 0.0, 0.0]
+        c.ClipType.Normal = [0.0, 1.0, 0.0]
+        c.Invert = 0
+        dom = c
+    UpdatePipeline(proxy=dom)
+    dd = Show(dom, view)
+    ColorBy(dd, None)
+    dd.Representation = "Surface"
+    dd.DiffuseColor = [0.62, 0.66, 0.82]
+    dd.Opacity = 0.16
+    dd.SetScalarBarVisibility(view, False)
+
+    rg = ring_of("J_field.vtk")
+    UpdatePipeline(proxy=rg)
+    dr = Show(rg, view)
+    ColorBy(dr, None)
+    dr.Representation = "Surface"
+    dr.DiffuseColor = [0.72, 0.42, 0.20]      # copper
+    dr.Opacity = 1.0
+    dr.SetScalarBarVisibility(view, False)
+
+    view.CameraPosition = [1.15 * Rd, -1.55 * Rd, elev_scale * Rd]
+    view.CameraFocalPoint = [0, 0, 0]
+    view.CameraViewUp = [0, 0, 1]
+    view.CameraParallelScale = 1.02 * Rd
+    shot(name)
+
+
+geometry("geometry.png", False, 0.85)
+geometry("geometry_cut.png", True, 0.85)
+
 print("done")
