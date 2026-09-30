@@ -82,13 +82,19 @@ set "SOLVER=%BUILD%\solve_mesh.exe"
 set "WANTS_MUMPS="
 findstr /r /i /c:"^ *backend *= *mumps" "%CASE%" >nul 2>&1 && set "WANTS_MUMPS=1"
 if defined WANTS_MUMPS (
-  set "MBUILD=%REPO%\build-mumps-omp"
+  rem PREFER build-mumps-mkl. It is the same MUMPS on a THREADED MKL, and that
+  rem is worth 10x: 266.78 s -> 25.94 s to factor 418318 unknowns, same answer
+  rem to every printed digit. The other two link mkl_sequential and leave 20 of
+  rem 24 cores idle in the dense frontal kernels where nearly all the flops are.
+  rem See docs/MUMPS_SETUP.md.
+  set "MBUILD=%REPO%\build-mumps-mkl"
+  if not exist "!MBUILD!\solve_mesh.exe" set "MBUILD=%REPO%\build-mumps-omp"
   if not exist "!MBUILD!\solve_mesh.exe" set "MBUILD=%REPO%\build-mumps"
   if not exist "!MBUILD!\solve_mesh.exe" (
-    echo error: %CASE% asks for 'backend = mumps' but neither
-    echo        %REPO%\build-mumps-omp nor build-mumps has a solve_mesh.exe.
-    echo        See docs/MUMPS_SETUP.md to build one, or remove the backend line
-    echo        to use the internal solver.
+    echo error: %CASE% asks for 'backend = mumps' but none of
+    echo        %REPO%\build-mumps-mkl, build-mumps-omp or build-mumps
+    echo        has a solve_mesh.exe. See docs/MUMPS_SETUP.md to build one, or
+    echo        remove the backend line to use the internal solver.
     exit /b 1
   )
   set "SOLVER=!MBUILD!\solve_mesh.exe"

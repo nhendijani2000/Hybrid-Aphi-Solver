@@ -149,10 +149,133 @@ one. Recorded here because it is the first thing to check if MUMPS disappoints.
 
 ---
 
-## Result: 51x on case 02
+## The MKL threading trap: 10x that was being left on the floor
+
+**Read this before reading the timings below it.** Everything in the older
+sections was measured against a MUMPS linked to a **sequential** BLAS, without
+anyone intending that, and fixing it is worth about 10x on its own -- more than
+every other tuning in this document combined.
+
+### The symptom
+
+A running `solve_mesh.exe` had `mkl_sequential.3.dll` in its loaded module list
+and was using about 4.3 of 24 cores. The 4.3 was MUMPS's own OpenMP tree
+parallelism; the dense kernels *inside* each frontal matrix, which are where
+nearly all the flops of a large factorization live, were running on one core.
+
+### Why, and why `MUMPS_openmp=ON` did not fix it
+
+`build_mumps_omp.bat` already passed `-DMUMPS_openmp=ON`. That switches on
+MUMPS's own threading and has nothing to say about the BLAS. MUMPS's
+`FindLAPACK.cmake` chooses that separately:
+
+```cmake
+if(NOT DEFINED MKL_THREADING)
+  if(TBB IN_LIST LAPACK_FIND_COMPONENTS)
+    set(MKL_THREADING "tbb_thread")
+  elseif(OpenMP IN_LIST LAPACK_FIND_COMPONENTS)
+    set(MKL_THREADING "intel_thread")
+  else()
+    set(MKL_THREADING "sequential")      # <- silently, this one
+  endif()
+endif()
+```
+
+`MUMPS_openmp=ON` does not put `OpenMP` into `LAPACK_FIND_COMPONENTS`, so the
+default fires and the BLAS is serial. No warning is printed.
+
+**And setting it on the MUMPS build alone is NOT enough**, which cost a wasted
+rebuild to discover. `MUMPSConfig.cmake` line 69 re-runs
+
+```cmake
+find_dependency(LAPACK COMPONENTS ${MUMPS_LAPACK_VENDOR})   # MKL
+```
+
+at **our** configure time. `MKL_THREADING` is undefined there, so the same
+default fires again and our link line picks `mkl_sequential` regardless of how
+MUMPS was built. The flag has to be passed to the **consumer**:
+
+```
+cmake -S . -B build-mumps-mkl -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+  -DAPHI_WITH_MUMPS=ON -DMUMPS_ROOT=<prefix> -DMUMPS_DIR=<prefix>/cmake ^
+  -DMETIS_LIBRARY=<prefix>/lib/metis.lib -DMETIS_INCLUDE_DIR=<prefix>/include ^
+  -DMKL_THREADING=intel_thread
+```
+
+**Verify it rather than trusting the cache**, because the cache said
+`MKL_THREADING:UNINITIALIZED=intel_thread` in the run that still linked
+sequential:
+
+```
+dumpbin /dependents build-mumps-mkl\solve_mesh.exe | findstr /i mkl
+```
+
+must print `mkl_intel_thread.3.dll`, not `mkl_sequential.3.dll`.
+
+### Measured, 2026-09-29, 24 logical cores
+
+| problem | unknowns | internal | MUMPS, seq MKL | MUMPS, **threaded MKL** | threading gain |
+|---|---|---|---|---|---|
+| `01_OneCylinder` | 55 652 | 90.04 s | 2.14 s | **0.78 s** | 2.7x |
+| `02_Ansys_Cylinder_50Hz` | 240 990 | 550.29 s | 10.67 s | **2.75 s** | 3.9x |
+| `04` N=76 | 418 318 | — | 266.78 s | **25.94 s** | **10.3x** |
+| `04` N=96 | 739 304 | — | 743.22 s | **81.77 s** | 9.1x |
+
+(factorization time only). **The gain grows with problem size**, which is what
+it should do: threading the dense frontal kernels only pays once the fronts are
+big. At 55 k unknowns it is 2.7x; at 418 k it is 10.3x.
+
+Caveat on the N=96 row: the sequential run of it **paged** -- 17.1 GB of factors
+with 0.5 GB of RAM free -- so its 743.22 s is partly disk, and the true
+threading gain there is somewhat below 9.1x.
+
+**The answers are identical.** Both meshes of case 04, checked through
+`verify.py`, give the same `R/R_dc`, `L`, `<J>` ratio and phase lag to every
+printed digit under both builds. Threading changes the order of floating-point
+accumulation inside the BLAS, so this was worth confirming rather than assuming.
+
+**Against the internal solver this now reads 200x on case 02**, not 51x.
+
+### What to build
+
+`third_party/build_mumps_omp_mkl.bat` does the MUMPS side and installs to
+`mumps-install-omp-mkl`. `run_case.bat` prefers `build-mumps-mkl` over
+`build-mumps-omp` over `build-mumps`, so once it exists it is used
+automatically.
+
+**`third_party/` sits OUTSIDE this repository and is not tracked**, so the
+MUMPS configure is reproduced here rather than living only in that script. Load
+`vcvars64.bat` and the two oneAPI component scripts first (see step 1 -- oneAPI's
+own `setvars.bat` is broken on this install), then:
+
+```
+cmake -S third_party/mumps -B third_party/mumps-build-omp-mkl -G Ninja ^
+  -DCMAKE_BUILD_TYPE=Release ^
+  -DCMAKE_Fortran_COMPILER=ifx -DCMAKE_C_COMPILER=icx ^
+  -DCMAKE_INSTALL_PREFIX=third_party/mumps-install-omp-mkl ^
+  -DMUMPS_parallel=OFF -DMUMPS_scalapack=OFF ^
+  -DMUMPS_openmp=ON -DMUMPS_metis=ON ^
+  -DBUILD_SHARED_LIBS=OFF ^
+  -DBUILD_SINGLE=OFF -DBUILD_DOUBLE=OFF -DBUILD_COMPLEX=OFF -DBUILD_COMPLEX16=ON ^
+  -DMKL_THREADING=intel_thread
+cmake --build third_party/mumps-build-omp-mkl --parallel
+cmake --install third_party/mumps-build-omp-mkl
+```
+
+`MUMPS_parallel=OFF` because there is no MPI to install and the comparison
+against our single-process solver is the meaningful one. Only COMPLEX16 is
+built: the RowScaled and ScaledPhi conditionings give complex symmetric
+indefinite systems, so `zmumps` is the only arithmetic wanted.
+
+---
+
+## Result: 51x on case 02 (superseded -- it is 200x with a threaded BLAS)
 
 Measured 2026-09-29, both solvers single-threaded (MUMPS built without OpenMP
-precisely so this comparison is like for like).
+precisely so this comparison is like for like). **This section is kept because
+the like-for-like single-threaded comparison is the one that answers "is the gap
+the formulation or the linear algebra". For the number you should quote today,
+see the MKL threading section above: 2.75 s, not 10.67 s.**
 
 `02_Ansys_Cylinder_50Hz`, 240990 unknowns:
 

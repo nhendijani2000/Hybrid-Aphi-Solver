@@ -601,8 +601,9 @@ it by going and getting `delta/h = 4`.
 
 `cylinder_skin_n96.geo` is the same case at `N = 96`, `lc = 0.640 mm`, which
 does reach `delta/h = 4.0` in the conductor. It is **not** a regression case --
-739304 unknowns, 17.1 GB of factors and 743 s to factor is too heavy to run on
-every change -- it exists to establish the convergence RATE.
+739304 unknowns and 17.1 GB of factors is too heavy to run on every change,
+even though threaded MKL brought the factorization down from 743 s to 82 s --
+it exists to establish the convergence RATE.
 
 ![mesh convergence](04_Cylinder_SkinDepth/fig/convergence.png)
 
@@ -616,7 +617,8 @@ every change -- it exists to establish the convergence RATE.
 | `L` | 20.2097 nH | 20.2041 nH | | converged to 0.03 % |
 | unknowns | 418318 | 739304 | 1.77 | |
 | factor nnz | 497.8 M | 1068.6 M | 2.15 | |
-| factorization | 267 s | 743 s | 2.78 | |
+| factorization, threaded MKL | **25.9 s** | **81.8 s** | 3.15 | |
+| factorization, sequential MKL | 267 s | 743 s | 2.78 | |
 
 **Why the rate matters more than either error value.** A single number says "we
 are 0.74 % off" and cannot separate discretisation error from a modelling
@@ -632,9 +634,10 @@ formulation rather than at `h`.
 with `h` at all: the polygon floor, which fell 0.028 % to 0.018 % only because
 `N` changed. Net of it, 0.192 % to 0.127 %.
 
-**This is close to the last useful uniform refinement on a 32 GB machine.** Fill
-scales as `n^1.47` and factorization time as `n^2.39` -- measured on this
-geometry, from these two runs plus case 01's. Halving `h` again needs `N ~ 136`
+**Memory, not time, is what stops further refinement on a 32 GB machine.** Fill
+scales as `n^1.47`; factorization time scales as `n^2.39` on a sequential BLAS
+but only about `n^2.0` once MKL is threaded, and threading took the N=96 solve
+from 743 s to 82 s. Time is no longer the binding constraint -- memory is. Halving `h` again needs `N ~ 136`
 and about 1.8 M unknowns, which extrapolates to roughly 45 GB of factors. The
 N=96 run already paged: 17.1 GB of factors with 0.5 GB of RAM free at the peak,
 and it only survived because Windows could push other processes out. Going
@@ -660,8 +663,9 @@ The `.msh` is gitignored: 14 MB, regenerated in 50 s, and used once.
 | unknowns | **418318** |
 | factor nnz | 497.8 M, about 8.0 GB |
 | mesh | 24 s |
-| factorization, MUMPS | **267 s** |
-| one frequency end to end | 293 s |
+| factorization, MUMPS, threaded MKL | **25.9 s** |
+| one frequency end to end | **42 s** |
+| (the same on a sequential MKL) | 267 s / 293 s |
 
 Measured scaling on this geometry, from case 01's mesh and both meshes here:
 **fill ~ `n^1.47`, factorization time ~ `n^2.39`.** An earlier note in this file
