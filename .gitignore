@@ -24,9 +24,16 @@ Testing/
 *.pdb
 *.ilk
 
-# Third-party fetched sources (vendor via CMake FetchContent / submodules, not committed)
+# third_party/ holds the MUMPS BUILD SCRIPTS, which are OURS and are tracked.
+# What they build is not: mumps/ is an upstream checkout (scivision/mumps at
+# v5.9.1.2) and the build and install trees run to ~190 MB. So: ignore the
+# directory wholesale, then re-admit the few files we author. A new script here
+# needs its own negation or it will be silently untracked -- which is exactly
+# how the MUMPS build ended up recorded nowhere for as long as it did.
 third_party/*
 !third_party/.gitkeep
+!third_party/README.md
+!third_party/*.bat
 
 # Editor / OS
 .vscode/

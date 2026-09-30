@@ -243,24 +243,33 @@ accumulation inside the BLAS, so this was worth confirming rather than assuming.
 `build-mumps-omp` over `build-mumps`, so once it exists it is used
 automatically.
 
-**`third_party/` sits OUTSIDE this repository and is not tracked**, so the
-MUMPS configure is reproduced here rather than living only in that script. Load
+The scripts now live in the repository at `third_party/`, with
+`third_party/README.md` recording the clone URL and the pinned tag. They find
+the MUMPS source and their build trees through **`MUMPS_TP`**, which defaults to
+that directory; set it to point at trees that already exist elsewhere. The
+configure is reproduced below as well, so the doc stands on its own. Load
 `vcvars64.bat` and the two oneAPI component scripts first (see step 1 -- oneAPI's
 own `setvars.bat` is broken on this install), then:
 
 ```
-cmake -S third_party/mumps -B third_party/mumps-build-omp-mkl -G Ninja ^
+cmake -S %MUMPS_TP%/mumps -B %MUMPS_TP%/mumps-build-omp-mkl -G Ninja ^
   -DCMAKE_BUILD_TYPE=Release ^
   -DCMAKE_Fortran_COMPILER=ifx -DCMAKE_C_COMPILER=icx ^
-  -DCMAKE_INSTALL_PREFIX=third_party/mumps-install-omp-mkl ^
+  -DCMAKE_INSTALL_PREFIX=%MUMPS_TP%/mumps-install-omp-mkl ^
   -DMUMPS_parallel=OFF -DMUMPS_scalapack=OFF ^
   -DMUMPS_openmp=ON -DMUMPS_metis=ON ^
   -DBUILD_SHARED_LIBS=OFF ^
   -DBUILD_SINGLE=OFF -DBUILD_DOUBLE=OFF -DBUILD_COMPLEX=OFF -DBUILD_COMPLEX16=ON ^
+  -DMUMPS_BUILD_TESTING=OFF ^
   -DMKL_THREADING=intel_thread
 cmake --build third_party/mumps-build-omp-mkl --parallel
 cmake --install third_party/mumps-build-omp-mkl
 ```
+
+`MUMPS_BUILD_TESTING=OFF` because MUMPS's own `test_mumps_openmp` example does
+not link on this toolchain (unresolved externals, LNK 1120) while every library
+we consume builds and works. Note the name: the guard is
+`${PROJECT_NAME}_BUILD_TESTING`, so the generic `BUILD_TESTING` does nothing.
 
 `MUMPS_parallel=OFF` because there is no MPI to install and the comparison
 against our single-process solver is the meaningful one. Only COMPLEX16 is
