@@ -150,6 +150,72 @@ SaveScreenshot(os.path.join(FIG, "j_longitudinal.png"), view,
                ImageResolution=[900, 1100])
 print("wrote %s/j_longitudinal.png  -- no z dependence" % FIG)
 
+# --- the mesh, cross-section -----------------------------------------------
+# Section 3 of the report is entirely about how this mesh was sized, so it
+# should be possible to look at it. Two views: the whole domain, to show the
+# grading from the conductor out to the box wall, and the wire alone, to show
+# that the interior is uniform rather than graded and that the 76 facets are
+# resolved.
+W = 200e-3          # box side, from cylinder_skin.geo
+
+mesh_src = LegacyVTKReader(FileNames=[os.path.join(OUT, "J_field.vtk")])
+mslice = Slice(Input=mesh_src)
+mslice.SliceType = "Plane"
+mslice.SliceType.Origin = [0.0, 0.0, L / 2]
+mslice.SliceType.Normal = [0.0, 0.0, 1.0]
+UpdatePipeline(proxy=mslice)
+
+Hide(sl2, view)
+dm = Show(mslice, view)
+# Solid fill with the element edges drawn on top. ColorBy(None) is what makes
+# it a MESH picture rather than a field picture with edges over it.
+ColorBy(dm, None)
+dm.SetScalarBarVisibility(view, False)
+dm.Representation = "Surface With Edges"
+dm.AmbientColor = [0.15, 0.17, 0.22]
+dm.DiffuseColor = [0.85, 0.87, 0.91]
+dm.EdgeColor = [0.15, 0.17, 0.22]
+dm.LineWidth = 1.0
+
+view.CameraPosition = [0, 0, L / 2 + 0.05]
+view.CameraFocalPoint = [0, 0, L / 2]
+view.CameraViewUp = [0, 1, 0]
+view.CameraParallelProjection = 1
+
+view.CameraParallelScale = 0.5 * W * 1.04
+Render(view)
+SaveScreenshot(os.path.join(FIG, "mesh_domain.png"), view,
+               ImageResolution=[1000, 1000])
+print("wrote %s/mesh_domain.png  -- whole 200 mm box at mid height" % FIG)
+
+# The conductor ALONE. Zooming the full mesh instead gives an unreadable field
+# of triangles: the air within delta/2 of the surface is refined to lc_skin too,
+# so there is no contrast at the boundary and the 76-gon cannot be made out.
+# Thresholding to body_tag = 1 first isolates the conductor and its facets.
+mwire = Threshold(Input=mesh_src)
+mwire.Scalars = ["CELLS", "body_tag"]
+mwire.LowerThreshold = 1.0
+mwire.UpperThreshold = 1.0
+mwire.ThresholdMethod = "Between"
+mws = Slice(Input=mwire)
+mws.SliceType = "Plane"
+mws.SliceType.Origin = [0.0, 0.0, L / 2]
+mws.SliceType.Normal = [0.0, 0.0, 1.0]
+UpdatePipeline(proxy=mws)
+Hide(mslice, view)
+dw = Show(mws, view)
+ColorBy(dw, None)
+dw.SetScalarBarVisibility(view, False)
+dw.Representation = "Surface With Edges"
+dw.DiffuseColor = [0.85, 0.87, 0.91]
+dw.EdgeColor = [0.15, 0.17, 0.22]
+dw.LineWidth = 1.0
+view.CameraParallelScale = a * 1.12
+Render(view)
+SaveScreenshot(os.path.join(FIG, "mesh_wire.png"), view,
+               ImageResolution=[1000, 1000])
+print("wrote %s/mesh_wire.png  -- the conductor alone, 76-gon, uniform interior" % FIG)
+
 # --- the radial profile, per cell, against exact Bessel --------------------
 cc = CellCenters(Input=wire("J_field.vtk"))
 cc.VertexCells = 1

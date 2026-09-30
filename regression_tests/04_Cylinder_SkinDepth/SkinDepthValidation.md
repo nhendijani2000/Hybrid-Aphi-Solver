@@ -197,6 +197,22 @@ That low-frequency limit also explains why cases 02 and 03 see nothing: at `a/δ
 
 ## 3. The mesh, and how it was sized
 
+![Cross-section mesh of the whole domain](fig/mesh_domain.png)
+
+**Whole domain**, the 200 mm box at mid height. Graded from the conductor out to `lc_far = 16 mm` at
+the wall over `d_far = 45 mm`. The dark disc in the middle is the conductor and the shell of air
+around it, both held at the fine size.
+
+![Cross-section mesh of the conductor alone](fig/mesh_wire.png)
+
+**The conductor alone**, 98,204 tets of the 179,477. Note it is **uniform** — no grading toward the
+axis, which is the decision argued for in §3.2 — and that at `N = 76` the polygon is already
+visually a circle.
+
+The conductor is meshed at a uniform `lc = 0.833 mm` target, realising `h ≈ 1.08 mm` as an
+equivalent regular-tet edge, against a skin depth of 3.334 mm. The air holds that same fine size for
+the first half skin depth outward and then grades away. Everything below is why.
+
 ### 3.1 The sizing was measured, not assumed
 
 `01_OneCylinder`'s mesh was run at three frequencies first and the error read off against Bessel, to

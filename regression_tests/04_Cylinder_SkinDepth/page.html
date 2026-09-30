@@ -284,6 +284,23 @@ general-purpose implementation and should not be reused blindly at higher freque
 
 <h2>3. The mesh, and how it was sized</h2>
 
+<div class="figs">
+  <figure><img src="fig/mesh_domain.png" alt="Cross-section mesh of the whole domain">
+    <figcaption><b>Whole domain</b>, the 200&nbsp;mm box at mid height. Graded from the conductor out
+    to <code>lc_far = 16 mm</code> at the wall over <code>d_far = 45 mm</code>. The dark disc in the
+    middle is the conductor and the shell of air around it, both held at the fine
+    size.</figcaption></figure>
+  <figure><img src="fig/mesh_wire.png" alt="Cross-section mesh of the conductor alone">
+    <figcaption><b>The conductor alone</b>, 98,204 tets of the 179,477. Note it is <b>uniform</b> —
+    no grading toward the axis, which is the decision argued for in &sect;3.2 — and that at
+    <code>N = 76</code> the polygon is already visually a circle.</figcaption></figure>
+</div>
+
+<p>The conductor is meshed at a uniform <code>lc = 0.833 mm</code> target, realising
+<code>h &asymp; 1.08 mm</code> as an equivalent regular-tet edge, against a skin depth of
+3.334&nbsp;mm. The air holds that same fine size for the first half skin depth outward and then
+grades away. Everything below is why.</p>
+
 <h3>3.1 The sizing was measured, not assumed</h3>
 
 <p><code>01_OneCylinder</code>&rsquo;s mesh was run at three frequencies first and the error read off
