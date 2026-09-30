@@ -259,11 +259,34 @@ outside. This is the plane the cut is made on.</p>
 </tbody></table></div>
 
 <div class="note">
-<p><strong>The air's E is LARGER than the conductor's, and that surprised me.</strong> It is not
-<code>&minus;j&omega;A</code>, which is only 2.6e&#8209;04&nbsp;V/m here. It is the
-<b>electrostatic</b> field of the ring's own varying surface potential: the loop carries 0.354&nbsp;mV
-from one side of the cut to the other, and that voltage appears across the surrounding air. The
-figure shows it strongest near the cut, which is where the gradient is.</p>
+<p><strong>The air's E is larger than the conductor's &mdash; and so it is in every other case.</strong>
+An earlier version of this report called that surprising and implied it was something the ring did.
+It is not. Measured across the suite:</p>
+</div>
+
+<div class="tw"><table>
+<thead><tr><th>case</th><th>conductor <code>|E|</code></th><th>air within 2.5a</th><th>ratio</th><th>global max / conductor</th></tr></thead>
+<tbody>
+<tr><td>02 rod, 1 V</td><td>24.9 V/m</td><td>55.7</td><td>2.2x</td><td>7.7x</td></tr>
+<tr><td>03 rod, 1 A</td><td>2.45e&#8209;03</td><td>5.47e&#8209;03</td><td>2.2x</td><td>7.7x</td></tr>
+<tr><td>04 rod, 393 Hz</td><td>1.51</td><td>9.84</td><td>6.5x</td><td>17.7x</td></tr>
+<tr><td><b>05 torus, cut</b></td><td>8.58e&#8209;03</td><td>2.10e&#8209;02</td><td><b>2.4x</b></td><td><b>200x</b></td></tr>
+</tbody></table></div>
+
+<div class="note">
+<p><strong>What IS different is the dynamic range, and it is the cut that causes it.</strong> The
+ratio of air to conductor is ordinary here &mdash; 2.4 against the rods' 2.2. But the ratio of the
+frame's <em>maximum</em> to the conductor is <b>200x</b>, against 7.7x for a rod, because &Phi; jumps
+across a zero-thickness interface and the adjacent air sees 1.72&nbsp;V/m.</p>
+<p><strong>That is also why the conductor reads BLUE here and deep red in case 02.</strong> It is the
+colour range, not the physics. Case 02's <code>06_E_in_wire.png</code> thresholds to the
+<em>wire only</em> and auto-ranges to the wire's own values, so the wire spans the whole colour map
+and tops out red &mdash; that figure's own report warns it magnifies noise in the fifth digit into a
+full rainbow. The figures here keep the air in frame and must span the cut spike, so the conductor
+lands at the bottom of the scale. Same field, different window.</p>
+<p>The air's field is <b>electrostatic</b>, not <code>&minus;j&omega;A</code> &mdash; that term is only
+2.6e&#8209;04&nbsp;V/m here. The loop carries 0.354&nbsp;mV from one side of the cut to the other and
+that voltage appears across the surrounding air, strongest near the cut where the gradient is.</p>
 <p><strong>Two ranges are pinned, and both had to be.</strong> <code>|E|</code> spikes to
 1.72&nbsp;V/m <em>at the cut</em>, because &Phi; jumps across a zero-thickness interface &mdash; on an
 auto range that one spike takes the whole colour map and everything else reads as flat blue, which

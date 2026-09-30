@@ -153,11 +153,32 @@ it is *higher*.
 | air beyond `ρ` = 25 mm | 3.719e-04 V/m |
 | at the cut itself | 1.72 V/m — 200× the conductor |
 
-> **The air's E is LARGER than the conductor's, and that surprised me.** It is not `−jωA`, which is
-> only 2.6e-04 V/m here. It is the **electrostatic** field of the ring's own varying surface
-> potential: the loop carries 0.354 mV from one side of the cut to the other, and that voltage
-> appears across the surrounding air. The figure shows it strongest near the cut, which is where the
-> gradient is.
+> **The air's E is larger than the conductor's — and so it is in every other case.** An earlier
+> version of this report called that surprising and implied it was something the ring did. It is
+> not. Measured across the suite:
+
+| case | conductor `\|E\|` | air within 2.5a | ratio | global max / conductor |
+|---|---|---|---|---|
+| 02 rod, 1 V | 24.9 V/m | 55.7 | 2.2× | 7.7× |
+| 03 rod, 1 A | 2.45e-03 | 5.47e-03 | 2.2× | 7.7× |
+| 04 rod, 393 Hz | 1.51 | 9.84 | 6.5× | 17.7× |
+| **05 torus, cut** | 8.58e-03 | 2.10e-02 | **2.4×** | **200×** |
+
+> **What IS different is the dynamic range, and it is the cut that causes it.** The ratio of air to
+> conductor is ordinary here — 2.4 against the rods' 2.2. But the ratio of the frame's *maximum* to
+> the conductor is **200×**, against 7.7× for a rod, because Φ jumps across a zero-thickness
+> interface and the adjacent air sees 1.72 V/m.
+>
+> **That is also why the conductor reads BLUE here and deep red in case 02.** It is the colour
+> range, not the physics. Case 02's `06_E_in_wire.png` thresholds to the *wire only* and auto-ranges
+> to the wire's own values, so the wire spans the whole colour map and tops out red — that figure's
+> own report warns it magnifies noise in the fifth digit into a full rainbow. The figures here keep
+> the air in frame and must span the cut spike, so the conductor lands at the bottom of the scale.
+> Same field, different window.
+>
+> The air's field is **electrostatic**, not `−jωA` — that term is only 2.6e-04 V/m here. The loop
+> carries 0.354 mV from one side of the cut to the other and that voltage appears across the
+> surrounding air, strongest near the cut where the gradient is.
 >
 > **Two ranges are pinned, and both had to be.** `|E|` spikes to 1.72 V/m *at the cut*, because Φ
 > jumps across a zero-thickness interface — on an auto range that one spike takes the whole colour
