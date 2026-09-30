@@ -1,0 +1,391 @@
+<title>Loop Validation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#15181d; --ink-2:#4a5260; --ink-3:#6f7888;
+    --bg:#fbfaf8; --card:#ffffff; --rule:#e3e0da;
+    --accent:#8a3324; --accent-soft:#f6ece9;
+    --ok:#2c5f2d; --warn:#8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+      --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+      --accent:#e08b74; --accent-soft:#2a1f1c;
+      --ok:#8fc98f; --warn:#e0b467;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+    --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+    --accent:#e08b74; --accent-soft:#2a1f1c;
+    --ok:#8fc98f; --warn:#e0b467;
+    color-scheme: dark;
+  }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.6; margin:0;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding-inline:16px; padding-block:40px 72px;}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:clamp(1.9rem,5vw,2.6rem);
+     line-height:1.15; margin:0 0 .35em; text-wrap:balance; letter-spacing:-.01em;}
+  .sub{color:var(--ink-2); font-size:1.05rem; margin:0 0 .4em; max-width:62ch;}
+  .meta{color:var(--ink-3); font-size:.82rem; font-family:"IBM Plex Mono",monospace;}
+  h2{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:1.5rem;
+     margin:3rem 0 .2em; padding-top:1.6rem; border-top:1px solid var(--rule); text-wrap:balance;}
+  h3{font-size:1.02rem; font-weight:600; margin:2rem 0 .3em; color:var(--ink);}
+  p{margin:.7em 0; max-width:68ch;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.88em;
+       background:var(--accent-soft); color:var(--accent); padding:.08em .34em; border-radius:3px;}
+  pre{background:var(--card); border:1px solid var(--rule); border-radius:6px;
+      padding:.8rem 1rem; overflow-x:auto; font-family:"IBM Plex Mono",monospace;
+      font-size:.82rem; line-height:1.5; margin:1rem 0;}
+  pre code{background:none; color:var(--ink); padding:0;}
+  .eq{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--ink-3);
+      border-radius:6px; padding:.7rem 1.1rem; margin:1rem 0; overflow-x:auto;
+      font-family:"IBM Plex Mono",monospace; font-size:.88rem; line-height:1.7;}
+  .figs{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); margin:1.2rem 0 .4rem;}
+  .figs.one{grid-template-columns:1fr;}
+  figure{margin:0; background:var(--card); border:1px solid var(--rule); border-radius:8px; overflow:hidden;}
+  figure img{display:block; width:100%; height:auto; background:#fff;}
+  figcaption{font-size:.8rem; color:var(--ink-2); padding:.6rem .8rem; border-top:1px solid var(--rule);}
+  figcaption b{color:var(--ink); font-weight:600;}
+  .tw{overflow-x:auto; margin:1.1rem 0;}
+  table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.45rem .7rem; border-bottom:1px solid var(--rule); white-space:nowrap;}
+  th{font-weight:600; color:var(--ink-2); font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;}
+  td:first-child{white-space:normal;}
+  tbody tr:last-child td{border-bottom:none;}
+  .note{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--accent);
+        border-radius:6px; padding:.9rem 1.1rem; margin:1.3rem 0;}
+  .note p{margin:.35em 0;}
+  .note strong{color:var(--accent);}
+  .ok{color:var(--ok); font-weight:600;}
+  .warn{color:var(--warn); font-weight:600;}
+  ul,ol{max-width:68ch; padding-left:1.15rem;}
+  li{margin:.35em 0;}
+
+  /* Print / PDF. Protect ONLY what is ruined by being split: a figure, a table,
+     an equation block. Prose is allowed to flow -- protecting it is what leaves
+     half-empty pages, because any block too tall for the remaining space jumps
+     whole and abandons the rest. */
+  @media print{
+    :root{ color-scheme: light; }
+    body{ background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+          orphans:3; widows:3; }
+    .wrap{ max-width:none; padding-block:0 .5rem; }
+    h1{ font-size:2rem; }
+    h2{ margin-top:1.2rem; padding-top:.7rem; font-size:1.3rem;
+        break-after:avoid; page-break-after:avoid; }
+    h3{ margin-top:.9rem; break-after:avoid; page-break-after:avoid; }
+    figure, .tw, table, .eq{ break-inside:avoid; page-break-inside:avoid; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    p, li, .note, ul, ol, pre{ break-inside:auto; page-break-inside:auto; }
+    figure img{ max-height:11cm; object-fit:contain; }
+    .figs{ gap:12px; margin:.8rem 0 .3rem; }
+    figcaption{ padding:.4rem .6rem; }
+    a{ color:inherit; text-decoration:none; }
+  }
+</style>
+
+<div class="wrap">
+
+
+
+<div class="wrap">
+
+<h1>A conducting ring driven through an internal cut</h1>
+<p class="sub">Hybrid A&#8209;&Phi; finite-element solver, tree&#8209;cotree gauge. The first
+<b>multiply connected</b> case in the suite: the current circulates with no terminal anywhere on the
+outer boundary, so the ring can only be driven by cutting it.</p>
+<p class="meta">regression_tests/05_Loop_1A_50Hz &nbsp;·&nbsp; 1&nbsp;A internal current source &nbsp;·&nbsp;
+50&nbsp;Hz &nbsp;·&nbsp; 524,050 unknowns &nbsp;·&nbsp; backward error 9.1e&#8209;23</p>
+
+<h2>0. What this case establishes</h2>
+
+<p>Cases 01&ndash;04 are all a straight rod. A rod is <b>simply connected</b> and the tree&#8209;cotree
+gauge has nothing hard to do on one. A ring is <b>multiply connected</b>: the cotree has to span the
+loop, the current has to be able to go all the way round, and there is no outer surface to attach an
+electrode to. It can only be driven through a <b>cut</b>.</p>
+
+<div class="note">
+<p><strong>The check no other case can make.</strong> Inject 1&nbsp;A across the cut, then measure the
+current crossing a plane where <em>nothing is prescribed</em>:</p>
+</div>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>measured</th></tr></thead>
+<tbody>
+<tr><td><code>|I|</code> through the <b>cut</b>, where 1&nbsp;A is injected</td><td><b>0.9999784 A</b></td></tr>
+<tr><td><code>|I|</code> through <b>&theta; = &pi;/2</b>, nothing prescribed</td><td><b>1.000183 A</b></td></tr>
+</tbody></table></div>
+
+<p>The current circulates the whole way round. A gauge that wrongly killed the loop would show up
+there and in no other case in the suite.</p>
+
+<h2>1. The case</h2>
+
+<div class="tw"><table><tbody>
+<tr><td>Conductor</td><td>copper, <code>&sigma; = 5.8e7 S/m</code>; loop radius <code>R = 6.5 mm</code>, tube circumradius <code>a = 0.8 mm</code>, a <b>20&#8209;gon</b> cross-section revolved about <code>z</code></td></tr>
+<tr><td>Domain</td><td>cylinder of air, 30&nbsp;mm radius, 30&nbsp;mm tall, <code>n &times; A = 0</code> on the outer boundary</td></tr>
+<tr><td>Excitation</td><td><b>1.0 A through the cut</b> at <code>&theta; = 0</code>, 50&nbsp;Hz</td></tr>
+<tr><td>Skin depth</td><td><code>&delta; = 9.346 mm</code>, so <code>a/&delta; = 0.086</code> &mdash; no skin effect</td></tr>
+<tr><td>Mesh</td><td>38,248 nodes, 237,031 elements, Netgen-optimised</td></tr>
+<tr><td>Measured</td><td><code>Z = 3.543192e&#8209;04 + 6.087457e&#8209;06 j &Omega;</code></td></tr>
+</tbody></table></div>
+
+<h3>1.1 Where the dimensions came from</h3>
+
+<p>Not from a document. Two <b>published</b> closed forms, solved together against a reference
+impedance measured for this geometry:</p>
+
+<div class="eq">R_dc = 2 &pi; R / (&sigma; A)<br>
+L&nbsp;&nbsp;&nbsp; = &mu;&#8320; R [ ln(8R/a) &minus; 2 + 1/4 ]&nbsp;&nbsp;&nbsp;round wire, uniform current</div>
+
+<p><code>R = 6.5 mm</code> with <code>a = 0.8 mm</code> reproduces the reference <code>R</code> to
+1.3&nbsp;% and <code>L</code> to 0.27&nbsp;%, and agrees independently with dimensions measured off
+the reference model's own scale bar &mdash; centreline diameter 1.23&nbsp;cm, tube 1.4&ndash;2.0&nbsp;mm.</p>
+
+<div class="note">
+<p><strong>The reference was run at 100&nbsp;Hz, not 50.</strong> That was stated nowhere and falls
+out of the same two equations. <code>Im(Z)/&omega;</code> is 19.75&nbsp;nH at 100&nbsp;Hz and
+39.50&nbsp;nH at 50&nbsp;Hz, and <em>no</em> geometry consistent with the reported <code>R</code> can
+give 39.50&nbsp;nH. It does not matter for what this case checks: <code>a/&delta;</code> is 0.086 at
+50&nbsp;Hz and 0.121 at 100&nbsp;Hz, so there is no skin effect either way and <code>R</code> and
+<code>L</code> are frequency independent between them.</p>
+</div>
+
+<h2>2. The potential</h2>
+
+<div class="figs">
+  <figure><img src="fig/phi_ring_top.png" alt="Potential over the torus, seen from +z">
+    <figcaption><b>Re(&Phi;) over the whole ring</b>, seen from <code>+z</code>. It ramps smoothly
+    all the way round and <b>falls off a cliff at the cut</b>, at 3 o'clock.</figcaption></figure>
+  <figure><img src="fig/phi_ring_iso.png" alt="The same, from an angle">
+    <figcaption><b>The same, obliquely</b>, so the tube reads as a tube. Flat-shaded: 3D lighting
+    darkens one side by more than &Phi; changes across a colour band.</figcaption></figure>
+</div>
+
+<p>This is the picture of what an internal cut actually does, and nothing in cases 01&ndash;04 looks
+like it. One side of the cut is the port's 0&nbsp;V reference; the other floats to whatever the
+solve returns. <b>That jump is the terminal voltage</b> &mdash; 3.543192e&#8209;04&nbsp;V here, for
+1&nbsp;A, which is the impedance.</p>
+
+<p>&Phi; is single-valued on each side: 193 nodes sit exactly on the cut plane and every one reads
+the same value, so the jump is a genuine discontinuity across a zero-thickness interface, not a
+gradient through a thin region.</p>
+
+<h2>3. The current</h2>
+
+<div class="figs one">
+  <figure><img src="fig/j_vectors.png" alt="Current density vectors around the ring">
+    <figcaption><b>J = &sigma;E</b> on the ring, every 11th cell, coloured by magnitude. The arrows
+    close the loop.</figcaption></figure>
+</div>
+
+<div class="note">
+<p><strong>Look at the colour, not just the arrows.</strong> <code>|J|</code> is highest on the
+<b>inner</b> radius &mdash; 5.8e5 against 4.4e5&nbsp;A/m&sup2;, a ratio of <b>1.32</b>. That is not
+noise: current flowing azimuthally takes a shorter path on the inside, so it crowds there.
+<code>(R+a)/(R&minus;a) = 1.28</code>, and the measured 1.32 is that effect.</p>
+<p>It is also why the exact <code>R</code> below is <b>not</b> <code>2&pi;R/(&sigma;A)</code>.</p>
+</div>
+
+<h2>4. The fields</h2>
+
+<h3>4.1 B in the xy plane</h3>
+
+<div class="figs">
+  <figure><img src="fig/b_xy_ring.png" alt="B magnitude on the xy plane, zoomed to the ring">
+    <figcaption><b>|B| through the tube centreline</b>, zoomed. Red at the <b>inner</b> tube surface,
+    a minimum at the tube axis, yellow at the outer surface.</figcaption></figure>
+  <figure><img src="fig/b_xy_domain.png" alt="B magnitude over the whole domain">
+    <figcaption><b>The whole 30&nbsp;mm domain</b>, log scale, so the decay to the wall is
+    visible.</figcaption></figure>
+</div>
+
+<p>Three things in the zoomed view are worth naming, because each is a check. <code>|B|</code> has a
+<b>minimum at the tube axis</b> &mdash; the wire's own field vanishes there. It <b>peaks at the tube
+surface</b>, where Amp&egrave;re gives <code>&mu;&#8320;I/(2&pi;a) = 2.5e&#8209;4 T</code>. And the
+inner surface is <b>hotter than the outer</b>, because the rest of the loop's field adds on the
+inside and subtracts on the outside.</p>
+
+<h3>4.2 The port plane</h3>
+
+<div class="figs one">
+  <figure><img src="fig/b_port_plane.png" alt="B magnitude on the y = 0 plane through the port">
+    <figcaption><b>|B| on the <code>y = 0</code> plane</b>, which cuts the tube twice &mdash; at the
+    port (<code>&theta; = 0</code>, right) and at <code>&theta; = &pi;</code> (left). Range pinned:
+    see the note in &sect;4.3.</figcaption></figure>
+</div>
+
+<p>Each conductor carries its own circulating field with a minimum on its axis, and the loop's hole
+between them is brighter than the outside &mdash; the two contributions add in there and oppose
+outside. This is the plane the cut is made on.</p>
+
+<h3>4.3 E in the xy plane, and a warning about colour ranges</h3>
+
+<div class="figs">
+  <figure><img src="fig/e_xy_ring.png" alt="E magnitude on the xy plane, zoomed to the ring">
+    <figcaption><b>|E|, zoomed</b>, range pinned to 3.0e&#8209;02. The conductor is the uniform green
+    annulus; the air around it is <em>higher</em>.</figcaption></figure>
+  <figure><img src="fig/e_xy_domain.png" alt="E magnitude over the whole domain">
+    <figcaption><b>The whole domain</b>, log scale.</figcaption></figure>
+</div>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>median <code>|E|</code></th></tr></thead>
+<tbody>
+<tr><td>inside the conductor</td><td>8.584e&#8209;03 V/m &nbsp; (<code>J/&sigma;</code> = 8.621e&#8209;03, <span class="ok">0.4 %</span>)</td></tr>
+<tr><td>air within 3&nbsp;mm of the tube</td><td><b>2.037e&#8209;02 V/m</b></td></tr>
+<tr><td>air beyond <code>&rho;</code> = 25&nbsp;mm</td><td>3.719e&#8209;04 V/m</td></tr>
+<tr><td>at the cut itself</td><td>1.72 V/m &nbsp; &mdash; 200x the conductor</td></tr>
+</tbody></table></div>
+
+<div class="note">
+<p><strong>The air's E is LARGER than the conductor's, and that surprised me.</strong> It is not
+<code>&minus;j&omega;A</code>, which is only 2.6e&#8209;04&nbsp;V/m here. It is the
+<b>electrostatic</b> field of the ring's own varying surface potential: the loop carries 0.354&nbsp;mV
+from one side of the cut to the other, and that voltage appears across the surrounding air. The
+figure shows it strongest near the cut, which is where the gradient is.</p>
+<p><strong>Two ranges are pinned, and both had to be.</strong> <code>|E|</code> spikes to
+1.72&nbsp;V/m <em>at the cut</em>, because &Phi; jumps across a zero-thickness interface &mdash; on an
+auto range that one spike takes the whole colour map and everything else reads as flat blue, which
+is how this figure first came out. The port plane in &sect;4.2 has the opposite problem: the slice
+spans the whole 30&nbsp;mm domain while the view is zoomed to 12&nbsp;mm, so an auto range is set by
+a far-field minimum three decades below anything visible and the picture lands uniformly red.</p>
+</div>
+
+<h2>5. Results</h2>
+
+<h3>5.1 R &mdash; 0.11 %</h3>
+
+<div class="tw"><table><tbody>
+<tr><td>measured</td><td>3.543192e&#8209;04 &Omega;</td></tr>
+<tr><td>exact for <b>this</b> shape</td><td>3.546955e&#8209;04 &Omega;</td></tr>
+<tr><td>error</td><td><span class="ok">&minus;0.106 %</span></td></tr>
+</tbody></table></div>
+
+<p><b>The exact value is not <code>2&pi;R/(&sigma;A)</code>.</b> Current flows azimuthally, so the
+path length is <code>2&pi;&rho;</code> and varies across the section: the conductance is
+<code>&sigma; &int; dA/(2&pi;&rho;)</code>, and the current crowds to the inner radius as &sect;3
+shows. Ignoring that is a <b>0.44&nbsp;%</b> error &mdash; four times the solver's own.
+<code>verify_loop.py</code> takes it straight off the mesh as
+<code>(1/2&pi;) &int; dV/&rho;&sup2;</code>, assuming nothing about the shape.</p>
+
+<p>The 2.5&nbsp;% gap to the reference tool decomposes exactly: <b>+1.61&nbsp;%</b> because our
+cross-section is a 20&#8209;gon, 1.64&nbsp;% less area than a circle, and 0.91&nbsp;% between the
+reference and the exact round-torus value.</p>
+
+<h3>5.2 L &mdash; still 2 % out, and it is ours</h3>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>L</th><th>vs the closed form</th></tr></thead>
+<tbody>
+<tr><td>measured</td><td><b>19.377 nH</b></td><td><span class="warn">&minus;2.15 %</span></td></tr>
+<tr><td>reference tool</td><td>19.748 nH</td><td>&minus;0.27 %</td></tr>
+<tr><td>closed form, free space</td><td>19.8027 nH</td><td>&mdash;</td></tr>
+</tbody></table></div>
+
+<p>The reference agrees with theory; we do not. <b>It was &minus;4.02&nbsp;%, and half of that turned
+out to be a mesh bug</b> &mdash; see &sect;6.2. The remaining 2.15&nbsp;% is open.</p>
+
+<p>The domain is ruled out: doubling it to 60&nbsp;mm moved <code>L</code> by +0.2&nbsp;%, and a
+dipole estimate puts the field energy beyond 30&nbsp;mm at about 0.09&nbsp;nH, 0.4&nbsp;%. The
+remaining suspect is resolution of the <b>air beyond one wire radius</b>: a wire loop's magnetic
+energy is logarithmically distributed, roughly half of it between 1 and 10 wire radii from the
+surface, and that shell is meshed at 0.25&nbsp;mm growing to 4&nbsp;mm. Refining it needs about
+700k tets in the shell alone, which does not fit in 32&nbsp;GB. <b>Recorded rather than
+resolved</b>, and <code>expected.txt</code> pins <code>L</code> as a regression guard rather than a
+validation.</p>
+
+<div class="note">
+<p><strong>Extracting L here is ill-conditioned.</strong> <code>&omega;L/R = 0.017</code>: the
+reactance is 1.7&nbsp;% of the resistance, so <code>Im(Z)</code> is a small difference on a large
+product. Dividing by the <em>measured</em> current instead of the imposed 1&nbsp;A lets that
+current's own 0.02&nbsp;% imaginary part into the answer and moves <code>L</code> by 1.3&nbsp;%
+&mdash; fifty times its own size. The verifier divides by the imposed current.</p>
+</div>
+
+<h2>6. The mesh, and two bugs found building it</h2>
+
+<div class="figs">
+  <figure><img src="fig/mesh_domain.png" alt="Cross-section mesh of the whole domain">
+    <figcaption><b>Whole domain</b>, graded from 0.25&nbsp;mm at the ring to 4&nbsp;mm at the
+    wall.</figcaption></figure>
+  <figure><img src="fig/mesh_ring.png" alt="Cross-section mesh of the ring">
+    <figcaption><b>The ring</b>, about 5 elements across the 1.6&nbsp;mm tube.</figcaption></figure>
+</div>
+
+<h3>6.1 An OCC Torus will not mesh with a cut in it</h3>
+
+<p>The obvious construction &mdash; an <code>OpenCASCADE Torus</code>, cut, fragmented against the
+air &mdash; fails with <i>&ldquo;Invalid boundary mesh (overlapping facets)&rdquo;</i>: a curved torus
+face overlapping itself. That was tried <b>eight ways</b>: partial tori welded with
+<code>Coherence</code>, cuts by oversized discs, by exact-size discs, by thin boxes, cuts moved off
+the parametric seam, the seam rotated away from the cuts, the air fragmented before and after the
+cut. Every one failed identically.</p>
+
+<p><b>Revolving a polygon has none of that trouble</b>, and it is what this project does for every
+other conductor anyway, because planar lateral faces make <code>&part;&Phi;/&part;n = 0</code> hold
+exactly.</p>
+
+<p>Note also that a ring needs <b>two</b> cuts. Cut in one place it is still one connected volume,
+because the current can go round the other way.</p>
+
+<h3>6.2 One +&pi; sweep and one &minus;&pi; sweep is wrong in a way that is easy to miss</h3>
+
+<p>The ring was first revolved as one <code>+Pi</code> extrude and one <code>-Pi</code> extrude. It
+meshes, it passes every check, and <b>both halves come out with the right volume</b> &mdash; 40.386
+against 40.307&nbsp;mm&sup3;, equal to 0.2&nbsp;%. But:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>tets</th><th>mean h</th><th>volume</th></tr></thead>
+<tbody>
+<tr><td><code>+Pi</code> half</td><td>11,621</td><td>0.302 mm</td><td>40.386 mm&sup3;</td></tr>
+<tr><td><code>-Pi</code> half</td><td><b>4,557</b></td><td>0.373 mm</td><td>40.307 mm&sup3;</td></tr>
+</tbody></table></div>
+
+<p><b>Half the conductor was quietly meshed two and a half times coarser.</b> It showed up as a
+ragged lower half in the field plots, and was measured before it was believed. Chaining two
+<em>positive</em> sweeps &mdash; the second starting from the first's end face &mdash; gives a count
+ratio of 0.988.</p>
+
+<div class="note">
+<p><strong>And it moved the physics.</strong> <code>L</code> went 19.038 &rarr; 19.377&nbsp;nH,
+closing 1.87 of the 4.02 points of the gap to theory. It also <b>retracts</b> an earlier conclusion
+recorded in this case: that refining the tube moved <code>L</code> the wrong way, so resolution was
+not the cause. That test refined <code>lc_ring</code> globally while half the ring stayed coarse, so
+it was measuring the wrong thing. Resolution <em>is</em> part of it.</p>
+</div>
+
+<h2>7. What is asserted automatically</h2>
+
+<p><code>check.bat</code> runs this case through <code>verify_loop.py</code>, not
+<code>../verify.py</code>: the rod verifier finds the drive by differencing &Phi; between two end
+caps, and a ring has none. A case-local <code>verify_*.py</code> wins where one exists.</p>
+
+<div class="tw"><table><tbody>
+<tr><td><code>|I|</code> through the cut</td><td>0.9999784 vs 1.0, tol 1e&#8209;3</td></tr>
+<tr><td><code>|I|</code> at &theta; = &pi;/2</td><td>1.000183 vs 1.0, tol 1e&#8209;3</td></tr>
+<tr><td><code>R</code> vs exact for this shape</td><td>0.99894 vs 1.0, tol 2e&#8209;3</td></tr>
+<tr><td><code>L</code></td><td>19.377 nH, tol 0.05 &mdash; a <b>regression guard</b>, not a validation</td></tr>
+</tbody></table></div>
+
+<h3>Reproducing</h3>
+
+<pre><code>gmsh loop.geo -3 -o loop.msh
+..\run_case.bat loop_50hz.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_plots.py output
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" verify_loop.py
+sh build_doc.sh</code></pre>
+
+<p><code>loop_big.geo</code> is the 60&nbsp;mm domain used for the boundary test in &sect;5.2; it is
+kept because a negative result is worth being able to reproduce. <b>Run
+<code>build_doc.sh</code> after regenerating figures</b>, or this document keeps showing the
+previous run's pictures &mdash; they are baked in.</p>
+
+</div>
