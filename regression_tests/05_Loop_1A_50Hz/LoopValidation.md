@@ -208,15 +208,17 @@ The `B` figure is the control. A magnetic field does not care that Φ jumps, so 
 look alike there, and the two pictures side by side separate what the port does to `E` from what the
 geometry does to everything.
 
-![E at the port cross-section](fig/e_port_zoom.png)
+![E at the port cross-section, on the cut and one tube radius off it](fig/e_port_pair.png)
 
-**At the cut.** The 20-gon conductor is uniform blue at `J/σ`; the air immediately around it reaches
-**1–2 V/m**.
+**The measurement is the difference between these two.** Same view, same tube, same log scale — the
+left panel lies *on* the cut, the right one tube radius off it. The red ring on the left is the
+port.
 
-![E one tube radius off the cut](fig/e_port_zoom_off.png)
-
-**One tube radius off the cut**, same colour scale. The surrounding air peaks around 0.2 V/m instead
-— the spike is **local to the port**.
+Each panel alone is an unremarkable blob, which is why they are drawn in one frame rather than
+merely adjacent: the eye has to compare them, and a shared colour bar is the only way that
+comparison means anything. The blue disc is the conductor, uniform at `J/σ` because `a/δ = 0.086`
+leaves no skin effect to resolve. `make_port_pair.py` composes it, sampling ParaView's own colour
+ramp out of the render rather than guessing a matplotlib equivalent.
 
 > **This slice lies exactly on a discontinuity, which is the point.** Φ jumps across the cut, so
 > `E = −jωA − ∇Φ` does too: the whole 0.354 mV appears across a zero-thickness interface, and the

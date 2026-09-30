@@ -13,6 +13,9 @@
 # correct inside the repository, where the figures are tracked beside it. This
 # script produces the portable pair.
 #
+# fig/e_port_pair.png is COMPOSED from two of make_plots.py's outputs by
+# make_port_pair.py, so regenerating figures means running BOTH:
+#     pvbatch make_plots.py output  &&  pvbatch make_port_pair.py
 # Re-run after regenerating figures with make_plots.py or
 # make_convergence_plot.py, or the documents keep showing the previous run's
 # pictures: they are baked in.

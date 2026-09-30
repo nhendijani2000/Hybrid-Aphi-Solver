@@ -320,14 +320,19 @@ them it differs by <b>23x</b>. That difference <em>is</em> the port.</p>
 tube crossings look alike there, and the two pictures side by side separate what the port does to
 <code>E</code> from what the geometry does to everything.</p>
 
-<div class="figs">
-  <figure><img src="fig/e_port_zoom.png" alt="E at the port cross-section">
-    <figcaption><b>At the cut.</b> The 20&#8209;gon conductor is uniform blue at
-    <code>J/&sigma;</code>; the air immediately around it reaches <b>1&ndash;2 V/m</b>.</figcaption></figure>
-  <figure><img src="fig/e_port_zoom_off.png" alt="E one tube radius off the cut">
-    <figcaption><b>One tube radius off the cut</b>, same colour scale. The surrounding air peaks
-    around 0.2 V/m instead &mdash; the spike is <b>local to the port</b>.</figcaption></figure>
+<div class="figs one">
+  <figure><img src="fig/e_port_pair.png" alt="E at the port cross-section, on the cut and one tube radius off it">
+    <figcaption><b>The measurement is the difference between these two.</b> Same view, same tube,
+    same log scale &mdash; the left panel lies <em>on</em> the cut, the right one tube radius off it.
+    The red ring on the left is the port.</figcaption></figure>
 </div>
+
+<p>Each panel alone is an unremarkable blob, which is why they are drawn in one frame rather than
+merely adjacent: the eye has to compare them, and a shared colour bar is the only way that
+comparison means anything. The blue disc is the conductor, uniform at <code>J/&sigma;</code> because
+<code>a/&delta; = 0.086</code> leaves no skin effect to resolve. <code>make_port_pair.py</code>
+composes it, sampling ParaView's own colour ramp out of the render rather than guessing a matplotlib
+equivalent.</p>
 
 <div class="note">
 <p><strong>This slice lies exactly on a discontinuity, which is the point.</strong> &Phi; jumps
