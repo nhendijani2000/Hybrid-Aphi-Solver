@@ -1,0 +1,79 @@
+# Known-good physics for 04_Cylinder_SkinDepth, asserted by ../verify.py.
+#
+# WHAT THIS CASE ADDS THAT NOTHING ELSE IN THE SUITE HAS. Cases 02 and 03 sit at
+# a/delta = 0.16, where the current profile is flat to five digits. Case 01 sits
+# at a/delta = 1.07, where the skin effect is real but only 2.6 % of R -- so
+# matching Kelvin to 0.04 % there validates the EFFECT ITSELF to only about
+# 1.4 %. This case is a/delta = 3.00, where the skin effect is 77 % of R. The
+# same fractional agreement is a far stronger statement, and |J| falling 3.7x
+# from surface to axis is something a wrong answer cannot fake.
+#
+#   key                value        tol      what sets the tolerance
+# ---------------------------------------------------------------------------
+# THE MUMPS INPUT IS NAMED ON PURPOSE, unlike cases 01-03 which deliberately run
+# the internal solver so check.bat exercises the default. 418318 unknowns is not
+# something the internal scalar LDL^T factors in a sensible time; MUMPS does it
+# in 267 s. run_case.bat sees `backend = mumps` and switches to the
+# build-mumps-omp binary with the oneAPI environment loaded.
+#
+# cylinder_393hz.aphi is the same case on the internal solver, kept for the
+# backend cross-check, and is NOT what check.bat runs.
+input                  cylinder_393hz_mumps.aphi
+
+# geometry. ngon = 76, NOT 36: resolving delta = 3.33 mm needs h well under 1 mm
+# in the conductor, and the facet 2a sin(pi/N) has to stay comparable to the
+# element size or the mesh fills with slivers. A_poly = 313.80 mm2 and
+# R_dc = 2.197743e-06 ohm, both different from case 01's 36-gon.
+a_mm                   10.0
+length_mm              40.0
+ngon                   76
+sigma                  5.8e7
+drive_voltage          1.0          1.0e-9
+frequency              393.0
+
+# R AGAINST KELVIN. `R_rel_error_max` is absent for the same reason as in case
+# 01 but far more so: R is 77 % above R_dc here, so comparing against R_dc would
+# fail by the entire size of the effect.
+#
+#     u = sqrt(2) a/delta = 4.2426
+#     R_ac/R_dc = (u/2)(ber bei' - bei ber')/(ber'^2 + bei'^2) = 1.76802
+#     measured                                                  1.77191
+#     error                                                       +0.220 %
+#
+# TWO THINGS SET THIS TOLERANCE, and only one of them is the mesh.
+#
+#  1. Discretisation. delta/h is about 3.1 in the conductor interior, not the
+#     4 that was aimed for -- gmsh's characteristic length is not the
+#     equivalent-tet edge, and the realised h runs about 1.3x the target. Most
+#     of the +0.220 % is this.
+#  2. KELVIN'S FORMULA IS FOR A CIRCULAR CONDUCTOR and this is a 76-gon. At
+#     a/delta = 3 the current lives in a thin surface layer, so the perimeter
+#     matters rather than the area: the 76-gon's 62.8140 mm against the circle's
+#     62.8319 mm is -0.028 %, which raises R_ac by about +0.028 %. That part
+#     will NOT go away with refinement, and a tolerance tight enough to exclude
+#     it would be asserting something false.
+R_over_Rdc             1.76802      0.006
+
+# L has no closed form for a finite box, so it is pinned to catch CHANGE.
+L_nH                   20.2097      0.05
+
+# PHI IS GAUGE DOMINATED, even more than in case 01: omega*L/R = 12.8 here
+# against 2.89 there. Measured Phi/V deviates from z/L by 0.51. Both Phi checks
+# are deliberately absent -- see 01_OneCylinder/expected.txt for the 1 Hz vs
+# 50 Hz experiment that established this is the gauge and not the mesh.
+#
+# (phi_vs_zL_worst_max and phi_pointwise_rel_max intentionally omitted.)
+
+# THE J PROFILE. As always the reference is Bessel averaged over the radii the
+# mesh actually samples, not the r=0 value, and it is specific to THIS mesh:
+#
+#     measured <J>core/<J>surf   0.281160
+#     Bessel at the same radii   0.277956    -- +1.152 %
+#
+# The full radial profile is checked in the report figure, not here: 38294 cells
+# across 11 radial bands, worst band error 1.27 %, monotonic from +1.27 % at the
+# axis to 0.00 % at the surface. That shape is the signature of an h-limited
+# solution rather than a wrong one -- the error is largest where delta/h is
+# worst and vanishes where the mesh is finest.
+J_ratio_exact          0.277956
+J_ratio_tol            5.0e-3

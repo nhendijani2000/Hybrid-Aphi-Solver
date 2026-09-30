@@ -67,7 +67,44 @@ if not errorlevel 1 (
 )
 :built
 
+rem --- pick the binary: MUMPS build if the case asks for it -----------------
+rem `backend = mumps` needs a build configured with -DAPHI_WITH_MUMPS=ON, which
+rem the default build is NOT -- that is deliberate, so the ordinary workflow
+rem stays free of the oneAPI dependency. A case that asks for MUMPS gets the
+rem build-mumps-omp binary instead, with the Intel environment loaded, because
+rem that executable links the Fortran runtime (libifcoremd.dll) and will not
+rem start without it.
+rem
+rem 04_Cylinder_SkinDepth is why this exists: 418318 unknowns is not something
+rem the internal scalar LDL^T can factor in a sensible time, so the case would
+rem otherwise be impossible to put in check.bat at all.
 set "SOLVER=%BUILD%\solve_mesh.exe"
+set "WANTS_MUMPS="
+findstr /r /i /c:"^ *backend *= *mumps" "%CASE%" >nul 2>&1 && set "WANTS_MUMPS=1"
+if defined WANTS_MUMPS (
+  set "MBUILD=%REPO%\build-mumps-omp"
+  if not exist "!MBUILD!\solve_mesh.exe" set "MBUILD=%REPO%\build-mumps"
+  if not exist "!MBUILD!\solve_mesh.exe" (
+    echo error: %CASE% asks for 'backend = mumps' but neither
+    echo        %REPO%\build-mumps-omp nor build-mumps has a solve_mesh.exe.
+    echo        See docs/MUMPS_SETUP.md to build one, or remove the backend line
+    echo        to use the internal solver.
+    exit /b 1
+  )
+  set "SOLVER=!MBUILD!\solve_mesh.exe"
+  echo === backend    mumps ^(!MBUILD!^)
+  rem setvars.bat is broken on this oneAPI install -- it reports "'vars.bat' is
+  rem not recognized" and leaves MKLROOT empty -- so call the component scripts
+  rem directly. See docs/MUMPS_SETUP.md.
+  set "ONEAPI=%ProgramFiles(x86)%\Intel\oneAPI"
+  if exist "!ONEAPI!\compiler\latest\env\vars.bat" (
+    call "!ONEAPI!\compiler\latest\env\vars.bat" >nul 2>&1
+    call "!ONEAPI!\mkl\latest\env\vars.bat" >nul 2>&1
+  ) else (
+    echo warning: oneAPI environment not found at !ONEAPI!
+    echo          the MUMPS binary needs libifcoremd.dll and may fail to start.
+  )
+)
 if not exist "%SOLVER%" (
   echo error: solver not found at %SOLVER%
   echo        run build.bat in %REPO% first.

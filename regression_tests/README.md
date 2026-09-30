@@ -37,11 +37,12 @@ solver; seconds in `verify-only`.
 
 **Run all three, not one.** Each covers something the others cannot.
 
-| case | drive | `a/delta` | what only this case can catch |
-|---|---|---|---|
-| `01_OneCylinder` | 1 V | **1.07** | the **skin effect against theory** — `R_ac/R_dc` vs Kelvin |
-| `02_Ansys_Cylinder_50Hz` | 1 V | 0.16 | `R` against the exact DC value; `Phi` as a clean `z/L` gradient |
-| `03_Cylinder_1A_50Hz` | **1 A** | 0.16 | port current self-consistency; the same mesh as 02 |
+| case | drive | `a/delta` | skin effect in `R` | what only this case can catch |
+|---|---|---|---|---|
+| `01_OneCylinder` | 1 V | 1.07 | 2.6 % | a mild skin effect against Kelvin; the **gauge study** (1 Hz vs 50 Hz) |
+| `02_Ansys_Cylinder_50Hz` | 1 V | 0.16 | ~0 | `R` against the exact DC value; `Phi` as a clean `z/L` gradient |
+| `03_Cylinder_1A_50Hz` | **1 A** | 0.16 | ~0 | port current self-consistency; the same mesh as 02 |
+| `04_Cylinder_SkinDepth` | 1 V | **3.00** | **77 %** | the skin effect where it **dominates** — `\|J\|` falls 3.7x to the axis |
 
 02 and 03 are **duals** — 02 drives 1 V and reads the current out, 03 drives
 1 A on the same mesh and reads the voltage out — and they must report the same
@@ -49,11 +50,16 @@ solver; seconds in `verify-only`.
 to how the thing is driven. **A change that breaks that duality shows up as the
 two disagreeing, which neither case alone can see.**
 
-01 sits in the other regime entirely, and that is why it is worth the runtime:
-at `a/delta = 1.07` the current genuinely crowds outward, so it is the only
-case where the skin effect is large enough to check against an analytic value.
+01 and 04 sit in the other regime, and that is why they are worth the runtime:
 02 and 03 are at `a/delta = 0.16`, where the profile is flat to five digits and
 a bug in the skin-effect physics would be invisible.
+
+**01 and 04 are not redundant with each other.** At `a/delta = 1.07` the skin
+effect is only 2.6 % of `R`, so matching Kelvin to 0.038 % validates *the effect
+itself* to about 1.4 %. At `a/delta = 3.00` it is **77 %** of `R`, so matching
+to 0.22 % validates the effect to 0.29 %. 04 is the stronger statement; 01 is
+cheap, carries the gauge study, and covers the weak-effect end where a
+formulation could get the limit wrong.
 
 **A case may omit a check, and the omission is a claim.** `verify.py` skips any
 check whose key is absent from `expected.txt` and prints `SKIPPED` with the
@@ -470,3 +476,125 @@ Judge this case by the backward error.
 
 The mesh is **referenced, not copied**: `file = ../02_Ansys_Cylinder_50Hz/cylinder.msh`.
 "Exactly the same mesh" is the point of the comparison, and a copy can drift.
+
+---
+
+## 04_Cylinder_SkinDepth
+
+The `01_OneCylinder` rod -- copper, `a = 10 mm`, `L = 40 mm`, box 200 mm -- run
+at **393 Hz** instead of 50, where `delta = 3.334 mm` and `a/delta = 3.000`.
+
+![current density over the cross-section](04_Cylinder_SkinDepth/fig/j_cross_section.png)
+
+That is the point of the case in one picture: the current is confined to a
+surface layer about one skin depth thick, and the core carries almost none of
+it. Quantitatively, `|J|` falls **3.7x** from surface to axis.
+
+### Why a second high-`a/delta` case at all
+
+| | 01 @ 50 Hz | **04 @ 393 Hz** |
+|---|---|---|
+| `a/delta` | 1.070 | **3.000** |
+| `\|J(0)/J(a)\|` exact | 0.9265 | **0.2522** |
+| `R_ac/R_dc` exact | 1.0267 | **1.7680** |
+| the skin effect is | 2.6 % of `R` | **77 % of `R`** |
+| measured `R_ac/R_dc` | 1.02633 | **1.77191** |
+| error vs Kelvin | −0.038 % | **+0.220 %** |
+| so the EFFECT is validated to | ~1.4 % | **~0.29 %** |
+
+Matching Kelvin to 0.038 % sounds better than 0.220 % until you notice what
+fraction of the answer the skin effect actually is. At `a/delta = 1.07` almost
+all of `R` is just `R_dc`, which any solver that integrates `sigma` correctly
+will get right; the thing under test is a 2.6 % correction. At `a/delta = 3` the
+correction is most of the answer.
+
+### The radial profile
+
+![radial profile against Bessel](04_Cylinder_SkinDepth/fig/j_radial_profile.png)
+
+38294 cells, one point each, against the exact `|J0(kr)/J0(ka)|` evaluated at the
+radii actually sampled. **Worst band error 1.27 %**, and the error is monotonic
+-- +1.27 % at the axis falling to 0.00 % at the surface. That shape is the
+signature of an `h`-limited solution rather than a wrong one: the error is
+largest exactly where `delta/h` is worst and vanishes where the mesh is finest.
+
+![where each run sits on the Kelvin curve](04_Cylinder_SkinDepth/fig/kelvin_curve.png)
+
+### How the mesh was sized, and the measurement it came from
+
+The sizing was not guessed. `01_OneCylinder`'s mesh was run at three frequencies
+first, and the error was read off against Bessel:
+
+| f | `delta` | `a/delta` | `delta/h` | worst band err | `R` vs Kelvin |
+|---|---|---|---|---|---|
+| 50 Hz | 9.346 mm | 1.070 | 5.66 | 0.26 % | −0.038 % |
+| 175 Hz | 4.996 mm | 2.002 | 3.03 | 2.10 % | −0.050 % |
+| 300 Hz | 3.815 mm | 2.621 | 2.31 | 4.73 % | +0.386 % |
+
+So the error is set by `delta/h`, and `delta/h >= 3` is what holds it near 1 %.
+
+**Where the refinement had to go was the non-obvious part.** At 300 Hz the
+per-band error reads 0.1 % in the annulus (`r > 0.8a`) and 4.7 % in the core
+(`r < 0.3a`), which looks like "refine the core". That reading is wrong: `|J|` in
+the core is *flat* there -- 0.3934, 0.3929, 0.3949 across `r/a` 0 to 0.3 -- so
+the core is not failing to resolve local variation. It is inheriting accumulated
+error from the region where the field actually decays, and `delta/h` was
+**1.45 to 2.31 across the whole conductor**. The annulus's own relative error
+only looks small because `|J|` is large there.
+
+At `a/delta = 3` the decay region `r > a − 2*delta` is 89 % of the cross-section,
+so there is nothing to gain by grading inside the conductor: `lc_core = lc_skin`
+and the wire is meshed uniformly.
+
+**`N` had to rise with it.** The facet is `2a sin(pi/N)`, and the volume element
+size has to stay comparable to it or the mesh fills with slivers. At `N = 36` the
+facet is 1.743 mm, so `h = 0.833 mm` would be less than half of it. `N = 76`
+gives 0.827 mm, matched. This is the same rule that killed the `N = 96`
+experiment in case 02 from the other direction -- there the facet was 0.098 mm
+and the volume size 0.25 mm. The ratio is what matters, in either direction.
+
+One thing that did **not** come out as designed: `lc_core = 0.833 mm` was meant
+to give `delta/h = 4`, and the realised `delta/h` is **3.0–3.1**. gmsh's
+characteristic length is not the equivalent-tet edge -- the realised `h` runs
+about 1.3x the target, which case 01 also showed (target 2.0 mm, measured
+2.60 mm). Reaching `delta/h = 4` would need `N = 96` and roughly twice the
+elements. The 1.27 % that remains is mostly that.
+
+### Cost, and why this case runs MUMPS by default
+
+| | |
+|---|---|
+| nodes | 31922 |
+| tets | 179477, of which 98204 in the wire |
+| unknowns | **418318** |
+| mesh | 24 s |
+| factorization, MUMPS | **267 s** |
+| one frequency end to end | 293 s |
+
+**This is the first case that cannot practically run on the internal solver**, so
+its `expected.txt` names `cylinder_393hz_mumps.aphi` rather than the plain input
+-- the opposite of cases 01-03, which name the plain one on purpose so
+`check.bat` exercises the default backend. `run_case.bat` reads `backend = mumps`
+out of the input file and switches to the `build-mumps-omp` binary with the
+oneAPI environment loaded; see `docs/MUMPS_SETUP.md`.
+
+Note that 267 s is well above what linear fill extrapolation predicted (~60 s)
+from the 55652- and 240990-unknown data points. Fill is not linear this far out.
+
+### A caveat that refinement will not remove
+
+**Kelvin's formula is for a circular conductor and this is a 76-gon.** At
+`a/delta = 3` the current lives in a thin surface layer, so what matters is the
+perimeter rather than the area: 62.8140 mm against the circle's 62.8319 mm, or
+−0.028 %, which raises `R_ac` by about +0.028 %. That is a real part of the
++0.220 % and it will not go away with a finer mesh -- only with a larger `N`,
+which also changes `R_dc`. A tolerance tight enough to exclude it would be
+asserting something false.
+
+### Regenerating
+
+```
+gmsh cylinder_skin.geo -3 -o cylinder_skin.msh
+..\run_case.bat cylinder_393hz_mumps.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_plots.py output
+```

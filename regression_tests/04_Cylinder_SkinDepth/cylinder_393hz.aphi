@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# 04_Cylinder_SkinDepth -- the 01_OneCylinder rod where the SKIN EFFECT DOMINATES
+#
+#     ../run_case.bat cylinder_393hz.aphi        (from this folder)
+#
+# WHY THIS CASE EXISTS
+#
+# 01_OneCylinder runs a = 10 mm at 50 Hz: a/delta = 1.07, R_ac/R_dc = 1.027. The
+# skin effect is real there but it is only 2.6 % of the answer, so matching the
+# exact Kelvin value to 0.04 % validates the EFFECT ITSELF to only about 1.4 %.
+#
+# This is the same rod at 393 Hz, where a/delta = 3.00:
+#
+#                          01 @ 50 Hz     04 @ 393 Hz
+#     a/delta                 1.070          3.000
+#     |J(0)/J(a)| exact       0.9265         0.2522     <- 4x surface to axis
+#     R_ac/R_dc exact         1.0267         1.7680     <- 77 % of R, not 2.6 %
+#
+# The skin effect is now most of R rather than a correction to it, so the same
+# fractional agreement is a far stronger statement. And |J| falling 4x from
+# surface to axis is visible in a plot rather than inferred from a table.
+#
+# THE MESH IS ITS OWN, not 01's, and it had to be: resolving delta = 3.33 mm
+# needs h well under 1 mm in the conductor, which needs N = 76 rather than 36
+# because the polygon facet 2a sin(pi/N) has to stay comparable to the element
+# size. cylinder_skin.geo carries the full sizing argument and the measurements
+# it was derived from.
+#
+# GEOMETRY: a = 10 mm, L = 40 mm, box 200 mm, a 76-gon, 31922 nodes.
+# A_poly = 0.5 N a^2 sin(2 pi/N) = 313.80 mm2   (36-gon was 311.87)
+# R_dc   = L/(sigma A_poly) = 2.1980e-06 ohm
+# delta  = 3.3336 mm at 393 Hz, so a/delta = 3.000
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = cylinder_skin.msh
+length_unit = mm
+
+[output]
+directory   = output
+
+[analysis]
+type        = frequency
+frequencies = 393                          # Hz -- a/delta = 3.000
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire
+sigma       = 5.8e7                        # copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+[port P1]
+type        = boundary_voltage
+surface     = wire_top
+voltage     = 1.0                          # V
+
+[port P2]
+type        = boundary_voltage
+surface     = wire_bottom
+voltage     = 0.0                          # V, the reference
+
+[solver]
+conditioning = row_scaled
