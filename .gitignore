@@ -110,3 +110,8 @@ examples/_tmpout/
 
 # The MUMPS-enabled build tree, configured separately from build/
 build-mumps*/
+
+# The N=96 convergence-study mesh: 14 MB, regenerated from its .geo in 50 s, and
+# used once to establish the h^2 rate rather than by any regression case.
+# cylinder_skin.msh (N=76) IS tracked, because check.bat runs it.
+regression_tests/04_Cylinder_SkinDepth/cylinder_skin_n96.msh

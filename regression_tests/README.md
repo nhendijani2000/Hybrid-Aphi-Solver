@@ -594,8 +594,62 @@ One thing that did **not** come out as designed: `lc_core = 0.833 mm` was meant
 to give `delta/h = 4`, and the realised `delta/h` is **3.0–3.1**. gmsh's
 characteristic length is not the equivalent-tet edge -- the realised `h` runs
 about 1.3x the target, which case 01 also showed (target 2.0 mm, measured
-2.60 mm). Reaching `delta/h = 4` would need `N = 96` and roughly twice the
-elements. The 1.27 % that remains is mostly that.
+2.60 mm). The 1.27 % that remains is mostly that, and the next section proves
+it by going and getting `delta/h = 4`.
+
+### Mesh convergence: N=76 against N=96
+
+`cylinder_skin_n96.geo` is the same case at `N = 96`, `lc = 0.640 mm`, which
+does reach `delta/h = 4.0` in the conductor. It is **not** a regression case --
+739304 unknowns, 17.1 GB of factors and 743 s to factor is too heavy to run on
+every change -- it exists to establish the convergence RATE.
+
+![mesh convergence](04_Cylinder_SkinDepth/fig/convergence.png)
+
+| | N=76 | N=96 | ratio | implied order |
+|---|---|---|---|---|
+| `h` in the conductor | 1.08 mm | 0.84 mm | 0.778 | |
+| `delta/h` | 3.1 | 4.0 | | |
+| worst band \|J\| | 1.27 % | **0.74 %** | 0.58 | **2.17** |
+| worst band phase | 0.385° | **0.230°** | 0.60 | **2.06** |
+| `R` vs Kelvin | +0.220 % | **+0.145 %** | 0.66 | 1.65 |
+| `L` | 20.2097 nH | 20.2041 nH | | converged to 0.03 % |
+| unknowns | 418318 | 739304 | 1.77 | |
+| factor nnz | 497.8 M | 1068.6 M | 2.15 | |
+| factorization | 267 s | 743 s | 2.78 | |
+
+**Why the rate matters more than either error value.** A single number says "we
+are 0.74 % off" and cannot separate discretisation error from a modelling
+mistake sitting at a floor. Two meshes give the rate: `h` falls by 0.778 and the
+error falls by 0.605 = `0.778^2`, at **every radius**, in both magnitude and
+phase. That is the dashed line in the figure, and the fine mesh lands on it. So
+the residual is genuine discretisation converging at second order, and
+refinement would keep paying. An error that had stalled between the two meshes
+would have meant the opposite, and would have pointed at the geometry or the
+formulation rather than at `h`.
+
+`R` converges more slowly (order 1.65) because part of its error does not scale
+with `h` at all: the polygon floor, which fell 0.028 % to 0.018 % only because
+`N` changed. Net of it, 0.192 % to 0.127 %.
+
+**This is close to the last useful uniform refinement on a 32 GB machine.** Fill
+scales as `n^1.47` and factorization time as `n^2.39` -- measured on this
+geometry, from these two runs plus case 01's. Halving `h` again needs `N ~ 136`
+and about 1.8 M unknowns, which extrapolates to roughly 45 GB of factors. The
+N=96 run already paged: 17.1 GB of factors with 0.5 GB of RAM free at the peak,
+and it only survived because Windows could push other processes out. Going
+materially below 0.5 % needs a different lever -- second-order elements for `A`,
+or an out-of-core solve -- not a smaller `h`.
+
+To reproduce it:
+
+```
+gmsh cylinder_skin_n96.geo -3 -o cylinder_skin_n96.msh
+..\run_case.bat cylinder_393hz_n96_mumps.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_convergence_plot.py
+```
+
+The `.msh` is gitignored: 14 MB, regenerated in 50 s, and used once.
 
 ### Cost, and why this case runs MUMPS by default
 
@@ -604,9 +658,17 @@ elements. The 1.27 % that remains is mostly that.
 | nodes | 31922 |
 | tets | 179477, of which 98204 in the wire |
 | unknowns | **418318** |
+| factor nnz | 497.8 M, about 8.0 GB |
 | mesh | 24 s |
 | factorization, MUMPS | **267 s** |
 | one frequency end to end | 293 s |
+
+Measured scaling on this geometry, from case 01's mesh and both meshes here:
+**fill ~ `n^1.47`, factorization time ~ `n^2.39`.** An earlier note in this file
+claimed fill was near-linear; that was derived by comparing case 01 against
+case 02, which are different geometries, and it is wrong. Sizing anything from
+it will underestimate badly -- it is what made this case's 267 s look like 60 s
+beforehand.
 
 **This is the first case that cannot practically run on the internal solver**, so
 its `expected.txt` names `cylinder_393hz_mumps.aphi` rather than the plain input
