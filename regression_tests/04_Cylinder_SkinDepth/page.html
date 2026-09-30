@@ -1,0 +1,599 @@
+<title>Skin Depth Validation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#15181d; --ink-2:#4a5260; --ink-3:#6f7888;
+    --bg:#fbfaf8; --card:#ffffff; --rule:#e3e0da;
+    --accent:#8a3324; --accent-soft:#f6ece9;
+    --ok:#2c5f2d; --warn:#8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+      --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+      --accent:#e08b74; --accent-soft:#2a1f1c;
+      --ok:#8fc98f; --warn:#e0b467;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+    --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+    --accent:#e08b74; --accent-soft:#2a1f1c;
+    --ok:#8fc98f; --warn:#e0b467;
+    color-scheme: dark;
+  }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.6; margin:0;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding-inline:16px; padding-block:40px 72px;}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:clamp(1.9rem,5vw,2.6rem);
+     line-height:1.15; margin:0 0 .35em; text-wrap:balance; letter-spacing:-.01em;}
+  .sub{color:var(--ink-2); font-size:1.05rem; margin:0 0 .4em; max-width:62ch;}
+  .meta{color:var(--ink-3); font-size:.82rem; font-family:"IBM Plex Mono",monospace;}
+  h2{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:1.5rem;
+     margin:3rem 0 .2em; padding-top:1.6rem; border-top:1px solid var(--rule); text-wrap:balance;}
+  h3{font-size:1.02rem; font-weight:600; margin:2rem 0 .3em; color:var(--ink);}
+  p{margin:.7em 0; max-width:68ch;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.88em;
+       background:var(--accent-soft); color:var(--accent); padding:.08em .34em; border-radius:3px;}
+  pre{background:var(--card); border:1px solid var(--rule); border-radius:6px;
+      padding:.8rem 1rem; overflow-x:auto; font-family:"IBM Plex Mono",monospace;
+      font-size:.82rem; line-height:1.5; margin:1rem 0;}
+  pre code{background:none; color:var(--ink); padding:0;}
+  .eq{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--ink-3);
+      border-radius:6px; padding:.7rem 1.1rem; margin:1rem 0; overflow-x:auto;
+      font-family:"IBM Plex Mono",monospace; font-size:.88rem; line-height:1.7;}
+  .figs{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); margin:1.2rem 0 .4rem;}
+  .figs.one{grid-template-columns:1fr;}
+  figure{margin:0; background:var(--card); border:1px solid var(--rule); border-radius:8px; overflow:hidden;}
+  figure img{display:block; width:100%; height:auto; background:#fff;}
+  figcaption{font-size:.8rem; color:var(--ink-2); padding:.6rem .8rem; border-top:1px solid var(--rule);}
+  figcaption b{color:var(--ink); font-weight:600;}
+  .tw{overflow-x:auto; margin:1.1rem 0;}
+  table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.45rem .7rem; border-bottom:1px solid var(--rule); white-space:nowrap;}
+  th{font-weight:600; color:var(--ink-2); font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;}
+  td:first-child{white-space:normal;}
+  tbody tr:last-child td{border-bottom:none;}
+  .note{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--accent);
+        border-radius:6px; padding:.9rem 1.1rem; margin:1.3rem 0;}
+  .note p{margin:.35em 0;}
+  .note strong{color:var(--accent);}
+  .ok{color:var(--ok); font-weight:600;}
+  .warn{color:var(--warn); font-weight:600;}
+  ul,ol{max-width:68ch; padding-left:1.15rem;}
+  li{margin:.35em 0;}
+
+  /* Print / PDF. Protect ONLY what is ruined by being split: a figure, a table,
+     an equation block. Prose is allowed to flow -- protecting it is what leaves
+     half-empty pages, because any block too tall for the remaining space jumps
+     whole and abandons the rest. */
+  @media print{
+    :root{ color-scheme: light; }
+    body{ background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+          orphans:3; widows:3; }
+    .wrap{ max-width:none; padding-block:0 .5rem; }
+    h1{ font-size:2rem; }
+    h2{ margin-top:1.2rem; padding-top:.7rem; font-size:1.3rem;
+        break-after:avoid; page-break-after:avoid; }
+    h3{ margin-top:.9rem; break-after:avoid; page-break-after:avoid; }
+    figure, .tw, table, .eq{ break-inside:avoid; page-break-inside:avoid; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    p, li, .note, ul, ol, pre{ break-inside:auto; page-break-inside:auto; }
+    figure img{ max-height:11cm; object-fit:contain; }
+    .figs{ gap:12px; margin:.8rem 0 .3rem; }
+    figcaption{ padding:.4rem .6rem; }
+    a{ color:inherit; text-decoration:none; }
+  }
+</style>
+
+<div class="wrap">
+
+<h1>Skin effect in a copper rod at 393&nbsp;Hz</h1>
+<p class="sub">Hybrid A&#8209;&Phi; finite-element solver, tree&#8209;cotree gauge, validated against the
+<b>exact Bessel solution</b> for current density &mdash; magnitude <em>and</em> phase &mdash; and against
+<b>Kelvin&rsquo;s exact AC resistance</b>.</p>
+<p class="meta">regression_tests/04_Cylinder_SkinDepth &nbsp;·&nbsp; a/&delta; = 3.000 &nbsp;·&nbsp; 418,318 unknowns &nbsp;·&nbsp; backward error 5.5e&#8209;21</p>
+
+<h2>0. What this case establishes</h2>
+
+<p><code>01_OneCylinder</code> runs the same rod at 50&nbsp;Hz, where <code>a/&delta; = 1.07</code> and
+<code>R_ac/R_dc = 1.027</code>. The skin effect is real there but it is only <b>2.6&nbsp;%</b> of the
+answer &mdash; almost all of <code>R</code> is just <code>R_dc</code>, which any solver that integrates
+<code>&sigma;</code> correctly will get right. Matching Kelvin to 0.038&nbsp;% there validates
+<em>the effect itself</em> to only about 1.4&nbsp;%.</p>
+
+<p>This case runs the same rod at <b>393&nbsp;Hz</b>, where the skin effect is <b>77&nbsp;% of
+<code>R</code></b> rather than a correction to it.</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>01 @ 50 Hz</th><th>04 @ 393 Hz</th></tr></thead>
+<tbody>
+<tr><td><code>a/&delta;</code></td><td>1.070</td><td><b>3.000</b></td></tr>
+<tr><td><code>|J(0)/J(a)|</code> exact</td><td>0.9265</td><td><b>0.2522</b> &mdash; 4x surface to axis</td></tr>
+<tr><td>phase rotation, axis to surface</td><td>27.6&deg;</td><td><b>148&deg;</b> &mdash; nearly anti-phase</td></tr>
+<tr><td><code>R_ac/R_dc</code> exact</td><td>1.0267</td><td><b>1.7680</b></td></tr>
+<tr><td>the skin effect is</td><td>2.6 % of <code>R</code></td><td><b>77 % of <code>R</code></b></td></tr>
+<tr><td>measured <code>R_ac/R_dc</code></td><td>1.02633</td><td><b>1.77191</b></td></tr>
+<tr><td>error against Kelvin</td><td>&minus;0.038 %</td><td><b>+0.220 %</b></td></tr>
+<tr><td>so the <em>effect</em> is validated to</td><td>~1.4 %</td><td><b>~0.29 %</b></td></tr>
+</tbody></table></div>
+
+<div class="note">
+<p><strong>Why the larger raw error is the stronger result.</strong> 0.038&nbsp;% looks better than
+0.220&nbsp;% until you ask what fraction of the answer the skin effect actually is. At
+<code>a/&delta; = 1.07</code> the quantity under test is a 2.6&nbsp;% correction to a number the solver
+would get right anyway. At <code>a/&delta; = 3</code> it is most of the answer, and <code>|J|</code>
+falling 4x from surface to axis is something a wrong answer cannot fake.</p>
+</div>
+
+<h2>1. The case</h2>
+
+<div class="tw"><table><tbody>
+<tr><td>Conductor</td><td>copper, <code>&sigma; = 5.8e7 S/m</code>, <code>a = 10 mm</code>, <code>L = 40 mm</code>, a <b>76&#8209;gon</b></td></tr>
+<tr><td>Domain</td><td>200&nbsp;mm box of air, <code>n &times; A = 0</code> on the outer boundary</td></tr>
+<tr><td>Excitation</td><td>1.0&nbsp;V across the end caps, <b>393&nbsp;Hz</b></td></tr>
+<tr><td>Skin depth</td><td><code>&delta; = 3.3336 mm</code>, so <code>a/&delta; = 2.9998</code></td></tr>
+<tr><td>Formulation</td><td>first-order Whitney edge <code>A</code>, second-order P2 nodal <code>&Phi;</code></td></tr>
+<tr><td>Mesh</td><td>31,922 nodes, 179,477 tets, 98,204 of them in the wire; Netgen-optimised</td></tr>
+<tr><td><code>A_poly</code></td><td>313.8015&nbsp;mm&sup2; (the circle would be 314.1593)</td></tr>
+<tr><td><code>R_dc</code></td><td><code>L/(&sigma; A_poly)</code> = 2.197743e&#8209;06&nbsp;&Omega;</td></tr>
+<tr><td>Measured</td><td><code>|I| = 19977.92 A</code>, <code>Z = 3.894203e&#8209;06 + 4.990355e&#8209;05 j &Omega;</code></td></tr>
+</tbody></table></div>
+
+<p><b>Why 393&nbsp;Hz and not more.</b> At <code>a/&delta; = 5</code> (1092&nbsp;Hz) the exact
+<code>|J(0)/J(a)|</code> is 0.054, so the core current is 5&nbsp;% of the surface value and a relative
+error there is being taken against nearly zero &mdash; the reference stops being well conditioned.
+It would also need <code>N = 128</code> and about 1.7&nbsp;M unknowns. <code>a/&delta; = 3</code> is the
+most demanding point that still has a meaningful exact reference.</p>
+
+<h2>2. The analytical solution</h2>
+
+<h3>2.1 From Maxwell&rsquo;s equations to Bessel&rsquo;s equation</h3>
+
+<p>Inside the conductor displacement current is negligible (<code>&sigma; &gt;&gt; &omega;&epsilon;</code>),
+so with the <code>e^{j&omega;t}</code> convention:</p>
+
+<div class="eq">&nabla; &times; H = J = &sigma;E &nbsp;&nbsp;&nbsp;&nbsp; &nabla; &times; E = &minus;j&omega;&mu;H</div>
+
+<p>Taking the curl of the first, substituting the second, and using <code>&nabla;&middot;B = 0</code>
+with constant <code>&mu;</code>:</p>
+
+<div class="eq">&nabla;&sup2;J = j&omega;&mu;&sigma; J</div>
+
+<p>Define the skin depth <code>&delta; = &radic;(2/&omega;&mu;&sigma;)</code>. Then
+<code>j&omega;&mu;&sigma; = 2j/&delta;&sup2;</code>, and writing this as a Helmholtz equation
+<code>&nabla;&sup2;J + k&sup2;J = 0</code> gives</p>
+
+<div class="eq">k&sup2; = &minus;j&omega;&mu;&sigma; = &minus;2j/&delta;&sup2; &nbsp;&nbsp;&rarr;&nbsp;&nbsp; <b>k = (1 &minus; j)/&delta;</b></div>
+
+<p>For a long cylinder the current is axial and depends only on <code>r</code>, so the Laplacian
+reduces to</p>
+
+<div class="eq">(1/r) d/dr ( r dJ_z/dr ) + k&sup2; J_z = 0</div>
+
+<p>which is <b>Bessel&rsquo;s equation of order zero</b>. Its two solutions are <code>J&#8320;(kr)</code>
+and <code>Y&#8320;(kr)</code>; <code>Y&#8320;</code> diverges on the axis, so physics keeps only the first:</p>
+
+<div class="eq"><b>J_z(r) = J_z(a) &middot; J&#8320;(kr) / J&#8320;(ka)</b></div>
+
+<div class="note">
+<p><strong>A notation collision worth naming.</strong> <code>J_z</code> is current density;
+<code>J&#8320;</code> is the Bessel function. They are unrelated and both are standard.</p>
+<p><strong>This is not an exponential.</strong> <code>e^{&minus;(a&minus;r)/&delta;}</code> is only the
+asymptotic form for <code>a &gt;&gt; &delta;</code>. At <code>a/&delta; = 3</code> the Bessel solution is
+what is correct, which is why the measured profile <em>flattens</em> toward the axis rather than
+decaying to zero.</p>
+</div>
+
+<h3>2.2 Kelvin functions: why the argument is complex</h3>
+
+<p>Because <code>k</code> is complex, <code>J&#8320;(kr)</code> is a Bessel function of complex argument.
+The <b>Kelvin functions</b> exist precisely to split that into real and imaginary parts:</p>
+
+<div class="eq">ber(x) + j&middot;bei(x) &equiv; J&#8320;( x&middot;e^{3j&pi;/4} )</div>
+
+<p>Since <code>kr = &radic;2 (r/&delta;) e^{&minus;j&pi;/4}</code> and <code>J&#8320;</code> is even, this is
+exactly <code>J&#8320;(kr) = ber(u) + j&middot;bei(u)</code> with</p>
+
+<div class="eq"><b>u = &radic;2 &middot; r/&delta;</b> &nbsp;&nbsp;and at the surface&nbsp;&nbsp; u = &radic;2 &middot; a/&delta; = <b>4.242337</b></div>
+
+<p>That is why <code>u = &radic;2 a/&delta;</code> appears throughout: it is the same Bessel function
+written in real arithmetic. The defining series are</p>
+
+<div class="eq">ber(x) = &Sigma; (&minus;1)^m (x/2)^{4m} / [(2m)!]&sup2;<br>
+bei(x) = &Sigma; (&minus;1)^m (x/2)^{4m+2} / [(2m+1)!]&sup2;</div>
+
+<p>At this case&rsquo;s <code>u</code>:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>value at u = 4.242337</th></tr></thead>
+<tbody>
+<tr><td><code>ber(u)</code></td><td>&minus;3.365444524</td></tr>
+<tr><td><code>bei(u)</code></td><td>+2.095782021</td></tr>
+<tr><td><code>ber&prime;(u)</code></td><td>&minus;3.475101853</td></tr>
+<tr><td><code>bei&prime;(u)</code></td><td>&minus;1.160258139</td></tr>
+</tbody></table></div>
+
+<h3>2.3 The AC resistance &mdash; Kelvin&rsquo;s formula</h3>
+
+<p>Integrate the current density over the cross-section, using
+<code>&int;&#8320;^a J&#8320;(kr) r dr = (a/k) J&#8321;(ka)</code>:</p>
+
+<div class="eq">I = &int;&#8320;^a J_z(r) &middot; 2&pi;r dr = J_z(a) &middot; 2&pi;a &middot; J&#8321;(ka) / (k &middot; J&#8320;(ka))</div>
+
+<p>Divide the surface field <code>E_z(a) = J_z(a)/&sigma;</code> by that to get the internal impedance
+per unit length, and normalise by <code>R_dc = 1/(&sigma;&pi;a&sup2;)</code>:</p>
+
+<div class="eq">Z_internal / R_dc = (ka/2) &middot; J&#8320;(ka) / J&#8321;(ka)</div>
+
+<p>Taking the real part and rewriting in Kelvin functions gives the form used in
+<code>expected.txt</code>:</p>
+
+<div class="eq"><b>R_ac/R_dc = (u/2) &middot; [ ber(u) bei&prime;(u) &minus; bei(u) ber&prime;(u) ] / [ ber&prime;(u)&sup2; + bei&prime;(u)&sup2; ]</b></div>
+
+<p>and the companion internal inductance,
+<code>&omega;L_int/R_dc = (u/2)[ber&middot;ber&prime; + bei&middot;bei&prime;]/[ber&prime;&sup2;+bei&prime;&sup2;]</code>,
+which evaluates to <code>1.463933</code> here.</p>
+
+<h3>2.4 Verifying the reference itself</h3>
+
+<p>Every error quoted below is measured <em>against</em> these formulas, so a bug in them would be
+invisible and would corrupt every number in the report. Three independent checks:</p>
+
+<p><b>Two routes to the same quantity.</b> The Kelvin form above and
+<code>Re[(ka/2) J&#8320;(ka)/J&#8321;(ka)]</code> are the same number written differently, computed here
+through entirely separate code &mdash; real <code>ber/bei</code> series and derivative series versus
+complex <code>J&#8320;</code> and <code>J&#8321;</code> series:</p>
+
+<pre><code>(u/2)(ber bei' - bei ber')/(ber'^2 + bei'^2) = 1.768019136
+Re[ (ka/2) J0(ka)/J1(ka) ]                   = 1.768019136
+difference                                   = 0.0e+00</code></pre>
+
+<p>They agree to machine precision at every <code>a/&delta;</code> from 0.1 to 5.</p>
+
+<p><b>The Kelvin functions against their defining identity.</b> The real
+<code>ber/bei</code> series was checked against <code>J&#8320;(x e^{3j&pi;/4})</code> computed from the
+complex series &mdash; a different code path &mdash; and they agree to machine precision at every
+<code>x</code> tested up to 8, including this case&rsquo;s 4.242.</p>
+
+<p><b>Both asymptotic limits.</b></p>
+
+<div class="tw"><table>
+<thead><tr><th><code>a/&delta;</code></th><th>computed</th><th>limit</th></tr></thead>
+<tbody>
+<tr><td>0.10</td><td>1.00000208</td><td><code>1 + (a/&delta;)&#8308;/48</code> = 1.00000208</td></tr>
+<tr><td>0.50</td><td>1.00130073</td><td>1.00130208</td></tr>
+<tr><td>10.0</td><td>5.25930</td><td><code>a/(2&delta;) + 1/4</code> = 5.25000</td></tr>
+<tr><td>30.0</td><td>15.25312</td><td>15.25000</td></tr>
+</tbody></table></div>
+
+<p>That low-frequency limit also explains why cases 02 and 03 see nothing: at
+<code>a/&delta; = 0.16</code>, <code>(a/&delta;)&#8308;/48 = 1.4e&#8209;05</code>.</p>
+
+<div class="note">
+<p><strong>A caution the series carries.</strong> The alternating <code>ber/bei</code> series suffers
+catastrophic cancellation at large argument &mdash; it returns nonsense by <code>a/&delta; = 100</code>.
+It is exact to machine precision across the range used here (<code>u &le; 4.25</code>), but it is not a
+general-purpose implementation and should not be reused blindly at higher frequency.</p>
+</div>
+
+<h2>3. The mesh, and how it was sized</h2>
+
+<h3>3.1 The sizing was measured, not assumed</h3>
+
+<p><code>01_OneCylinder</code>&rsquo;s mesh was run at three frequencies first and the error read off
+against Bessel, to find what resolution the profile actually needs:</p>
+
+<div class="tw"><table>
+<thead><tr><th>f</th><th><code>&delta;</code></th><th><code>a/&delta;</code></th><th><code>&delta;/h</code></th><th>worst band error</th><th><code>R</code> vs Kelvin</th></tr></thead>
+<tbody>
+<tr><td>50 Hz</td><td>9.346 mm</td><td>1.070</td><td>5.66</td><td>0.26 %</td><td>&minus;0.038 %</td></tr>
+<tr><td>175 Hz</td><td>4.996 mm</td><td>2.002</td><td>3.03</td><td>2.10 %</td><td>&minus;0.050 %</td></tr>
+<tr><td>300 Hz</td><td>3.815 mm</td><td>2.621</td><td>2.31</td><td>4.73 %</td><td>+0.386 %</td></tr>
+</tbody></table></div>
+
+<p>So the error is governed by <code>&delta;/h</code>, and <code>&delta;/h &ge; 3</code> is what holds it
+near 1&nbsp;%. At 393&nbsp;Hz, <code>&delta; = 3.334 mm</code>, so <code>h</code> must be about
+0.8&ndash;1.1&nbsp;mm.</p>
+
+<h3>3.2 Where the refinement had to go &mdash; the non-obvious part</h3>
+
+<div class="note">
+<p><strong>Reading the per-band error gets this backwards.</strong> At 300&nbsp;Hz the error is
+0.1&nbsp;% in the annulus (<code>r &gt; 0.8a</code>) and 4.7&nbsp;% in the core
+(<code>r &lt; 0.3a</code>), which looks like &ldquo;refine the core&rdquo;. It is not.</p>
+<p><code>|J|</code> in the core is <b>flat</b> there &mdash; 0.3934, 0.3929, 0.3949 across
+<code>r/a</code> 0 to 0.3 &mdash; so the core is not failing to resolve local variation. It is
+<b>inheriting accumulated error</b> from the region where the field actually decays, and
+<code>&delta;/h</code> was 1.45 to 2.31 across the <em>whole</em> conductor. The annulus&rsquo;s own
+relative error only looks small because <code>|J|</code> is large there.</p>
+</div>
+
+<p>At <code>a/&delta; = 3</code> the decay region <code>r &gt; a &minus; 2&delta; = 3.33 mm</code> is
+<b>89&nbsp;% of the cross-section</b>, so there is nothing to gain by grading inside the conductor:
+<code>lc_core = lc_skin</code> and the wire is meshed uniformly.</p>
+
+<h3>3.3 The facet rule fixes N</h3>
+
+<p>The polygon facet is <code>2a sin(&pi;/N)</code>, and the design rule is that the volume element
+size stays <em>comparable</em> to the facet width; a volume size well below the facet produces
+slivers. At <code>N = 36</code> the facet is 1.743&nbsp;mm, so <code>h = 0.833 mm</code> would be less
+than half of it. <code>N = 76</code> gives <b>0.827&nbsp;mm</b>, matched to <code>h</code>.</p>
+
+<p>This is the same rule that killed an <code>N = 96</code> experiment in case 02 from the other
+direction, where the facet was 0.098&nbsp;mm and the volume size 0.25&nbsp;mm. <b>The ratio is what
+matters, in either direction.</b></p>
+
+<h3>3.4 The unsigned-distance trap</h3>
+
+<p>The mesh is graded by a <code>Distance</code> field measured from the conductor&rsquo;s lateral
+surface, mapped through a <code>Threshold</code>. <b>That distance is unsigned</b>, so it reads 10&nbsp;mm
+on the axis &mdash; the same as a point 10&nbsp;mm out in the air &mdash; and the field coarsens
+<em>inward</em> as well as outward. In <code>01_OneCylinder</code> that left the core at 4.4&nbsp;mm
+elements with <b>no cells at all inside <code>r &lt; 0.1a</code></b>.</p>
+
+<p>The fix, used here and in case 02, is a second field capping the interior:</p>
+
+<pre><code>Field[3] = MathEval;   Field[3].F = Sprintf("%g", lc_core);
+Field[4] = Restrict;   Field[4].InField = 3;  VolumesList = {wire_volume};
+Field[5] = Min;        Field[5].FieldsList = {2, 4};</code></pre>
+
+<p><code>Restrict</code> returns a huge size outside its volume, which is exactly what <code>Min</code>
+wants, so <code>lc_core</code> binds only inside the wire and the air grading is untouched. A third
+field holds the fine size through the first half skin depth outward (<code>DistMin = &delta;/2</code>
+rather than 0) &mdash; without that, the fine size decays immediately and there is a fine
+<em>surface</em> but no resolved <em>shell</em>.</p>
+
+<h2>4. Results</h2>
+
+<h3>4.1 The picture</h3>
+
+<div class="figs">
+  <figure><img src="fig/j_cross_section.png" alt="Current density over the conductor cross-section">
+    <figcaption><b>|J| at mid height.</b> The current is confined to a surface layer about one skin
+    depth thick; the core carries almost none of it.</figcaption></figure>
+  <figure><img src="fig/j_longitudinal.png" alt="Current density on a longitudinal slice">
+    <figcaption><b>Longitudinal slice.</b> Nothing varies along <code>z</code>, which is what the
+    infinite-cylinder assumption behind the analytical solution requires.</figcaption></figure>
+</div>
+
+<p>Unlike the 50&nbsp;Hz cases, the auto colour range here is <em>meaningful</em>: <code>|J|</code>
+spans nearly 4x across the section, so the visible structure is physics rather than noise in the
+fifth digit.</p>
+
+<h3>4.2 Magnitude and phase against the exact Bessel solution</h3>
+
+<div class="figs one">
+  <figure><img src="fig/j_radial_profile.png" alt="Radial profile of current density against the exact Bessel solution">
+    <figcaption><b>38,294 cells, one point each</b>, against <code>J&#8320;(kr)/J&#8320;(ka)</code>
+    evaluated at the radii actually sampled. Top: magnitude. Middle: phase. Bottom: both errors.
+    </figcaption></figure>
+</div>
+
+<div class="note">
+<p><strong>There is no radial probe line.</strong> Every point is one tetrahedron plotted at its
+centroid radius, over <b>all azimuths</b> and all <code>z</code> in <code>0.3L</code> to
+<code>0.7L</code>. A line would have allowed a lucky azimuth to be chosen and would have sampled
+about 30 cells instead of 38,294. The vertical spread at fixed <code>r</code> <em>is</em> the
+azimuthal scatter and element noise, shown rather than averaged away. The values are the per-cell
+<code>J</code>, exact per tetrahedron, not the volume-averaged nodal field.</p>
+</div>
+
+<p>Both curves are normalised by the <em>same</em> reference &mdash; the mean over cells with
+<code>r &gt; 0.95a</code> &mdash; so amplitude and the drive&rsquo;s own phase cancel and only shape is
+compared. Amplitude is checked separately by <code>R</code>, which is an integral of the same field.</p>
+
+<div class="tw"><table>
+<thead><tr><th><code>r/a</code></th><th>cells</th><th>|J| measured</th><th>|J| exact</th><th>err</th><th>phase err</th></tr></thead>
+<tbody>
+<tr><td>0.00&ndash;0.10</td><td>334</td><td>0.2717</td><td>0.2683</td><td>+1.27 %</td><td>&minus;0.385&deg;</td></tr>
+<tr><td>0.10&ndash;0.20</td><td>958</td><td>0.2724</td><td>0.2692</td><td>+1.19 %</td><td>&minus;0.372&deg;</td></tr>
+<tr><td>0.20&ndash;0.30</td><td>1576</td><td>0.2770</td><td>0.2741</td><td>+1.04 %</td><td>&minus;0.353&deg;</td></tr>
+<tr><td>0.30&ndash;0.40</td><td>2248</td><td>0.2917</td><td>0.2893</td><td>+0.84 %</td><td>&minus;0.302&deg;</td></tr>
+<tr><td>0.40&ndash;0.50</td><td>2842</td><td>0.3236</td><td>0.3216</td><td>+0.63 %</td><td>&minus;0.206&deg;</td></tr>
+<tr><td>0.50&ndash;0.60</td><td>3323</td><td>0.3798</td><td>0.3781</td><td>+0.46 %</td><td>&minus;0.086&deg;</td></tr>
+<tr><td>0.60&ndash;0.70</td><td>3900</td><td>0.4651</td><td>0.4636</td><td>+0.31 %</td><td>+0.036&deg;</td></tr>
+<tr><td>0.70&ndash;0.80</td><td>4413</td><td>0.5841</td><td>0.5831</td><td>+0.18 %</td><td>+0.156&deg;</td></tr>
+<tr><td>0.80&ndash;0.90</td><td>5212</td><td>0.7458</td><td>0.7454</td><td>+0.05 %</td><td>+0.238&deg;</td></tr>
+<tr><td>0.90&ndash;0.95</td><td>3455</td><td>0.8890</td><td>0.8886</td><td>+0.05 %</td><td>+0.092&deg;</td></tr>
+<tr><td>0.95&ndash;1.00</td><td>10033</td><td>1.0000</td><td>1.0000</td><td>0.00 %</td><td>0.000&deg;</td></tr>
+</tbody></table></div>
+
+<p><b>Worst band: 1.27&nbsp;% in magnitude, 0.385&deg; in phase</b>, and both are <em>monotonic</em> &mdash;
+largest at the axis, vanishing at the surface. That shape is the signature of an <code>h</code>-limited
+solution rather than a wrong one: the error is largest exactly where <code>&delta;/h</code> is worst
+and disappears where the mesh is finest.</p>
+
+<h3>4.3 Phase is the tighter test</h3>
+
+<p><code>J_z</code> is a phasor and the magnitude comparison tests only half of it. The argument is
+independent, and in practice more demanding: an error in the <code>&minus;j&omega;A</code> term of
+<code>E = &minus;j&omega;A &minus; &nabla;&Phi;</code> shows up in the phase before it shows up in
+<code>|J|</code>. The exact rotation across the radius:</p>
+
+<div class="tw"><table>
+<thead><tr><th><code>r/a</code></th><th>0.0</th><th>0.2</th><th>0.4</th><th>0.6</th><th>0.8</th><th>1.0</th></tr></thead>
+<tbody>
+<tr><td><code>|J&#8320;(kr)/J&#8320;(ka)|</code></td><td>0.2522</td><td>0.2543</td><td>0.2833</td><td>0.3895</td><td>0.6119</td><td>1.0000</td></tr>
+<tr><td>phase, deg</td><td>&minus;148.09</td><td>&minus;137.81</td><td>&minus;108.92</td><td>&minus;71.42</td><td>&minus;34.91</td><td>0.00</td></tr>
+</tbody></table></div>
+
+<p>The axis current is <b>nearly anti-phase</b> with the surface. Across the whole suite:</p>
+
+<div class="tw"><table>
+<thead><tr><th>case</th><th><code>a/&delta;</code></th><th>measured lag</th><th>exact</th><th>error</th><th>(magnitude error)</th></tr></thead>
+<tbody>
+<tr><td>02 / 03</td><td>0.16</td><td>&minus;0.62816&deg;</td><td>&minus;0.63860&deg;</td><td><span class="ok">0.010&deg;</span></td><td>0.00 %</td></tr>
+<tr><td>01</td><td>1.07</td><td>&minus;27.4249&deg;</td><td>&minus;27.5592&deg;</td><td><span class="ok">0.134&deg;</span></td><td>+0.26 %</td></tr>
+<tr><td>01&rsquo;s mesh @ 300 Hz</td><td>2.62</td><td>&minus;112.673&deg;</td><td>&minus;111.979&deg;</td><td>0.694&deg;</td><td>+4.7 %</td></tr>
+<tr><td><b>04</b></td><td><b>3.00</b></td><td><b>&minus;134.239&deg;</b></td><td><b>&minus;133.847&deg;</b></td><td><b>0.392&deg;</b></td><td>+1.15 %</td></tr>
+</tbody></table></div>
+
+<p>This case reproduces a <b>134&deg; rotation to 0.39&deg;</b> &mdash; 0.29&nbsp;% of the rotation,
+<em>tighter</em> than the 1.15&nbsp;% on the magnitude ratio. Case 02 is the most telling of the
+others: its magnitude ratio is 0.99997, flat to five digits and nearly insensitive, yet it resolves a
+0.64&deg; lag to 0.010&deg;.</p>
+
+<div class="note">
+<p><strong>Two details that had to be right.</strong> The <b>complex field is averaged and the
+argument taken afterwards</b>; averaging the arguments is wrong wherever the phase spread inside a
+band is not small, which is exactly the high-frequency case. And everything is referred to the same
+<code>r &gt; 0.95a</code> band, so the drive&rsquo;s own phase cancels &mdash; <code>&Phi;</code> is gauge
+dependent, but <code>J = &sigma;E</code> is not, so the result is physical rather than a convention.</p>
+</div>
+
+<h3>4.4 AC resistance against Kelvin</h3>
+
+<div class="figs one">
+  <figure><img src="fig/kelvin_curve.png" alt="Kelvin R_ac/R_dc curve with the measured points">
+    <figcaption><b>The exact Kelvin curve</b> with every run in this study placed on it. At
+    <code>a/&delta;</code> = 1.07 the effect is 2.6 % of <code>R</code>; at 3.00 it is 77 %.</figcaption></figure>
+</div>
+
+<div class="tw"><table><tbody>
+<tr><td>Kelvin exact</td><td><b>1.768019</b></td></tr>
+<tr><td>measured</td><td><b>1.771910</b></td></tr>
+<tr><td>error</td><td><b>+0.220 %</b></td></tr>
+<tr><td>of which the polygon accounts for</td><td>+0.028 % &mdash; see &sect;7</td></tr>
+<tr><td><code>L</code> from <code>Im(Z)/&omega;</code></td><td>20.2097 nH</td></tr>
+<tr><td><code>&omega;L/R</code></td><td>12.8 &mdash; strongly inductive</td></tr>
+</tbody></table></div>
+
+<h2>5. Mesh convergence: N=76 against N=96</h2>
+
+<p><code>cylinder_skin_n96.geo</code> is the same case at <code>N = 96</code>, <code>lc = 0.640 mm</code>,
+which reaches <code>&delta;/h = 4.0</code> in the conductor. It is <b>not</b> a regression case &mdash;
+739,304 unknowns and 17.1&nbsp;GB of factors is too heavy to run on every change &mdash; it exists to
+establish the convergence <em>rate</em>.</p>
+
+<div class="figs one">
+  <figure><img src="fig/convergence.png" alt="Mesh convergence, N=76 against N=96, with the h-squared prediction">
+    <figcaption><b>The dashed line is what <code>h&sup2;</code> predicts</b> from the coarse mesh. The
+    fine mesh lands on it at every radius, in magnitude and phase alike.</figcaption></figure>
+</div>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>N=76</th><th>N=96</th><th>ratio</th><th>implied order</th></tr></thead>
+<tbody>
+<tr><td><code>h</code> in the conductor</td><td>1.08 mm</td><td>0.84 mm</td><td>0.778</td><td></td></tr>
+<tr><td><code>&delta;/h</code></td><td>3.1</td><td>4.0</td><td></td><td></td></tr>
+<tr><td>worst band <code>|J|</code></td><td>1.27 %</td><td><b>0.74 %</b></td><td>0.58</td><td><b>2.17</b></td></tr>
+<tr><td>worst band phase</td><td>0.385&deg;</td><td><b>0.230&deg;</b></td><td>0.60</td><td><b>2.06</b></td></tr>
+<tr><td><code>R</code> vs Kelvin</td><td>+0.220 %</td><td><b>+0.145 %</b></td><td>0.66</td><td>1.65</td></tr>
+<tr><td><code>L</code></td><td>20.2097 nH</td><td>20.2041 nH</td><td></td><td>converged to 0.03 %</td></tr>
+<tr><td>unknowns</td><td>418,318</td><td>739,304</td><td>1.77</td><td></td></tr>
+<tr><td>factor nnz</td><td>497.8 M</td><td>1068.6 M</td><td>2.15</td><td></td></tr>
+<tr><td>factorization</td><td>25.9 s</td><td>81.8 s</td><td>3.15</td><td></td></tr>
+</tbody></table></div>
+
+<div class="note">
+<p><strong>The rate matters more than either error value.</strong> A single number says
+&ldquo;we are 0.74&nbsp;% off&rdquo; and cannot distinguish discretisation error from a modelling
+mistake sitting at a floor. Two meshes give the rate: <code>h</code> falls by 0.778 and the error
+falls by <b>0.605 = 0.778&sup2;</b>, at every radius, in magnitude and phase alike. So the residual is
+genuine discretisation converging at <b>second order</b>, and refinement would keep paying. An error
+that had stalled between the two meshes would have meant the opposite, and would have pointed at the
+geometry or the formulation rather than at <code>h</code>.</p>
+</div>
+
+<p><code>R</code> converges more slowly (order 1.65) because part of its error does not scale with
+<code>h</code> at all: the polygon floor, which fell 0.028&nbsp;% to 0.018&nbsp;% only because
+<code>N</code> changed. Net of it, 0.192&nbsp;% to 0.127&nbsp;%.</p>
+
+<h2>6. Cost</h2>
+
+<div class="tw"><table><tbody>
+<tr><td>nodes / tets</td><td>31,922 / 179,477 (98,204 in the wire)</td></tr>
+<tr><td>unknowns</td><td><b>418,318</b> &mdash; <code>A</code>: 176,554 free edges, 28,996 gauged, 8,772 Dirichlet</td></tr>
+<tr><td>factor nnz</td><td>497.8 M, about 8.0 GB</td></tr>
+<tr><td>mesh</td><td>24 s</td></tr>
+<tr><td>factorization, MUMPS + threaded MKL</td><td><b>25.9 s</b></td></tr>
+<tr><td>one frequency end to end</td><td><b>42 s</b></td></tr>
+<tr><td>backward error</td><td>5.5e&#8209;21</td></tr>
+</tbody></table></div>
+
+<p><b>This is the first case that cannot practically run on the internal solver</b>, so its
+<code>expected.txt</code> names the MUMPS input &mdash; the opposite of cases 01&ndash;03, which name
+their plain inputs on purpose so <code>check.bat</code> exercises the default backend.</p>
+
+<p>Measured scaling on this geometry, across case 01&rsquo;s mesh and both meshes here:
+<b>fill ~ <code>n^1.47</code></b>, factorization time <b>~ <code>n^2.39</code></b> on a sequential BLAS.
+Linking MKL&rsquo;s threaded layer (<code>-DMKL_THREADING=intel_thread</code>) is worth about
+<b>10x</b> on this problem &mdash; 266.78&nbsp;s to 25.94&nbsp;s &mdash; because nearly all the flops are
+dense kernels inside the frontal matrices, and a sequential BLAS runs those on one core. See
+<code>docs/MUMPS_SETUP.md</code>.</p>
+
+<h2>7. Limitations, and what &ldquo;exact&rdquo; does not mean</h2>
+
+<p>The analytical solution is exact for an <b>idealisation</b>: an infinitely long, perfectly
+circular conductor of uniform <code>&sigma;</code> and <code>&mu;</code>, quasi-static. The simulation
+differs from it in three ways, and the residual error is discretisation <em>plus</em> those
+differences, not discretisation alone.</p>
+
+<ul>
+<li><b>The conductor is a 76-gon, not a circle.</b> At <code>a/&delta; = 3</code> the current lives in
+a thin surface layer, so what matters is the <em>perimeter</em> rather than the area: 62.8140&nbsp;mm
+against the circle&rsquo;s 62.8319&nbsp;mm, or &minus;0.0285&nbsp;%, which raises <code>R_ac</code> by
+about <b>+0.028&nbsp;%</b>. <b>This will not go away with a finer mesh</b> &mdash; only with a larger
+<code>N</code>, which also changes <code>R_dc</code>. A tolerance tight enough to exclude it would be
+asserting something false.</li>
+<li><b>The rod is 4 radii long, not infinite.</b> Mitigated by sampling only the mid-length band
+<code>0.3L</code> to <code>0.7L</code>, and the longitudinal slice shows no <code>z</code> dependence
+there.</li>
+<li><b>The air box is finite</b>, with <code>n &times; A = 0</code> at 200&nbsp;mm, against the
+analytical solution&rsquo;s unbounded exterior.</li>
+</ul>
+
+<p><b><code>&Phi;</code> is gauge dominated here and is deliberately not checked.</b> At
+<code>&omega;L/R = 12.8</code> the reactance dominates, and under the tree-cotree gauge
+<code>&Phi;</code> differs from the <code>z/L</code> gradient by <code>&minus;j&omega;&psi;</code>,
+which is the larger term; measured, <code>&Phi;/V</code> deviates from <code>z/L</code> by 0.51. That
+was established by experiment rather than assumed: running <code>01_OneCylinder</code>&rsquo;s
+<em>same mesh</em> at 1&nbsp;Hz instead of 50&nbsp;Hz &mdash; identical elements, only <code>&omega;</code>
+changed &mdash; moves the deviation from 5.4e&#8209;01 to 1.9e&#8209;03, a factor of 253.
+Discretisation cannot do that. <code>E</code>, <code>B</code>, <code>H</code> and <code>J</code> are
+gauge independent and are what this case validates.</p>
+
+<p><b>Memory, not time, is what stops further refinement</b> on a 32&nbsp;GB machine. Halving
+<code>h</code> again needs <code>N ~ 136</code> and about 1.8&nbsp;M unknowns, which extrapolates to
+roughly 45&nbsp;GB of factors. Going materially below 0.5&nbsp;% needs a different lever &mdash;
+second-order elements for <code>A</code>, or an out-of-core solve &mdash; not a smaller <code>h</code>.</p>
+
+<h2>8. What is asserted automatically</h2>
+
+<p><code>regression_tests/check.bat</code> runs this case and asserts all five, against the values in
+<code>expected.txt</code>:</p>
+
+<div class="tw"><table><tbody>
+<tr><td><code>|V|</code> measured vs prescribed</td><td>1.000000 vs 1.0</td></tr>
+<tr><td><code>R/R_dc</code> vs Kelvin</td><td>1.77191 vs 1.768019, tol 0.006</td></tr>
+<tr><td><code>L</code></td><td>20.2097 nH, tol 0.05 &mdash; pinned to catch change</td></tr>
+<tr><td><code>&lt;J&gt;core/&lt;J&gt;surf</code></td><td>0.281160 vs 0.277956, tol 0.005</td></tr>
+<tr><td>phase lag, core to surface</td><td>&minus;134.239&deg; vs &minus;133.847&deg;, tol 0.8&deg;</td></tr>
+</tbody></table></div>
+
+<p>The two <code>&Phi;</code> checks are deliberately <em>absent</em>, and <code>verify.py</code> prints
+<code>SKIPPED</code> with the reason rather than passing silently. An omitted key is a claim about the
+physics, not an exemption.</p>
+
+<h3>Reproducing</h3>
+
+<pre><code>gmsh cylinder_skin.geo -3 -o cylinder_skin.msh
+..\run_case.bat cylinder_393hz_mumps.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_plots.py output
+sh build_doc.sh                       # rebuilds this document
+
+# the convergence study
+gmsh cylinder_skin_n96.geo -3 -o cylinder_skin_n96.msh
+..\run_case.bat cylinder_393hz_n96_mumps.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_convergence_plot.py</code></pre>
+
+<p><b>Run <code>build_doc.sh</code> after regenerating figures</b>, or this document keeps showing the
+previous run&rsquo;s pictures &mdash; they are baked into the HTML and the PDF.</p>
+
+</div>
