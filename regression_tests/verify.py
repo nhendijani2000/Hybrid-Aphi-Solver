@@ -203,18 +203,26 @@ if "phi_pointwise_rel_max" in exp:
               exp["phi_pointwise_rel_max"][0])
 else:
     skip("Phi pointwise rel", "same reason")
-# --- J(0)/J(a) against Bessel ---------------------------------------------
+# --- the J profile against Bessel, MAGNITUDE AND PHASE ---------------------
+# J_z is a PHASOR and both halves of it are physics. The magnitude is the
+# familiar skin-effect picture. The phase is an independent and in practice
+# tighter test: at a/delta = 3 the axis current lags the surface by 134 deg,
+# and an error in the -j*omega*A term of E = -j*omega*A - grad Phi shows up
+# there before it shows up in |J|. Both are gauge independent -- Phi is gauge
+# dependent, J = sigma E is not -- and both are referred to the same surface
+# band, so the drive's own phase cancels.
 print("\nJ profile")
 cc = CellCenters(Input=wire)
 cc.VertexCells = 1
-calc = Calculator(Input=cc)
-calc.AttributeType = "Point Data"
-calc.ResultArrayName = "Jz"
-calc.Function = "sqrt(J_cell_real_Z^2 + J_cell_imag_Z^2)"
-UpdatePipeline(proxy=calc)
-dj = sm.Fetch(calc)
+UpdatePipeline(proxy=cc)
+dj = sm.Fetch(cc)
 q = vtk_to_numpy(dj.GetPoints().GetData())
-jz = vtk_to_numpy(dj.GetPointData().GetArray("Jz"))
+# The COMPLEX axial component, read straight from the per-cell arrays. These are
+# exact per tetrahedron; the nodal fields are volume averages and straddle the
+# conductor surface, which is meaningless there.
+jc = (vtk_to_numpy(dj.GetPointData().GetArray("J_cell_real"))[:, 2]
+      + 1j * vtk_to_numpy(dj.GetPointData().GetArray("J_cell_imag"))[:, 2])
+jz = np.abs(jc)
 r = np.hypot(q[:, 0], q[:, 1])
 zc = q[:, 2]
 mid = (zc > 0.3 * L) & (zc < 0.7 * L)
@@ -222,6 +230,7 @@ core = mid & (r < 0.25 * a)
 surf = mid & (r > 0.90 * a)
 if core.sum() < 5 or surf.sum() < 5:
     raise SystemExit("too few J samples: core %d, surface %d" % (core.sum(), surf.sum()))
+
 # NOTE ON THE REFERENCE. This is a mesh average over r < 0.25a divided by one
 # over r > 0.90a -- NOT J(0)/J(a). Where the profile is flat (a/delta << 1) the
 # difference is immaterial and J_ratio_exact is the r=0 Bessel ratio. Where it
@@ -229,9 +238,19 @@ if core.sum() < 5 or surf.sum() < 5:
 # core cells sit at r = 0.19a on average, and the r=0 ratio is 0.9265 while the
 # same-radii average is 0.9409 -- a 1.5 % difference that would read as solver
 # error. So a case with real skin effect must set J_ratio_exact from the Bessel
-# function evaluated AT THE SAMPLED RADII.
+# function evaluated AT THE SAMPLED RADII. The same applies to the phase.
 check("<J>core/<J>surf", float(jz[core].mean() / jz[surf].mean()),
       exp["J_ratio_exact"][0], exp["J_ratio_tol"][0])
+
+# Averaging is done on the COMPLEX field and the argument taken afterwards.
+# Averaging the arguments would be wrong wherever the phase spread inside a band
+# is not small, which is exactly the high-frequency case this checks.
+if "phase_lag_exact" in exp:
+    lag = math.degrees(np.angle(jc[core].mean() / jc[surf].mean()))
+    check("phase lag core-surf, deg", lag,
+          exp["phase_lag_exact"][0], exp["phase_lag_tol"][0])
+else:
+    skip("phase lag core-surf", "no phase_lag_exact given")
 
 # --- verdict ---------------------------------------------------------------
 print()

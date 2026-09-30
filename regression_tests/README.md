@@ -42,7 +42,7 @@ solver; seconds in `verify-only`.
 | `01_OneCylinder` | 1 V | 1.07 | 2.6 % | a mild skin effect against Kelvin; the **gauge study** (1 Hz vs 50 Hz) |
 | `02_Ansys_Cylinder_50Hz` | 1 V | 0.16 | ~0 | `R` against the exact DC value; `Phi` as a clean `z/L` gradient |
 | `03_Cylinder_1A_50Hz` | **1 A** | 0.16 | ~0 | port current self-consistency; the same mesh as 02 |
-| `04_Cylinder_SkinDepth` | 1 V | **3.00** | **77 %** | the skin effect where it **dominates** — `\|J\|` falls 3.7x to the axis |
+| `04_Cylinder_SkinDepth` | 1 V | **3.00** | **77 %** | the skin effect where it **dominates** — `\|J\|` falls 3.7x and the phase rotates 134° |
 
 02 and 03 are **duals** — 02 drives 1 V and reads the current out, 03 drives
 1 A on the same mesh and reads the voltage out — and they must report the same
@@ -512,11 +512,48 @@ correction is most of the answer.
 
 ![radial profile against Bessel](04_Cylinder_SkinDepth/fig/j_radial_profile.png)
 
-38294 cells, one point each, against the exact `|J0(kr)/J0(ka)|` evaluated at the
-radii actually sampled. **Worst band error 1.27 %**, and the error is monotonic
--- +1.27 % at the axis falling to 0.00 % at the surface. That shape is the
-signature of an `h`-limited solution rather than a wrong one: the error is
-largest exactly where `delta/h` is worst and vanishes where the mesh is finest.
+38294 cells, one point each, against the exact Bessel solution evaluated at the
+radii actually sampled. **Worst band error 1.27 % in magnitude and 0.39 deg in
+phase**, and both are monotonic -- largest at the axis, vanishing at the
+surface. That shape is the signature of an `h`-limited solution rather than a
+wrong one: the error is largest exactly where `delta/h` is worst and vanishes
+where the mesh is finest.
+
+**There is no radial probe line.** Every point is one tetrahedron, plotted at
+its centroid radius, over **all azimuths** and all `z` in `0.3L` to `0.7L`. A
+line would have let a lucky azimuth be chosen and would have sampled about 30
+cells instead of 38294; the vertical spread at fixed `r` is the azimuthal
+scatter and element noise, shown rather than averaged away. The values are the
+per-cell `J`, which is exact per tetrahedron, not the volume-averaged nodal
+field.
+
+### Phase, the other half of the Bessel solution
+
+`J_z` is a phasor and the magnitude comparison only tests half of it. The
+argument is an independent test and in practice the tighter one -- an error in
+the `-j*omega*A` term of `E = -j*omega*A - grad Phi` shows up in the phase
+before it shows up in `|J|`.
+
+| case | `a/delta` | measured lag | exact | error | (magnitude error) |
+|---|---|---|---|---|---|
+| 02 / 03 | 0.16 | −0.62816° | −0.63860° | **0.010°** | 0.00 % |
+| 01 | 1.07 | −27.4249° | −27.5592° | **0.134°** | +0.26 % |
+| 01's mesh @ 300 Hz | 2.62 | −112.673° | −111.979° | 0.694° | +4.7 % |
+| **04** | **3.00** | **−134.239°** | **−133.847°** | **0.392°** | +1.15 % |
+
+04 reproduces a **134 degree** phase rotation to 0.39 deg, which is 0.29 % of
+the rotation -- tighter than the 1.15 % on the magnitude ratio. The phase error
+is `h`-limited like everything else: 0.385 deg worst band on this mesh against
+0.634 deg on 01's coarser one at 300 Hz.
+
+Two details that matter for getting this right. The **complex field is averaged
+and the argument taken afterwards**; averaging the arguments is wrong wherever
+the phase spread inside a band is not small, which is exactly the
+high-frequency case. And everything is referred to the same `r>0.95a` band, so
+the drive's own phase cancels -- `Phi` is gauge dependent but `J = sigma E` is
+not, so the result is physical rather than a convention.
+
+All four cases now assert phase, via `phase_lag_exact` / `phase_lag_tol`.
 
 ![where each run sits on the Kelvin curve](04_Cylinder_SkinDepth/fig/kelvin_curve.png)
 

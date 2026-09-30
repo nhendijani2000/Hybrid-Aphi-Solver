@@ -77,3 +77,30 @@ L_nH                   20.2097      0.05
 # worst and vanishes where the mesh is finest.
 J_ratio_exact          0.277956
 J_ratio_tol            5.0e-3
+
+# ---------------------------------------------------------------------------
+# THE PHASE OF J, which is the other half of the Bessel solution.
+#
+# J_z is a PHASOR. The magnitude check above is the familiar skin-effect
+# picture; arg(J_z) is independent of it and, in practice, the tighter test. An
+# error in the -j*omega*A term of E = -j*omega*A - grad Phi shows up in the
+# phase before it shows up in |J|, and until this check existed that half of the
+# solution was never compared to anything.
+#
+# Measured as arg( <J>core / <J>surf ) over the SAME bands as the magnitude
+# ratio, with the complex field averaged and the argument taken afterwards --
+# averaging the arguments instead is wrong wherever the phase spread inside a
+# band is not small, which is exactly the high-frequency case. Referring both to
+# the surface band cancels the drive's own phase, and J = sigma E is gauge
+# independent, so this number is physical rather than a convention.
+#
+# This is where the check earns its keep. At a/delta = 3.00 the axis current is
+# nearly ANTI-PHASE with the surface: the exact lag is 133.85 deg, and we
+# measure -134.23912, off by 0.392 deg. That is 0.29 % of the rotation, TIGHTER
+# than the 1.15 % on the magnitude ratio.
+#
+# The phase error is h-limited like everything else here: the same measurement
+# on 01's coarser mesh at 300 Hz gives 0.634 deg of error against this mesh's
+# 0.385 deg worst band.
+phase_lag_exact      -133.84748     # degrees
+phase_lag_tol           0.80

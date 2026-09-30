@@ -105,3 +105,25 @@ J_ratio_tol            4.0e-3
 # 2a sin(pi/N) = 1.743 mm and a volume size well under the facet width makes
 # slivers. A finer interior needs a larger N first.
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# THE PHASE OF J, which is the other half of the Bessel solution.
+#
+# J_z is a PHASOR. The magnitude check above is the familiar skin-effect
+# picture; arg(J_z) is independent of it and, in practice, the tighter test. An
+# error in the -j*omega*A term of E = -j*omega*A - grad Phi shows up in the
+# phase before it shows up in |J|, and until this check existed that half of the
+# solution was never compared to anything.
+#
+# Measured as arg( <J>core / <J>surf ) over the SAME bands as the magnitude
+# ratio, with the complex field averaged and the argument taken afterwards --
+# averaging the arguments instead is wrong wherever the phase spread inside a
+# band is not small, which is exactly the high-frequency case. Referring both to
+# the surface band cancels the drive's own phase, and J = sigma E is gauge
+# independent, so this number is physical rather than a convention.
+#
+# At a/delta = 1.07 the core lags the surface by 27.6 deg. We measure
+# -27.42494 against the exact -27.55919, off by 0.134 deg -- 0.49 % of the lag,
+# against 0.25 % on the magnitude.
+phase_lag_exact       -27.55919     # degrees
+phase_lag_tol           0.30

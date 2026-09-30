@@ -26,3 +26,25 @@ phi_vs_zL_worst_max    2.0e-3
 phi_pointwise_rel_max  5.0e-5
 J_ratio_exact          0.999959
 J_ratio_tol            5.0e-5
+
+# ---------------------------------------------------------------------------
+# THE PHASE OF J, which is the other half of the Bessel solution.
+#
+# J_z is a PHASOR. The magnitude check above is the familiar skin-effect
+# picture; arg(J_z) is independent of it and, in practice, the tighter test. An
+# error in the -j*omega*A term of E = -j*omega*A - grad Phi shows up in the
+# phase before it shows up in |J|, and until this check existed that half of the
+# solution was never compared to anything.
+#
+# Measured as arg( <J>core / <J>surf ) over the SAME bands as the magnitude
+# ratio, with the complex field averaged and the argument taken afterwards --
+# averaging the arguments instead is wrong wherever the phase spread inside a
+# band is not small, which is exactly the high-frequency case. Referring both to
+# the surface band cancels the drive's own phase, and J = sigma E is gauge
+# independent, so this number is physical rather than a convention.
+#
+# Identical to case 02's, -0.62816 measured against -0.63860 exact, because it
+# is the same conductor on the same mesh driven the other way. R, L and the |J|
+# ratio already had to match between the duals; the phase now does too.
+phase_lag_exact        -0.63860     # degrees
+phase_lag_tol           0.03

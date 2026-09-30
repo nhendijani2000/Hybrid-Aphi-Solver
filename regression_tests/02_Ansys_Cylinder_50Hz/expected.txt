@@ -33,3 +33,30 @@ phi_pointwise_rel_max  1.0e-2
 # 0.999959; we measure 0.999968. The tolerance is the gap plus headroom.
 J_ratio_exact          0.999959
 J_ratio_tol            5.0e-5
+
+# ---------------------------------------------------------------------------
+# THE PHASE OF J, which is the other half of the Bessel solution.
+#
+# J_z is a PHASOR. The magnitude check above is the familiar skin-effect
+# picture; arg(J_z) is independent of it and, in practice, the tighter test. An
+# error in the -j*omega*A term of E = -j*omega*A - grad Phi shows up in the
+# phase before it shows up in |J|, and until this check existed that half of the
+# solution was never compared to anything.
+#
+# Measured as arg( <J>core / <J>surf ) over the SAME bands as the magnitude
+# ratio, with the complex field averaged and the argument taken afterwards --
+# averaging the arguments instead is wrong wherever the phase spread inside a
+# band is not small, which is exactly the high-frequency case. Referring both to
+# the surface band cancels the drive's own phase, and J = sigma E is gauge
+# independent, so this number is physical rather than a convention.
+#
+# At a/delta = 0.16 the lag is only 0.64 deg, and reproducing something that
+# small is a real test of the reactive term rather than a trivial one: the
+# magnitude ratio here is 0.99997, i.e. flat to five digits and nearly
+# insensitive. We measure -0.62816 against the exact -0.63860, off by
+# 0.0104 deg.
+#
+# Case 03 measures the IDENTICAL value, -0.62816, from a 1 A drive on the same
+# mesh -- one more way the duality has to hold.
+phase_lag_exact        -0.63860     # degrees
+phase_lag_tol           0.03

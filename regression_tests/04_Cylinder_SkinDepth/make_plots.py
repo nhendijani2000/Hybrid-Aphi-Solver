@@ -138,14 +138,14 @@ print("wrote %s/j_longitudinal.png  -- no z dependence" % FIG)
 # --- the radial profile, per cell, against exact Bessel --------------------
 cc = CellCenters(Input=wire("J_field.vtk"))
 cc.VertexCells = 1
-cal = Calculator(Input=cc)
-cal.AttributeType = "Point Data"
-cal.ResultArrayName = "Jz"
-cal.Function = "sqrt(J_cell_real_Z^2 + J_cell_imag_Z^2)"
-UpdatePipeline(proxy=cal)
-dj = sm.Fetch(cal)
+UpdatePipeline(proxy=cc)
+dj = sm.Fetch(cc)
 q = vtk_to_numpy(dj.GetPoints().GetData())
-jz = vtk_to_numpy(dj.GetPointData().GetArray("Jz"))
+# The COMPLEX axial component. Both halves of it are physics: |J| is the
+# familiar skin-effect picture, arg(J) is an independent and tighter test.
+jc = (vtk_to_numpy(dj.GetPointData().GetArray("J_cell_real"))[:, 2]
+      + 1j * vtk_to_numpy(dj.GetPointData().GetArray("J_cell_imag"))[:, 2])
+jz = np.abs(jc)
 r = np.hypot(q[:, 0], q[:, 1])
 zc = q[:, 2]
 mid = (zc > 0.3 * L) & (zc < 0.7 * L)
@@ -153,12 +153,15 @@ mid = (zc > 0.3 * L) & (zc < 0.7 * L)
 ref = mid & (r > 0.95 * a)
 jref = jz[ref].mean()
 bref = np.array([abs(J0(k * x)) for x in r[ref]]).mean()
+# complex references, for the phase: average the FIELD, then take the argument
+jcref = jc[ref].mean()
+bcref = np.mean([J0(k * x) for x in r[ref]])
 
 rr = np.linspace(0, a, 400)
 exact = np.array([abs(J0(k * x)) for x in rr]) / bref
 
-fig, (ax, axe) = plt.subplots(2, 1, figsize=(8.2, 8.0), sharex=True,
-                              gridspec_kw={"height_ratios": [3, 1]})
+fig, (ax, axp, axe) = plt.subplots(3, 1, figsize=(8.2, 10.6), sharex=True,
+                                   gridspec_kw={"height_ratios": [3, 2.2, 1.3]})
 # The exact curve is DASHED and drawn on top. A solid line here hides the
 # scatter completely -- the agreement is inside the marker size -- and a figure
 # where the data is invisible under the reference is not showing agreement, it
@@ -178,10 +181,28 @@ ax.legend(loc="upper left", fontsize=9, framealpha=0.95)
 ax.grid(alpha=0.3)
 ax.set_ylim(0, 1.15)
 
+# --- PHASE, the other half of the Bessel solution -------------------------
+# Until this panel existed only |J| was ever compared. arg(J) is independent of
+# it: an error in the -j*omega*A term shows up here first. Everything is
+# referred to the same r>0.95a band, so the drive's phase cancels.
+phase_meas = np.degrees(np.angle(jc[mid] / jcref))
+phase_exact = np.degrees(np.angle(
+    np.array([J0(k * x) for x in rr]) / bcref))
+axp.scatter(r[mid] / a, phase_meas, s=4.0, alpha=0.45, color="#9467bd",
+            rasterized=True, zorder=2, label="solver, one point per cell")
+axp.plot(rr / a, phase_exact, "k--", lw=1.6, dashes=(6, 4), zorder=3,
+         label=r"exact  $\arg[J_0(kr)/J_0(ka)]$")
+axp.axvline(1.0 - delta / a, color="#d62728", ls="--", lw=1.3)
+axp.set_ylabel("phase relative to the surface,  deg")
+axp.legend(loc="lower right", fontsize=9, framealpha=0.95)
+axp.grid(alpha=0.3)
+axp.set_title("the axis current is nearly ANTI-PHASE with the surface: "
+              "%.1f deg of rotation" % abs(phase_exact[0]), fontsize=9)
+
 # error panel, binned only here -- the scatter above is the honest view
 bins = np.linspace(0, 1, 21)
 idx = np.digitize(r[mid] / a, bins) - 1
-me, ex, ctr = [], [], []
+me, ex, ctr, pme, pex = [], [], [], [], []
 for b in range(len(bins) - 1):
     m = idx == b
     if m.sum() < 5:
@@ -190,20 +211,26 @@ for b in range(len(bins) - 1):
     me.append(jz[mid][m].mean() / jref)
     ex.append(np.array([abs(J0(k * x)) for x in rb]).mean() / bref)
     ctr.append(rb.mean() / a)
+    pme.append(np.degrees(np.angle(jc[mid][m].mean() / jcref)))
+    pex.append(np.degrees(np.angle(np.mean([J0(k * x) for x in rb]) / bcref)))
 err = 100.0 * (np.array(me) / np.array(ex) - 1.0)
-axe.plot(ctr, err, "o-", ms=4, color="#2ca02c")
+perr = np.array(pme) - np.array(pex)
+axe.plot(ctr, err, "o-", ms=4, color="#2ca02c", label="magnitude, %")
+axe.plot(ctr, perr, "s-", ms=4, color="#9467bd", label="phase, deg")
 axe.axhline(0, color="k", lw=0.8)
 axe.axvline(1.0 - delta / a, color="#d62728", ls="--", lw=1.3)
 axe.set_xlabel("$r/a$")
-axe.set_ylabel("error  %")
+axe.set_ylabel("solver $-$ exact")
+axe.legend(fontsize=8, ncol=2)
 axe.grid(alpha=0.3)
-axe.set_title("solver minus exact, Bessel evaluated at the radii actually "
-              "sampled", fontsize=9)
+axe.set_title("Bessel evaluated at the radii actually sampled. "
+              "worst: %.2f %% and %.2f deg"
+              % (np.abs(err).max(), np.abs(perr).max()), fontsize=9)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIG, "j_radial_profile.png"), dpi=150)
-print("wrote %s/j_radial_profile.png  -- worst binned error %.2f %%"
-      % (FIG, np.abs(err).max()))
+print("wrote %s/j_radial_profile.png  -- worst binned error %.2f %% and %.2f deg"
+      % (FIG, np.abs(err).max(), np.abs(perr).max()))
 
 # --- R_ac/R_dc against Kelvin across frequency -----------------------------
 # Drawn from the exact formula, with our two measured points on it, so the
