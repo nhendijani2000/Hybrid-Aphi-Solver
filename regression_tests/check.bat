@@ -128,7 +128,22 @@ if not "!RC!"=="0" (
 )
 
 :one_verify
-"%PVBATCH%" verify.py "%C%"
+rem A case may bring its OWN verifier. verify.py is built around a straight
+rem rod: it differences Phi between two END CAPS to find the drive, and bins J
+rem by distance from the axis. 05_Loop_1A_50Hz is a closed ring with neither --
+rem the current circulates and the terminal voltage is a jump ACROSS A CUT --
+rem so it ships verify_loop.py instead. Contorting one script to cover both
+rem would make neither readable, so a case-local verify_*.py wins where it
+rem exists.
+set "VERIFIER="
+set "VNAME="
+for %%F in ("%C%\verify_*.py") do ( set "VERIFIER=%%~fF" & set "VNAME=%%~nxF" )
+if defined VERIFIER (
+  echo     using the case's own verifier, !VNAME!
+  "%PVBATCH%" "!VERIFIER!"
+) else (
+  "%PVBATCH%" verify.py "%C%"
+)
 if errorlevel 1 set "FAILED=!FAILED! %C%"
 goto :eof
 

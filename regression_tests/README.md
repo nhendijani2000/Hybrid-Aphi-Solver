@@ -43,6 +43,7 @@ solver; seconds in `verify-only`.
 | `02_Ansys_Cylinder_50Hz` | 1 V | 0.16 | ~0 | `R` against the exact DC value; `Phi` as a clean `z/L` gradient |
 | `03_Cylinder_1A_50Hz` | **1 A** | 0.16 | ~0 | port current self-consistency; the same mesh as 02 |
 | `04_Cylinder_SkinDepth` | 1 V | **3.00** | **77 %** | the skin effect where it **dominates** — `\|J\|` falls 3.7x and the phase rotates 134° |
+| `05_Loop_1A_50Hz` | **1 A internal** | 0.086 | ~0 | a **closed ring** — multiply connected, driven through a cut |
 
 02 and 03 are **duals** — 02 drives 1 V and reads the current out, 03 drives
 1 A on the same mesh and reads the voltage out — and they must report the same
@@ -701,3 +702,129 @@ gmsh cylinder_skin.geo -3 -o cylinder_skin.msh
 ..\run_case.bat cylinder_393hz_mumps.aphi
 "C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_plots.py output
 ```
+
+---
+
+## 05_Loop_1A_50Hz
+
+A conducting **ring**, driven by a 1 A source through an internal cut. Loop
+radius 6.5 mm, wire radius 0.8 mm, a 20-gon tube cross-section revolved about
+`z`, copper, in a cylinder of air 30 mm in radius and 30 mm tall.
+
+### What only this case can catch
+
+Cases 01–04 are all a straight rod. A rod is **simply connected** and the
+tree-cotree gauge has nothing hard to do on one. A ring is **multiply
+connected**: the current circulates with no terminal anywhere on the outer
+boundary, the cotree has to span the loop, and the only way to drive it is to
+cut it. This is the first case in the suite to use `internal_current`.
+
+| | |
+|---|---|
+| `\|I\|` through the **cut**, where 1 A is injected | **0.999953** A |
+| `\|I\|` through **θ = π/2**, where nothing is prescribed | **1.000183** A |
+
+The second row is the point. A gauge that wrongly killed the loop would show up
+there and in no other case.
+
+### Where the dimensions came from
+
+Not from a document. Two **published** closed forms solved together against a
+reference impedance for this geometry:
+
+```
+R_dc = 2 pi R / (sigma A)
+L    = mu0 R [ ln(8R/a) - 2 + 1/4 ]      round wire, uniform current
+```
+
+`R = 6.5 mm` with `a = 0.8 mm` reproduces the reference `R` to 1.3 % and `L` to
+0.27 %, and agrees independently with dimensions measured off the reference
+model's own scale bar (centreline diameter 1.23 cm, tube 1.4–2.0 mm).
+
+**The reference was run at 100 Hz, not 50**, which was not stated anywhere and
+falls out of the same two equations: `Im(Z)/ω` is 19.75 nH at 100 Hz and
+39.50 nH at 50 Hz, and no geometry consistent with the reported `R` gives
+39.50 nH. It does not matter for what this case checks — `a/δ` is 0.086 at
+50 Hz and 0.121 at 100 Hz, so there is no skin effect either way and `R` and
+`L` are frequency independent between them.
+
+### R: 0.03 %
+
+| | |
+|---|---|
+| measured | 3.543745e-04 Ω |
+| exact for **this** shape | 3.544922e-04 Ω |
+| error | **−0.033 %** |
+
+The exact value is **not** `2πR/(σA)`. Current flows azimuthally, so the path
+length is `2πρ` and varies across the section — the conductance is
+`σ ∫ dA/(2πρ)` and the current crowds toward the inner radius. Ignoring that is
+a 0.44 % error, an order above the solver's own. `verify_loop.py` computes it
+straight off the mesh as `(1/2π)∫dV/ρ²`, assuming nothing about the shape.
+
+The 2.50 % gap to the reference tool decomposes exactly: **+1.61 %** because our
+cross-section is a 20-gon (1.64 % less area than a circle) and 0.91 % between
+the reference and the exact round-torus value.
+
+### L: a 4 % deficit, and it is ours
+
+| | |
+|---|---|
+| measured, terminal voltage | 19.0378 nH |
+| measured, field energy | 19.007 nH |
+| reference tool | 19.748 nH |
+| closed form, free space | 19.8027 nH |
+
+Two independent routes agree, so it is what the solver produced. But the
+reference agrees with the closed form to 0.27 % and **we are 4.02 % below it**.
+
+**Two explanations were tested and both failed.** The finite domain — `n × A = 0`
+at 30 mm confines the return flux, which lowers `L` — but doubling the domain to
+60 mm moved `L` by +0.2 % only, and a dipole estimate agrees that the energy
+beyond 30 mm is worth ~0.09 nH. And tube resolution — refining `lc_ring`
+0.25 → 0.20 mm with `M` 20 → 24 moved it −0.2 %, the wrong way.
+
+**Untested, and the remaining suspect:** resolution of the air beyond one wire
+radius. A wire loop's magnetic energy is logarithmically distributed, so roughly
+half lies between 1 and 10 wire radii from the surface, and that shell is meshed
+at 0.25 mm growing to 4 mm. Refining it needs ~700 k tets in the shell alone,
+which does not fit in 32 GB. So it is **recorded rather than resolved**, and
+`expected.txt` pins `L` as a regression guard rather than claiming it is right.
+
+### Two things that were harder than they look
+
+**The cut needs TWO cuts.** A ring cut in one place is still one connected
+volume — the current goes round the other way. Only cutting at `θ = 0` *and*
+`θ = π` gives two half-rings sharing two faces, which is what a port surface
+needs: a tet on each side.
+
+**An OCC `Torus` will not mesh with a cut in it.** Carrying an internal
+interface and fragmented against the air, it fails with *"Invalid boundary mesh
+(overlapping facets)"* — a curved torus face overlapping itself. That was tried
+eight ways: partial tori welded with `Coherence`, cuts by oversized discs, by
+exact-size discs, by thin boxes, cuts moved off the parametric seam, the seam
+rotated away from the cuts, the air fragmented before and after the cut. All
+failed identically. **Revolving a polygon has none of that trouble** — and it is
+what this project does for every other conductor anyway, because planar lateral
+faces make `∂Φ/∂n = 0` hold exactly.
+
+### Verified by its own script
+
+`verify_loop.py`, not `../verify.py`: the rod verifier finds the drive by
+differencing `Φ` between two end caps, and a ring has none. `check.bat` prefers
+a case-local `verify_*.py` where one exists.
+
+One subtlety it documents: **extracting `L` here is ill-conditioned.**
+`ωL/R = 0.017`, so `Im(Z)` is a small difference on a large product, and
+dividing by the *measured* current rather than the imposed 1 A lets that
+current's own 0.02 % imaginary part move `L` by 1.3 % — fifty times its own
+size. The verifier divides by the imposed current.
+
+```
+gmsh loop.geo -3 -o loop.msh
+..\run_case.bat loop_50hz.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" verify_loop.py
+```
+
+`loop_big.geo` is the 60 mm domain used for the boundary test above; it is kept
+because a negative result is worth being able to reproduce.

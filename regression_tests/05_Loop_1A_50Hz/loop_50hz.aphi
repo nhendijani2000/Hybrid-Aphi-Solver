@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------------------
+# 05_Loop_1A_50Hz -- a conducting RING driven by an internal 1 A current source.
+#
+#     ../run_case.bat loop_50hz.aphi        (from this folder)
+#
+# WHY THIS CASE EXISTS
+#
+# Cases 01-04 are all a straight rod. A rod is SIMPLY CONNECTED and the
+# tree-cotree gauge has nothing hard to do on it. A closed ring is MULTIPLY
+# CONNECTED, and that is where the gauge is actually tested: the cotree has to
+# span the loop, and the current circulates with no terminal anywhere on the
+# outer boundary to attach an electrode to.
+#
+# So the ring is driven through a CUT. `loop_cut` is a complete cross-section
+# of the ring with tets on both sides -- see loop.geo for why that requires
+# revolving the tube in two halves rather than drawing a surface inside a
+# volume. This is the first case in the suite to use `internal_current`.
+#
+# current_direction is a HINT, not a normal: the cut's normal comes from its own
+# faces and the hint only resolves the remaining sign. For a ring in the x-y
+# plane cut at the half-plane y = 0, x > 0, `+y` reads as "counterclockwise seen
+# from +z". The side the hint points AWAY from is held at 0 V, which is what
+# makes this port its own potential reference -- a floating loop needs no other.
+#
+# GEOMETRY: R = 6.5 mm loop radius, a = 0.8 mm tube circumradius, a 20-gon
+# cross-section, copper, in a 30 mm radius x 30 mm cylinder of air.
+# A_poly = 1.977709 mm2 (1.64 % under the circle's pi a^2).
+# delta = 9.346 mm at 50 Hz, so a/delta = 0.086 -- no skin effect.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = loop.msh
+length_unit = mm
+
+[output]
+directory   = output
+
+[analysis]
+type        = frequency
+frequencies = 50                           # Hz
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = ring
+sigma       = 5.8e7                        # copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+[port P1]
+type              = internal_current
+surface           = loop_cut
+current_direction = +y                     # counterclockwise seen from +z
+current           = 1.0                    # A
+
+[solver]
+conditioning = row_scaled
+backend      = mumps
