@@ -166,6 +166,76 @@ it is *higher*.
 > zoomed to 12 mm, so an auto range is set by a far-field minimum three decades below anything
 > visible and the picture lands uniformly red.
 
+### 4.4 E on the plane normal to the torus, through the port
+
+"Normal to the torus" at `θ = 0` means the plane whose normal is the centreline tangent there, which
+is `+y` — so it is the `y = 0` plane, and **that is the cut plane itself**. It slices the tube twice:
+at the port on the `+x` side, and at `θ = π` on the `-x` side.
+
+> **How to read these.** You are looking along `-y` at a *vertical* plane containing the `x` and
+> `z` axes. **`+x` is to the right.** The plane crosses the tube twice — at `x = +6.5 mm`, which is
+> the **port**, and at `x = -6.5 mm`, which is **just a joint** where the two half-rings meet with no
+> potential difference across them. Only one of those two is a source, which is why only one is
+> bright.
+
+| crossing | conductor `\|E\|` | air right around it |
+|---|---|---|
+| `x > 0`, θ = 0 — **the port** | 0.008713 V/m | median **0.174**, max **1.72 V/m** |
+| `x < 0`, θ = π — a plain joint | 0.008703 V/m | median 0.0076, max 0.0099 V/m |
+
+Inside the two conductors `|E|` is the **same** — 0.008713 against 0.008703 V/m, both `J/σ`, because
+the same current flows through both. Outside them it differs by **23×**. That difference *is* the
+port.
+
+![E on the y = 0 plane, both tube cross-sections](fig/e_port_plane.png)
+
+**|E| on the `y = 0` plane**, zoomed to the ring. The port is the bright crossing on the right; the
+faint patch on the left is the joint at `θ = π`.
+
+#### The same cut over the whole domain
+
+![E on the y = 0 plane over the whole domain](fig/e_port_domain.png)
+
+**|E|, the full 60 × 30 mm cut.** Log scale over five decades: 1.7 V/m at the cut face down to below
+1e-4 at the wall.
+
+![B on the same plane over the whole domain](fig/b_port_domain.png)
+
+**|B| on the same cut**, for comparison. It is **continuous** across the port and shows both
+crossings equally — the asymmetry above is an `E` effect only.
+
+The `B` figure is the control. A magnetic field does not care that Φ jumps, so both tube crossings
+look alike there, and the two pictures side by side separate what the port does to `E` from what the
+geometry does to everything.
+
+![E at the port cross-section](fig/e_port_zoom.png)
+
+**At the cut.** The 20-gon conductor is uniform blue at `J/σ`; the air immediately around it reaches
+**1–2 V/m**.
+
+![E one tube radius off the cut](fig/e_port_zoom_off.png)
+
+**One tube radius off the cut**, same colour scale. The surrounding air peaks around 0.2 V/m instead
+— the spike is **local to the port**.
+
+> **This slice lies exactly on a discontinuity, which is the point.** Φ jumps across the cut, so
+> `E = −jωA − ∇Φ` does too: the whole 0.354 mV appears across a zero-thickness interface, and the
+> adjacent air sees an enormous gradient. `B` is continuous there and does not care, which is why
+> §4.2's plot of the same plane needs none of this care.
+
+| air shell hugging the tube, `+x` side | median `\|E\|` |
+|---|---|
+| at the cut, `\|y\| < 0.3a` | **0.4207 V/m** |
+| one tube radius off, `0.7a < \|y\| < 1.3a` | 0.1708 V/m |
+| two to three radii round | 0.0999 V/m |
+| inside the conductor | 0.008584 V/m (`J/σ`) |
+| global maximum, at the cut face | **1.7218 V/m** — 200× the conductor |
+
+The field falls by 2.5× within one tube radius of the cut and by 4.2× by two or three. Both zooms
+are **log scaled**: the view spans more than two decades, from the conductor's 8.6e-03 to 1.7 V/m,
+and a linear range that resolves the conductor saturates every air cell around it into one flat
+colour.
+
 ## 5. Results
 
 ### 5.1 R — 0.11 %

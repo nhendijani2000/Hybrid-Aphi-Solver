@@ -65,7 +65,11 @@ def look(scale, along="z"):
         view.CameraPosition = [0, 0, d]
         view.CameraViewUp = [0, 1, 0]
     elif along == "y":
-        view.CameraPosition = [0, d, 0]
+        # From -y, NOT +y. Looking from +y puts +x on the LEFT of the screen,
+        # so the port at theta = 0 lands on the left and the plain joint at
+        # theta = pi on the right, which reads backwards. From -y, +x is on the
+        # right and the port is the right-hand crossing.
+        view.CameraPosition = [0, -d, 0]
         view.CameraViewUp = [0, 0, 1]
     else:
         view.CameraPosition = [d, 0, 0]
@@ -345,5 +349,101 @@ def geometry(name, clip_half, elev_scale):
 
 geometry("geometry.png", False, 0.85)
 geometry("geometry_cut.png", True, 0.85)
+
+
+# ---------------------------------------------------------------------------
+# 7. E ON THE PLANE NORMAL TO THE TORUS THROUGH THE PORT
+# ---------------------------------------------------------------------------
+# "Normal to the torus" at theta = 0 means the plane whose normal is the
+# centreline tangent there, which is +y -- so it is the y = 0 plane, and that
+# is the CUT PLANE itself. It slices the tube twice: at the port (theta = 0,
+# +x) and at theta = pi (-x).
+#
+# THE SLICE SITS EXACTLY ON A DISCONTINUITY. Phi jumps across the cut, so E
+# does too, and a plane lying exactly in it samples cells from both sides. B is
+# continuous there and does not care (section 4.2); E very much does. Both are
+# drawn: the plane itself, and a slice one tube radius to the +y side of it
+# where the field is single valued, so the two can be compared.
+def e_on_plane(name, yoff, focal, scale, pin, title, logscale=False):
+    clear()
+    calc = Calculator(Input=src("E_field.vtk"))
+    calc.AttributeType = "Cell Data"
+    calc.ResultArrayName = "emag"
+    calc.Function = ("sqrt(E_cell_real_X^2+E_cell_real_Y^2+E_cell_real_Z^2"
+                     "+E_cell_imag_X^2+E_cell_imag_Y^2+E_cell_imag_Z^2)")
+    sl = Slice(Input=calc)
+    sl.SliceType = "Plane"
+    sl.SliceType.Origin = [0.0, yoff, 0.0]
+    sl.SliceType.Normal = [0.0, 1.0, 0.0]
+    UpdatePipeline(proxy=sl)
+    dd = Show(sl, view)
+    ColorBy(dd, ("CELLS", "emag"))
+    l = GetColorTransferFunction("emag")
+    l.UseLogScale = 0
+    l.MapControlPointsToLinearSpace()
+    l.ApplyPreset("Rainbow Uniform", True)
+    l.RescaleTransferFunction(pin[0], pin[1])
+    if logscale:
+        l.MapControlPointsToLogSpace()
+        l.UseLogScale = 1
+    bar(l, title)
+    dd.SetScalarBarVisibility(view, True)
+    view.CameraPosition = [focal[0], focal[1] - 0.2, focal[2]]   # from -y: +x on the right
+    view.CameraFocalPoint = list(focal)
+    view.CameraViewUp = [0, 0, 1]
+    view.CameraParallelScale = scale
+    shot(name)
+
+
+# the whole plane: both tube cross-sections
+e_on_plane("e_port_plane.png", 0.0, (0, 0, 0), 1.6 * (R + a),
+           (0.0, 3.0e-2), "|E|  V/m")
+# THE SAME CUT OVER THE WHOLE DOMAIN. Log scaled and it has to be: |E| runs
+# from 1.7 V/m at the cut face to under 1e-4 V/m at the 30 mm wall, five
+# decades, and the ring occupies a fifth of the frame.
+e_on_plane("e_port_domain.png", 0.0, (0, 0, 0), 1.03 * Rd,
+           (1.0e-5, 2.0), "|E|  V/m", logscale=True)
+# B on the same cut over the whole domain, for comparison -- it is continuous
+# across the port, so it has none of E's trouble there.
+def b_on_plane(name, scale, pin, logscale=True):
+    clear()
+    calc = Calculator(Input=src("B_field.vtk"))
+    calc.AttributeType = "Cell Data"
+    calc.ResultArrayName = "bmagp"
+    calc.Function = ("sqrt(B_cell_real_X^2+B_cell_real_Y^2+B_cell_real_Z^2"
+                     "+B_cell_imag_X^2+B_cell_imag_Y^2+B_cell_imag_Z^2)")
+    sl = Slice(Input=calc)
+    sl.SliceType = "Plane"
+    sl.SliceType.Origin = [0.0, 0.0, 0.0]
+    sl.SliceType.Normal = [0.0, 1.0, 0.0]
+    UpdatePipeline(proxy=sl)
+    dd = Show(sl, view)
+    ColorBy(dd, ("CELLS", "bmagp"))
+    l = GetColorTransferFunction("bmagp")
+    l.UseLogScale = 0
+    l.MapControlPointsToLinearSpace()
+    l.ApplyPreset("Rainbow Uniform", True)
+    l.RescaleTransferFunction(pin[0], pin[1])
+    if logscale:
+        l.MapControlPointsToLogSpace()
+        l.UseLogScale = 1
+    bar(l, "|B|  T")
+    dd.SetScalarBarVisibility(view, True)
+    look(scale, along="y")
+    shot(name)
+
+
+b_on_plane("b_port_domain.png", 1.03 * Rd, (1.0e-7, 4.0e-4))
+# Zoomed onto the PORT cross-section. LOG SCALE, because this view spans more
+# than two decades: the conductor sits at J/sigma = 8.6e-3 while the air right
+# at the cut reaches 1.7 V/m. A linear range that shows the conductor saturates
+# every air cell around it into one flat colour, which is how this first came
+# out.
+e_on_plane("e_port_zoom.png", 0.0, (R, 0, 0), 3.0 * a,
+           (5.0e-3, 2.0), "|E|  V/m", logscale=True)
+# The same zoom one tube radius to the +y side, OFF the cut, where Phi is
+# single valued. The difference between the two is the discontinuity.
+e_on_plane("e_port_zoom_off.png", a, (R, a, 0), 3.0 * a,
+           (5.0e-3, 2.0), "|E|  V/m", logscale=True)
 
 print("done")
