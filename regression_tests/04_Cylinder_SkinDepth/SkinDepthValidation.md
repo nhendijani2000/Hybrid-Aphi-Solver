@@ -267,8 +267,9 @@ core carries almost none of it.
 
 ![Current density on a longitudinal slice](fig/j_longitudinal.png)
 
-**Longitudinal slice.** Nothing varies along `z`, which is what the infinite-cylinder assumption
-behind the analytical solution requires.
+**Longitudinal slice**, the full 40 mm. Two skin layers on the outside, a blue core between them,
+and the bands run **straight down the length** — nothing varies along `z`, which is what the
+infinite-cylinder assumption behind the analytical solution requires.
 
 Unlike the 50 Hz cases, the auto colour range here is *meaningful*: `|J|` spans nearly 4× across the
 section, so the visible structure is physics rather than noise in the fifth digit.

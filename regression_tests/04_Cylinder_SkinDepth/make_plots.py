@@ -126,13 +126,28 @@ d2 = Show(sl2, view)
 ColorBy(d2, ("CELLS", "Jmag"))
 d2.RescaleTransferFunctionToDataRange(True, False)
 d2.SetScalarBarVisibility(view, True)
-view.CameraPosition = [0.05, 0, L / 2]
+# THE CAMERA MUST LOOK ALONG THE SLICE NORMAL. The normal is +y, so the slice
+# lies in the x-z plane and the camera has to sit out along y. An earlier
+# version put it at [0.05, 0, L/2] -- out along x -- which views that plane
+# EDGE-ON and renders nothing but the colour bar. It shipped in the report
+# under a caption claiming it showed no z dependence, which the blank figure
+# plainly did not.
+view.CameraPosition = [0, 0.05, L / 2]
 view.CameraFocalPoint = [0, 0, L / 2]
 view.CameraViewUp = [0, 0, 1]
 view.CameraParallelScale = 0.60 * L
+# Park the colour bar clear of the rod. At the default location it sits on top
+# of the conductor's right-hand skin layer -- the very region the figure exists
+# to show -- so it is moved out and the frame widened to leave room for it.
+bar2 = GetScalarBar(lut, view)
+bar2.WindowLocation = "Any Location"
+bar2.Position = [0.74, 0.30]   # the bar TITLE is drawn to its right; at 0.80 it fell off the frame
+bar2.ScalarBarLength = 0.42
+bar2.TitleColor = [0, 0, 0]
+bar2.LabelColor = [0, 0, 0]
 Render(view)
 SaveScreenshot(os.path.join(FIG, "j_longitudinal.png"), view,
-               ImageResolution=[700, 1100])
+               ImageResolution=[900, 1100])
 print("wrote %s/j_longitudinal.png  -- no z dependence" % FIG)
 
 # --- the radial profile, per cell, against exact Bessel --------------------
