@@ -17,10 +17,12 @@
 //     200 Hz   4.673 mm    2.14        2.34             0.5055
 //     500 Hz   2.955 mm    3.38        1.48             0.1826   <- marginal
 //     1 kHz    2.090 mm    4.79        1.04             0.0538   <- not resolved
-// So this mesh is honest at 50 Hz (measured: 0.948 against the exact 0.9414 for
-// the same bin centres, 0.7 %) and marginal by 200 Hz. Going higher needs lc_skin
-// reduced, which costs elements fast -- and the direct solver is the binding
-// constraint, not gmsh: 49276 unknowns already take 93 s to factor and 751 MB.
+// So this mesh is honest at 50 Hz (measured 0.94229 against the exact 0.93993
+// averaged over the radii actually sampled, 0.25 %) and marginal by 200 Hz.
+// Going higher needs lc_skin reduced, which costs elements fast. The internal
+// direct solver used to be the binding constraint -- 55652 unknowns take 90 s to
+// factor -- but `backend = mumps` does the same matrix in 2.14 s, so the real
+// limit now is the facet rule: see lc_core below.
 //
 // The box is 200 mm across, W/a = 20, and the wire spans its full height so
 // both caps lie on the boundary and the problem stays a clean two-terminal
@@ -54,8 +56,16 @@ N = 36;      // sides of the wire polygon
 // Mesh sizing. These are the field parameters, NOT point sizes: the field
 // below overrides point sizes entirely (see CharacteristicLengthExtendFromBoundary).
 lc_skin = 2.0;    // at the conductor surface, where the skin depth lives
+lc_core = 2.0;    // INSIDE the conductor -- see the field block below for why
 lc_far  = 16.0;   // out in the air, where nothing happens
 d_far   = 45.0;   // distance over which one grows into the other
+
+// WHY lc_core = 2.0 AND NOT SMALLER. The polygon facet is
+// 2a sin(pi/N) = 2*10*sin(pi/36) = 1.743 mm, and the design rule is that the
+// volume element size must stay COMPARABLE to the facet width -- a volume size
+// well below it produces slivers, which is what killed the N=96 experiment in
+// case 02 from the other direction. So 2.0 mm is at the useful limit for N=36;
+// buying a finer interior means raising N first, not lowering this.
 
 // --- wire cross-section: a regular N-gon inscribed in radius a --------------
 For i In {0:N-1}
@@ -121,9 +131,20 @@ Physical Surface("wire_top", 11)    = {wire_top};
 // wanted: the skin effect is inside, and the 1/r field outside wants some
 // resolution too, but neither needs it more than a few skin depths away.
 //
-// Distance from the lateral surface reaches a = 10 mm at the axis, so the core
-// of the conductor is meshed at roughly lc_skin + (10/d_far)(lc_far - lc_skin)
-// = 3.8 mm -- coarse, and correctly so, since nothing happens there.
+// THE DISTANCE FIELD IS UNSIGNED, WHICH IS THE CATCH. It reaches a = 10 mm at
+// the axis -- the same reading as a point 10 mm out in the air -- so the
+// Threshold coarsens INWARD as well as outward and the core is meshed at about
+// 3.8 mm. An earlier version of this comment called that "correctly so, since
+// nothing happens there". That is true at case 02's a/delta = 0.16. It is false
+// here: at a/delta = 1.07 the exact |J| varies 6.7 % from axis to rim, and the
+// uncapped mesh captured only 5.8 % of it while leaving r < 0.1a with NO CELLS
+// AT ALL and the error tracking element size, +1.03 % in the core against
+// +0.52 % at the rim. The skin effect is the one thing this case exists to
+// measure, so the core has to be resolved.
+//
+// The cap below is the same construction case 02 uses. Restrict returns a huge
+// size outside its volume, which is exactly what Min wants, so lc_core binds
+// only inside the wire and the air grading is untouched.
 Field[1] = Distance;
 Field[1].SurfacesList = {lateral[]};
 Field[1].Sampling = 100;
@@ -135,7 +156,17 @@ Field[2].SizeMax = lc_far;
 Field[2].DistMin = 0.0;
 Field[2].DistMax = d_far;
 
-Background Field = 2;
+Field[3] = MathEval;
+Field[3].F = Sprintf("%g", lc_core);   // a bare "lc_core" stores the LITERAL STRING
+
+Field[4] = Restrict;
+Field[4].InField = 3;
+Field[4].VolumesList = {wire_volume};
+
+Field[5] = Min;
+Field[5].FieldsList = {2, 4};
+
+Background Field = 5;
 
 // Without this the point sizes above compete with the field and win near the
 // geometry, which would defeat the grading entirely.
@@ -145,7 +176,8 @@ Mesh.MeshSizeFromCurvature = 0;
 
 Mesh.Algorithm3D = 1;          // Delaunay, which respects a background field well
 Mesh.Optimize = 1;
-Mesh.OptimizeNetgen = 0;
+Mesh.OptimizeNetgen = 1;       // element SHAPE at fixed size; 24 % less B scatter
+                               // and a 26 % faster factorization on case 02
 Mesh.MshFileVersion = 4.1;
 
 // ---------------------------------------------------------------------------
@@ -155,4 +187,18 @@ Mesh.MshFileVersion = 4.1;
 // and costs roughly 8x the elements in the refined shell. Before reaching for
 // it, check whether the answer being sought needs the field resolved at all --
 // R and L converge considerably faster than the current profile does.
+//
+// AND RAISE N WHEN YOU DO. The facet is 2a sin(pi/N) = 1.743 mm at N = 36, and a
+// volume size well below the facet width makes slivers rather than accuracy, so
+// lc_skin and lc_core cannot usefully go much under 2 mm at this N. Raise N
+// first, then the sizes -- and check element quality, not just node count: the
+// N = 96 experiment in case 02 looked affordable by node count and failed on
+// shape.
+//
+// WHAT WILL NOT HELP: refining to straighten Phi. Phi deviates from V z/L by
+// 0.49 here because omega*L/R = 2.89 and the tree-cotree gauge puts most of the
+// axial E into -j*omega*A rather than -grad Phi. Running this same mesh at 1 Hz
+// drops the deviation to 1.9e-03, a factor of 253 with identical elements, which
+// is how we know it is the gauge and not discretisation. E, B, H and J are gauge
+// independent and are what the case validates.
 // ---------------------------------------------------------------------------

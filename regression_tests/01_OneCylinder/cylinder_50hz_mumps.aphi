@@ -1,0 +1,69 @@
+# NOTE: generated from cylinder_50hz.aphi -- same case, MUMPS backend.
+# ---------------------------------------------------------------------------
+# 01_OneCylinder -- one solid copper cylinder in a box, driven by 1 V across
+# its two end caps, at 50 Hz.
+#
+#     ../../run_case.bat cylinder_50hz.aphi          (from this folder)
+#
+# Everything it writes lands in ./output/.
+#
+# GEOMETRY (cylinder.geo): a = 10 mm, L = 40 mm, box 200 mm, a 36-gon.
+# 4041 nodes, 49276 unknowns; the 50 Hz solve takes about 3 minutes.
+# The radius is chosen so that 50 Hz is already interesting: the skin depth in
+# copper at 50 Hz is 9.346 mm, so a/delta = 1.07 and the current is beginning
+# to crowd toward the surface. Every decade up makes it stronger, which is what
+# the frequency sweep in this folder is for.
+#
+# WHAT TO EXPECT
+#
+#   R (DC)        = L / (sigma * A_poly) = 0.040 / (5.8e7 * 311.87e-6)
+#                 = 2.2114e-06 ohm
+#   |E| in wire   ~ V/L = 25 V/m, and NOT uniform: a/delta = 1.07, so |E| rises
+#                   toward the surface. MEASURED 5.5 % from axis to rim, which
+#                   matches the exact Bessel profile to 0.7 % (0.948 vs 0.9414
+#                   comparing the same radial bin centres).
+#   |B| at r = a  = mu0 I / (2 pi a), peaking at the conductor surface and
+#                   falling as 1/r outside.
+#
+# A_poly = (36/2) * 10^2 * sin(2*pi/36) = 311.87 mm^2, which is 0.51 % below
+# pi*a^2 = 314.16. Compare R against the POLYGON, not the circle.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = cylinder.msh
+length_unit = mm
+
+[output]
+directory   = output_mumps
+
+[analysis]
+type        = frequency
+frequencies = 50                           # Hz
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire
+sigma       = 5.8e7                        # copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+[port P1]
+type        = boundary_voltage
+surface     = wire_top
+voltage     = 1.0                          # V
+
+[port P2]
+type        = boundary_voltage
+surface     = wire_bottom
+voltage     = 0.0                          # V, the reference
+
+[solver]
+conditioning = row_scaled
+backend      = mumps

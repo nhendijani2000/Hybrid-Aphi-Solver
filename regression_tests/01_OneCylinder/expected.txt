@@ -9,20 +9,13 @@
 # is absent -- see the notes on each below. An omitted key is a claim about the
 # physics, not an exemption.
 #
-# This case ALSO still carries the core-sizing mesh defect that was fixed in
-# case 02 (see ../02_Ansys_Cylinder_50Hz/cylinder.geo): the Distance field
-# grades from the surface and never constrains the interior, so the core is
-# sampled by only 28 cells out of 2658 in the mid-length band -- 1.1 % of the
-# cells for 6.2 % of the cross-section area, with NO cells at all inside
-# r < 0.1a. Elements there are 4.5 mm against 1.74 mm at the rim, and the error
-# tracks that: +1.03 % in the core against +0.52 % at the surface. The tolerances
-# below reflect what THIS mesh holds. Fixing the mesh should tighten them.
-#
 #   key                value        tol      what sets the tolerance
 # ---------------------------------------------------------------------------
-# Which input to run. Needed here because the folder holds three .aphi files
-# -- 1 Hz, 50 Hz and a 4-frequency sweep -- and without this check.bat would
-# pick the sweep, which writes a different frequency into the same output dir.
+# Which input to run. Needed here because the folder holds four .aphi files
+# -- 1 Hz, 50 Hz, a MUMPS variant and a 4-frequency sweep -- and without this
+# check.bat would pick the sweep, which writes a different frequency into the
+# same output dir. This names the DEFAULT-solver 50 Hz case deliberately, so
+# check.bat exercises the internal solver rather than MUMPS.
 input                  cylinder_50hz.aphi
 
 # geometry, needed to compute the exact comparisons
@@ -38,48 +31,77 @@ frequency              50.0
 # is the wrong check and is deliberately absent: it would fail by the whole
 # size of the skin effect, 2.6 %, and calling that an error would be backwards.
 #
-# The analytic value is Kelvin's, from the Bessel functions of the first kind:
+# The analytic value is Kelvin's, from the Kelvin functions ber and bei:
 #
-#     u = sqrt(2) a/delta = 1.5132
-#     R_ac/R_dc = (u/2) * (ber(u) bei'(u) - bei(u) ber'(u))
-#                       / (ber'(u)^2 + bei'(u)^2)          = 1.02676
+#     u = sqrt(2) a/delta = 1.513191
+#     ber  =  0.918265305   bei  = 0.567230807
+#     ber' = -0.215566682   bei' = 0.735963532
+#     R_ac/R_dc = (u/2) (ber bei' - bei ber') / (ber'^2 + bei'^2) = 1.0267245
 #
-# and we measure 1.02596 -- 0.078 % low. The tolerance is that gap plus
+# computed from the defining series rather than by differencing J0 -- a central
+# difference put bei' out in the 6th digit, which moved this reference in the
+# 5th, and it is the number other numbers are judged against.
+#
+# We measure 1.026330 -- low by 0.038 %. The tolerance is that gap plus
 # headroom. This is the only place in the suite where the skin effect itself is
 # checked against theory; cases 02 and 03 cannot see it.
-R_over_Rdc             1.02676      0.002
+R_over_Rdc             1.0267245    0.001
 
 # L has no closed form for a finite box, so it is pinned to catch CHANGE. Note
 # it is 20.8 nH against case 02's 22.6 nH -- a different conductor radius, not
 # a discrepancy.
-L_nH                   20.8157      0.05
+L_nH                   20.8365      0.05
 
 # PHI IS GAUGE DOMINATED HERE, so both Phi checks are deliberately absent.
 #
 # At omega*L/R = 2.89 the reactance dominates, and under the tree-cotree gauge
 # Phi is not the z/L gradient -- it differs by -j*omega*psi, which is the
-# larger term. Measured, Phi/V deviates from z/L by 0.54 and pointwise by 0.98,
-# against 2e-3 and 1e-2 in case 02. That is the formulation behaving correctly
-# in a regime where Phi is gauge dependent and E, B, H and J are not, and it is
-# a large part of why this case exists. Asserting a z/L gradient here would be
-# asserting something false. The gauge-independent quantities carry the load:
-# R against Kelvin above, and J below.
+# larger term. Measured, Phi/V deviates from z/L by 0.49 and pointwise by 0.98,
+# against 2e-3 and 1e-2 in case 02.
+#
+# THIS WAS TESTED, not assumed. Running the SAME mesh at 1 Hz instead of 50 Hz
+# -- identical elements, only omega changed -- takes the deviation from 5.4e-01
+# to 2.1e-03, a factor of 254. Discretisation error cannot do that; it would be
+# about the same at both frequencies. So the deviation is the gauge, it scales
+# with omega, and refining the mesh does not remove it: the refinement recorded
+# below moved it only from 0.542 to 0.488 while halving the error in every
+# gauge-INDEPENDENT quantity. Asserting a z/L gradient here would be asserting
+# something false. R against Kelvin above and J below carry the load.
 #
 # (phi_vs_zL_worst_max and phi_pointwise_rel_max intentionally omitted.)
 
 # THE J PROFILE, and why the reference is not the r=0 Bessel value. verify.py
 # measures a mesh average over r < 0.25a divided by one over r > 0.90a. Where
-# the profile is flat that is the same thing as J(0)/J(a); here it is not. The
-# 28 core cells sit at r = 0.19a on average, where Bessel gives a higher value
-# than at r = 0, so the honest reference is the Bessel function averaged over
-# THE SAME RADII the mesh sampled:
+# the profile is flat that is the same thing as J(0)/J(a); here it is not, so
+# the reference is the Bessel function averaged over THE SAME RADII the mesh
+# sampled. That reference therefore MOVES when the mesh changes, and it is
+# 0.93993 for this mesh (it was 0.94089 before the core was refined).
 #
-#     J(0)/J(a) at r=0 exactly      0.926497   <- NOT the right comparison
-#     Bessel at the sampled radii   0.940888   <- this one
-#     measured                      0.945436   -- 0.48 % high
+#     Bessel at r=0 over r=a         0.926497   <- NOT the right comparison
+#     Bessel at the sampled radii    0.93993    <- this one
+#     measured                       0.94229    -- 0.250 % high
 #
-# 0.48 % is the coarse core: 28 cells cannot resolve a profile that varies. The
-# tolerance is that gap plus headroom, and it should tighten when the core
-# sizing is fixed.
-J_ratio_exact          0.940888
-J_ratio_tol            6.0e-3
+# The tolerance is that gap plus headroom.
+J_ratio_exact          0.93993
+J_ratio_tol            4.0e-3
+
+# ---------------------------------------------------------------------------
+# WHAT THE CORE REFINEMENT BOUGHT. cylinder.geo used to size the whole mesh from
+# one UNSIGNED distance-to-lateral-surface field, which reads 10 mm on the axis
+# -- the same as 10 mm out in the air -- so it coarsened INWARD and left the
+# core at 4.4 mm elements with NO CELLS AT ALL inside r < 0.1a. It now caps the
+# interior at lc_core = 2.0 mm with MathEval+Restrict+Min, and runs
+# Mesh.OptimizeNetgen.
+#
+#                          before      after      exact      error
+#   R/R_dc                1.025955   1.026330   1.0267245   0.075% -> 0.038%
+#   <J>core/<J>surf       0.94544    0.94229    (own ref)   +0.483% -> +0.250%
+#   axis-to-rim |J|         5.76 %     6.09 %      6.70 %    86% -> 91% captured
+#   Phi/V vs z/L          5.42e-01   4.88e-01       --       gauge, barely moves
+#   core cells, mid band   28/2658    130/3686
+#   nodes                     4041       4755
+#
+# lc_core cannot usefully go below about 2 mm at N = 36: the polygon facet is
+# 2a sin(pi/N) = 1.743 mm and a volume size well under the facet width makes
+# slivers. A finer interior needs a larger N first.
+# ---------------------------------------------------------------------------

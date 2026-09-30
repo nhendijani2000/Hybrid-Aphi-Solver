@@ -208,29 +208,45 @@ at the lowest frequency of interest. The earlier 0.2 mm geometry had
 `a/delta = 0.02` and could not show a skin effect at any frequency this solver
 targets.
 
-The mesh is graded from the conductor surface outward: 2.0 mm at the surface,
-16 mm in the far air, with 60 % of the nodes in the two radial bands straddling
-`r = a`. Node density at the surface is 600x that at the box wall.
+The mesh is graded from the conductor surface outward -- 2.0 mm at the surface,
+16 mm in the far air -- and **capped at 2.0 mm inside the conductor**, which is a
+separate field and the thing that was missing. See "The core sizing, and why it
+had to be capped" below; briefly, the grading field is an unsigned distance from
+the lateral surface, so without the cap it coarsens inward as well as outward and
+leaves the axis at 4.4 mm elements.
 
 | | |
 |---|---|
-| nodes | 4041 |
-| unknowns | 49276 |
-| nnz(L) after AMD | 39.4 M, 751 MB |
-| factorization | ~93 s per frequency |
-| one frequency, end to end | ~3 min |
+| nodes | 4755 |
+| unknowns | 55652 |
+| nnz(L) after AMD | 38.43 M |
+| factorization, internal solver | 90.0 s per frequency |
+| factorization, `backend = mumps` | **2.14 s** -- 42x |
+| one frequency end to end | 91.5 s internal, **3.1 s** MUMPS |
 
-**The direct solver, not gmsh, is what limits the mesh.** Fill grows roughly as
-`n^1.5`: an 8057-node version of this same geometry needed 4.3 GB and took
-12 min 19 s for a single frequency. If you refine `lc_skin`, expect that curve.
+Element size inside the conductor, measured as the equivalent regular-tet edge:
+
+| `r/a` | 0.0-0.1 | 0.1-0.2 | 0.3-0.5 | 0.5-0.7 | 0.7-0.9 | 0.9-1.0 |
+|---|---|---|---|---|---|---|
+| cells | 53 | 184 | 853 | 1350 | 2560 | 4492 |
+| `<h>` mm | 2.60 | 2.68 | 2.70 | 2.63 | 2.30 | 1.65 |
+
+**The direct solver, not gmsh, is what limits the mesh** -- or it was. Fill grows
+roughly as `n^1.5`: an 8057-node version of this same geometry needed 4.3 GB and
+12 min 19 s per frequency with the internal solver. MUMPS factorizes the present
+matrix in 2.14 s, so that curve is no longer the binding constraint on
+refinement; **the facet rule is.** `lc_core` cannot usefully go below about 2 mm
+at `N = 36`, because the polygon facet is `2a sin(pi/N) = 1.743 mm` and a volume
+size well under the facet width produces slivers. A finer interior needs a larger
+`N` first.
 
 ### What is known about the answer
 
 - `R = L/(sigma*A_poly) = 2.2114e-06 ohm`, against the **polygon** area
   `311.87 mm^2`, not `pi a^2 = 314.16`.
-- `|E|` rises toward the surface. Measured 5.5 % from axis to rim at 50 Hz,
-  against 0.9414 from the exact `J0(kr)/J0(ka)` for the same radial bin
-  centres -- 0.7 %.
+- `|E|` rises toward the surface. Measured **6.09 %** from axis to rim at 50 Hz
+  against the exact **6.70 %** from `J0(kr)/J0(ka)`, so 91 % of the crowding is
+  captured. It was 5.76 % (86 %) before the core was capped.
 - `|B|` is zero on the axis, linear in `r` inside, `1/r` outside, peaking at the
   conductor surface.
 
@@ -285,48 +301,126 @@ fail, and put it back.
 `tools/pv_extract_rl.py output` and `tools/pv_ampere.py output`:
 
     conductor volume     1.250267e-05 m3   exactly the 36-gon
-    terminal current     47269.85 - 136555.16 j A
-    R                    2.263692e-06 ohm
+    terminal current     47199.07 - 136437.18 j A   |I| = 144370.55 A
+    R                    2.264520e-06 ohm
     R (DC, exact)        2.206425e-06 ohm
-    R_ac / R_dc          1.0260
+    R_ac / R_dc          1.026330
 
-`R` is **2.60 % above DC**, against **2.67 %** from the exact Kelvin-function
-result `R_ac/R_dc = (u/2)[ber bei' - bei ber']/(ber'^2 + bei'^2)` at
-`u = sqrt(2) a/delta = 1.5132`: measured **1.02596** against **1.02676**, low by
-**0.078 %**. That agreement is the point of the geometry: on the old 0.2 mm wire
-this rise was about 1e-7 and indistinguishable from nothing. It is asserted by
-`check.bat` as `R_over_Rdc`, and it is the **only** place in the suite where the
-skin effect itself is checked against theory.
+`R` is **2.63 % above DC**, against the exact Kelvin-function result
+`R_ac/R_dc = (u/2)[ber bei' - bei ber']/(ber'^2 + bei'^2)` at
+`u = sqrt(2) a/delta = 1.513191`:
+
+| | |
+|---|---|
+| `ber`, `bei` | 0.918265305, 0.567230807 |
+| `ber'`, `bei'` | -0.215566682, 0.735963532 |
+| Kelvin `R_ac/R_dc` | **1.0267245** |
+| measured | **1.026330**, low by **0.038 %** |
+
+Take those from the **defining series**, not from differencing `J0`: a central
+difference put `bei'` out in the 6th digit, which moved this reference in the
+5th, and it is the number the others are judged against.
+
+That agreement is the point of the geometry: on the old 0.2 mm wire this rise was
+about 1e-7 and indistinguishable from nothing. `check.bat` asserts it as
+`R_over_Rdc`, and it is the **only** place in the suite where the skin effect
+itself is checked against theory.
 
 The `J` profile is checked too, and the reference needs care. `verify.py`
 measures a mesh average over `r < 0.25a` divided by one over `r > 0.90a`. Where
 the profile is flat that is the same as `J(0)/J(a)`; here it is not, because the
-28 core cells sit at `r = 0.19a` on average rather than at the axis:
+core cells sit well off the axis:
 
 | | |
 |---|---|
 | Bessel at `r = 0` over `r = a` | 0.926497 &nbsp; ← **not** the right comparison |
-| Bessel averaged over **the radii the mesh actually sampled** | **0.940888** |
-| measured | 0.945436, high by **0.48 %** |
+| Bessel averaged over **the radii the mesh actually sampled** | **0.93993** |
+| measured | 0.94229, high by **0.250 %** |
 
-Comparing against the `r = 0` value would read as 2 % solver error when the
-solver is within half a percent. The 0.48 % that remains is the coarse core:
-**28 cells out of 2658** in the mid-length band -- 1.1 % of them for 6.2 % of the
-cross-section area, and NO cells at all inside r < 0.1a -- because this case
-still has the
-core-sizing mesh defect that was fixed in case 02 — the `Distance` field grades
-from the conductor surface and never constrains the interior. Fixing it should
-tighten both this and the `R` agreement.
+Comparing against the `r = 0` value would read as 1.7 % solver error when the
+solver is within a quarter of a percent. **Because that reference is an average
+over sampled radii it moves when the mesh moves** -- it was 0.94089 before the
+core was capped -- so it has to be recomputed, not carried over, whenever
+`cylinder.geo` changes.
 
-`|B|` against Ampere's law, per cell, ratio across the whole domain:
+### The core sizing, and why it had to be capped
 
-     r (mm)        |B| meas   |B| Ampere    ratio
-     0.05 - 0.075    0.9298      0.9319     0.998
-     0.175 - 0.200   2.6619      2.7001     0.986     <- conductor surface
-     0.250 - 0.275   2.1875      2.2022     0.993
-     0.375 - 0.400   1.4919      1.4926     1.000
+`cylinder.geo` sized the whole mesh from one field: an **unsigned** `Distance`
+from the wire's lateral surface, mapped through a `Threshold`. That distance
+reads 10 mm on the axis -- the same as a point 10 mm out in the air -- so the
+field coarsened **inward** as well as outward. An earlier version of the `.geo`
+called that "correctly so, since nothing happens there", which is true at case
+02's `a/delta = 0.16` and false here.
 
-Linear in `r` inside, `1/r` outside, within 1-3 % throughout.
+The fix is the same `MathEval` + `Restrict` + `Min` construction case 02 uses:
+`Restrict` returns a huge size outside its volume, which is exactly what `Min`
+wants, so `lc_core` binds only inside the wire and the air grading is untouched.
+`Mesh.OptimizeNetgen` was switched on at the same time.
+
+| | before | after | exact | |
+|---|---|---|---|---|
+| `R/R_dc` | 1.025955 | **1.026330** | 1.0267245 | 0.075 % -> **0.038 %** |
+| `<J>core/<J>surf` vs own ref | +0.483 % | **+0.250 %** | -- | halved |
+| axis-to-rim &#124;J&#124; | 5.76 % | **6.09 %** | 6.70 % | 86 % -> **91 %** captured |
+| core cells, mid band | 28 / 2658 | **130 / 3686** | -- | none at all inside `r<0.1a` before |
+| `<h>` in the core | 4.41 mm | **2.60 mm** | -- | |
+| nodes | 4041 | 4755 | -- | +17.7 % |
+| `Phi/V` vs `z/L` | 5.42e-01 | 4.88e-01 | -- | **barely moves -- see below** |
+
+Every gauge-**independent** quantity roughly halved its error. `Phi` moved 10 %,
+which is the point of the next section.
+
+### Phi is gauge dominated here, and refining the mesh does not fix it
+
+At `omega*L/R = 2.89` the reactance dominates. `E = -j*omega*A - grad Phi`, and
+how the axial `E` splits between those two terms is set by that ratio: here `A`
+carries most of it, `grad Phi` carries little, and **the continuum answer for
+`Phi` is not `V z/L`.** So `Phi/V` deviating from `z/L` by 0.49 is not an error to
+be refined away.
+
+That is a claim worth testing rather than asserting, and the test is cheap: run
+the **same mesh** at 1 Hz instead of 50 Hz, so the elements are identical and
+only `omega` changes.
+
+| same mesh | `omega*L/R` | `a/delta` | `Phi/V` vs `z/L` |
+|---|---|---|---|
+| 50 Hz | 2.891 | 1.070 | **4.88e-01** |
+| 1 Hz | 0.059 | 0.151 | **1.93e-03** |
+
+**253x**, on identical elements. Discretisation error cannot do that -- it would
+be about the same at both frequencies. The deviation scales with `omega`, so it
+is the gauge. The residual 1.9e-03 at 1 Hz *is* the mesh-limited part, and
+capping the core improved that from 2.1e-03 -- about 10 %, which at 50 Hz is
+invisible under 0.49.
+
+This is why `01_OneCylinder/expected.txt` omits both `Phi` checks. `Phi` is gauge
+dependent; `E`, `B`, `H` and `J` are not, and those carry the validation.
+
+`cylinder_1hz_mumps.aphi` regenerates `output_1hz/` in about 3 s, so the
+comparison can be redone whenever the mesh changes. **Both directories must come
+from the same mesh for it to mean anything**, which is why that variant exists.
+
+`|B|` against Ampere's law, per cell, ratio across the whole domain. Re-measured
+on the present mesh -- the table that used to sit here had `r` running to 0.4,
+which cannot be this geometry's millimetres when the conductor surface is at
+`r = 10 mm`, so it was carried over from the old 0.2 mm wire:
+
+     r (mm)        |B| meas   |B| Ampere    ratio   cells
+      1.0 -  2.0     0.4518      0.4535     0.996      50
+      3.0 -  4.0     1.0094      1.0173     0.992      96
+      5.0 -  6.0     1.5670      1.5766     0.994     169
+      8.0 -  9.0     2.5012      2.4892     1.005     351
+      9.5 - 10.0     2.7727      2.7712     1.001     797   <- conductor surface
+     10.0 - 11.0     2.7053      2.7511     0.983    1277
+     12.0 - 14.0     2.2391      2.2570     0.992     530
+     18.0 - 22.0     1.4481      1.4512     0.998     201
+     35.0 - 45.0     0.7371      0.7316     1.008      99
+     70.0 - 90.0     0.3681      0.3654     1.007     103
+
+Linear in `r` inside, `1/r` outside, **within 0.4-1.7 % from `r = 1 mm` to
+`r = 80 mm`**. Inside the conductor the comparison uses
+`mu0 I r / (2 pi a^2)`, which treats the 36-gon as a circle, so the 1.7 % just
+outside `r = a` is the polygon rather than solver error.
 
 **Both scripts compare phasor magnitudes.** At 50 Hz here the current is
 `47270 - 136555j`, so `Re(I)` is only 0.327 of `|I|`: comparing `|Re(B)|`
