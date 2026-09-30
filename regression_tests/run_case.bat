@@ -99,6 +99,14 @@ if defined WANTS_MUMPS (
   )
   set "SOLVER=!MBUILD!\solve_mesh.exe"
   echo === backend    mumps ^(!MBUILD!^)
+  rem Say so when this is NOT the threaded-MKL build. The directory name alone
+  rem does not tell you: -omp means MUMPS's own tree parallelism, which sounds
+  rem like the fast one and is not. It links mkl_sequential, so the dense
+  rem frontal kernels -- nearly all the flops -- run on one core.
+  echo !MBUILD! | findstr /i "build-mumps-mkl" >nul || (
+    echo     WARNING: this is the SEQUENTIAL-BLAS build, roughly 10x slower.
+    echo              Build build-mumps-mkl instead -- see third_party/README.md.
+  )
   rem setvars.bat is broken on this oneAPI install -- it reports "'vars.bat' is
   rem not recognized" and leaves MKLROOT empty -- so call the component scripts
   rem directly. See docs/MUMPS_SETUP.md.
