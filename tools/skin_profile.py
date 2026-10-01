@@ -134,17 +134,24 @@ for tag in sorted(set(bt[sig > 0.0].tolist())):
     if surf.sum() < 20:
         print("    too few cells near the surface to anchor on")
         continue
+    # THE REFERENCE IS A MEAN, SO BESSEL MUST BE MEANED THE SAME WAY. Taking
+    # J0 at the band's mean radius is not the same as the mean of J0 over the
+    # band's radii -- J0 is not linear, so the two differ by its curvature across
+    # the band. Case 04's own make_plots.py gets this right and this script did
+    # not; both sides are now reduced identically, cell by cell.
     rbar = float(rr[surf].mean())
     Ja = J[surf].mean()
-    print("    anchored at r = %.4f a, BOTH sides -- not at a. See the note above."
+    bref = np.mean([bessel_j0(K_ := k * x) for x in rr[surf]])
+    print("    anchored on the r > 0.92a band (mean radius %.4f a), with Bessel"
           % (rbar / a))
+    print("    averaged over the SAME radii -- both sides reduced identically.")
     print("    r/a         measured   Kelvin     err        lag      Kelvin    err")
     for lo, hi in ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 0.92)):
         m = sel & (rr >= lo * a) & (rr < hi * a)
         if m.sum() < 20:
             continue
         Jm = J[m].mean()
-        ref = bessel_j0(k * rr[m].mean()) / bessel_j0(k * rbar)
+        ref = np.mean([bessel_j0(k * x) for x in rr[m]]) / bref
         lag = math.degrees(np.angle(Jm / Ja))
         rlag = math.degrees(np.angle(ref))
         print("    %.2f-%.2f    %8.4f   %8.4f  %+6.2f %%  %+7.2f  %+7.2f  %+5.2f deg"

@@ -83,14 +83,14 @@ Kelvin's `J₀(kr)/J₀(ka)` at `a/δ = 1.511`, 4.2 elements per `δ`:
 
 | `r/a` | measured | Kelvin | err | lag | Kelvin | err |
 |---|---|---|---|---|---|---|
-| 0.00–0.20 | 0.8034 | 0.8005 | **+0.36 %** | −53.09° | −53.18° | **+0.09°** |
-| 0.20–0.40 | 0.8048 | 0.8029 | +0.24 % | −47.86° | −48.05° | +0.19° |
-| 0.40–0.60 | 0.8182 | 0.8174 | +0.10 % | −37.54° | −37.76° | +0.22° |
-| 0.60–0.80 | 0.8624 | 0.8628 | −0.05 % | −22.64° | −22.93° | +0.29° |
-| 0.80–0.92 | 0.9343 | 0.9353 | −0.11 % | −8.78° | −9.00° | +0.22° |
+| 0.00–0.20 | 0.8034 | 0.8006 | **+0.35 %** | −53.09° | −53.05° | **−0.04°** |
+| 0.20–0.40 | 0.8048 | 0.8028 | +0.24 % | −47.86° | −47.86° | +0.00° |
+| 0.40–0.60 | 0.8182 | 0.8171 | +0.14 % | −37.54° | −37.56° | +0.03° |
+| 0.60–0.80 | 0.8624 | 0.8621 | +0.04 % | −22.64° | −22.71° | +0.07° |
+| 0.80–0.92 | 0.9343 | 0.9349 | −0.06 % | −8.78° | −8.91° | +0.13° |
 
-A 53° lag from surface to core, reproduced to **0.09°**, and the magnitude
-profile to better than 0.4 % everywhere.
+A 53° lag from surface to core, reproduced to **0.04°**, and the magnitude
+profile to better than 0.35 % everywhere.
 
 The script is `tools/skin_profile.py` and takes nothing but an output directory:
 it reads the frequency from the `.out` header, finds the conductors from the

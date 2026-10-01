@@ -539,7 +539,59 @@ band is not small, which is exactly the high-frequency case. And everything is r
 dependent, but <code>J = &sigma;E</code> is not, so the result is physical rather than a convention.</p>
 </div>
 
-<h3>4.4 AC resistance against Kelvin</h3>
+<h3>4.4 The same profile from the shared tool, and against case 06</h3>
+
+<p><code>tools/skin_profile.py</code> reduces any case's output the same way, so the number can be
+carried between cases. It takes nothing but an output directory &mdash; the frequency comes from the
+<code>.out</code> header, the conductors from the per&#8209;cell <code>sigma</code> array, and each
+conductor's axis and radius from its own cells:</p>
+
+<pre><code>"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" ..\..\tools\skin_profile.py output</code></pre>
+
+<div class="tw"><table>
+<thead><tr><th><code>r/a</code></th><th>measured</th><th>Kelvin</th><th>err</th><th>lag</th><th>Kelvin</th><th>err</th></tr></thead>
+<tbody>
+<tr><td>0.00&ndash;0.20</td><td>0.2755</td><td>0.2722</td><td><b>+1.20 %</b></td><td>&minus;138.33&deg;</td><td>&minus;137.95&deg;</td><td>&minus;0.39&deg;</td></tr>
+<tr><td>0.20&ndash;0.40</td><td>0.2863</td><td>0.2838</td><td>+0.91 %</td><td>&minus;118.01&deg;</td><td>&minus;117.67&deg;</td><td>&minus;0.34&deg;</td></tr>
+<tr><td>0.40&ndash;0.60</td><td>0.3523</td><td>0.3505</td><td>+0.50 %</td><td>&minus;83.32&deg;</td><td>&minus;83.17&deg;</td><td>&minus;0.15&deg;</td></tr>
+<tr><td>0.60&ndash;0.80</td><td>0.5264</td><td>0.5253</td><td>+0.21 %</td><td>&minus;45.40&deg;</td><td>&minus;45.50&deg;</td><td>+0.10&deg;</td></tr>
+<tr><td>0.80&ndash;0.92</td><td>0.7761</td><td>0.7757</td><td><b>+0.05 %</b></td><td>&minus;17.22&deg;</td><td>&minus;17.43&deg;</td><td>+0.21&deg;</td></tr>
+</tbody></table></div>
+
+<p>This is <b>&sect;4.2 reached by an independent path</b> &mdash; different binning, a different
+reference band (<code>r &gt; 0.92a</code> rather than <code>0.95a</code>), and code that knows
+nothing about this case &mdash; and it lands in the same place: about 1 % in the core, falling to
+nothing at the surface, with the phase inside half a degree throughout. Two reductions of the same
+field agreeing is worth more than either alone.</p>
+
+<p><strong>And it makes the cross-case comparison possible</strong>, which is what the tool is
+for:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th><code>a/&delta;</code></th><th>elements per <code>&delta;</code></th><th>core <code>|J|</code> err</th><th>worst lag err</th></tr></thead>
+<tbody>
+<tr><td><b>04</b>, this case</td><td>2.998</td><td>3.2</td><td>+1.20 %</td><td>0.39&deg;</td></tr>
+<tr><td><b>06</b>, two wires</td><td>1.511</td><td>4.2</td><td>+0.35 %</td><td>0.13&deg;</td></tr>
+</tbody></table></div>
+
+<p>Case 06 is the <b>better&#8209;resolved</b> of the two per skin depth; this case is the
+<b>harder problem</b> &mdash; 138&deg; of rotation from surface to core against 53&deg;, and
+<code>|J|</code> down to 27 % of its surface value against 80 %. That is the trade
+<code>a/&delta; = 3</code> buys, and it is why this case and not that one carries the
+<code>R_ac/R_dc</code> assertion: an integral of the field is a stronger claim than its shape.</p>
+
+<div class="note">
+<p><strong>Both sides must be reduced identically, and that is easy to get wrong.</strong> The
+measured reference is a <em>mean</em> over the cells in the reference band, so the Bessel reference
+must be the <b>mean of <code>J0</code> over those same radii</b> &mdash; not <code>J0</code>
+evaluated at their mean radius, which differs by the function's curvature across the band.
+<code>make_plots.py</code> has always done this correctly (&sect;4.2.1 item 5); the shared tool did
+not at first, and case 06's report records a related and more damaging version of the same mistake,
+where anchoring the two sides at <em>different radii</em> produced a 3.5 % offset that looked
+exactly like a discretisation floor.</p>
+</div>
+
+<h3>4.5 AC resistance against Kelvin</h3>
 
 <div class="figs one">
   <figure><img src="fig/kelvin_curve.png" alt="Kelvin R_ac/R_dc curve with the measured points">

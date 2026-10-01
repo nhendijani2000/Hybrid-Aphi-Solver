@@ -420,7 +420,56 @@ This case reproduces a **134° rotation to 0.39°** — 0.29 % of the rotation, 
 > `r > 0.95a` band, so the drive's own phase cancels — `Φ` is gauge dependent, but `J = σE` is not,
 > so the result is physical rather than a convention.
 
-### 4.4 AC resistance against Kelvin
+### 4.4 The same profile from the shared tool, and against case 06
+
+`tools/skin_profile.py` reduces any case's output the same way, so the number
+can be carried between cases. It takes nothing but an output directory — the
+frequency comes from the `.out` header, the conductors from the per-cell `sigma`
+array, and each conductor's axis and radius from its own cells:
+
+```bash
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" ..\..\tools\skin_profile.py output
+```
+
+| `r/a` | measured | Kelvin | err | lag | Kelvin | err |
+|---|---|---|---|---|---|---|
+| 0.00–0.20 | 0.2755 | 0.2722 | **+1.20 %** | −138.33° | −137.95° | −0.39° |
+| 0.20–0.40 | 0.2863 | 0.2838 | +0.91 % | −118.01° | −117.67° | −0.34° |
+| 0.40–0.60 | 0.3523 | 0.3505 | +0.50 % | −83.32° | −83.17° | −0.15° |
+| 0.60–0.80 | 0.5264 | 0.5253 | +0.21 % | −45.40° | −45.50° | +0.10° |
+| 0.80–0.92 | 0.7761 | 0.7757 | **+0.05 %** | −17.22° | −17.43° | +0.21° |
+
+This is **§4.2 reached by an independent path** — different binning, a different
+reference band (`r > 0.92a` rather than `0.95a`), and code that knows nothing
+about this case — and it lands in the same place: about 1 % in the core, falling
+to nothing at the surface, with the phase inside half a degree throughout. Two
+reductions of the same field agreeing is worth more than either alone.
+
+**And it makes the cross-case comparison possible**, which is what the tool is
+for:
+
+| | `a/δ` | elements per `δ` | core `\|J\|` err | worst lag err |
+|---|---|---|---|---|
+| **04**, this case | 2.998 | 3.2 | +1.20 % | 0.39° |
+| **06**, two wires | 1.511 | 4.2 | +0.35 % | 0.13° |
+
+Case 06 is the **better-resolved** of the two per skin depth; this case is the
+**harder problem** — 138° of rotation from surface to core against 53°, and `|J|`
+down to 27 % of its surface value against 80 %. That is the trade `a/δ = 3` buys,
+and it is why this case and not that one carries the `R_ac/R_dc` assertion: an
+integral of the field is a stronger claim than its shape.
+
+> **Both sides must be reduced identically, and that is easy to get wrong.** The
+> measured reference is a *mean* over the cells in the reference band, so the
+> Bessel reference must be the **mean of `J₀` over those same radii** — not `J₀`
+> evaluated at their mean radius, which differs by the function's curvature
+> across the band. `make_plots.py` has always done this correctly (§4.2.1 item
+> 5); the shared tool did not at first, and case 06's report records a related
+> and more damaging version of the same mistake, where anchoring the two sides at
+> *different radii* produced a 3.5 % offset that looked exactly like a
+> discretisation floor.
+
+### 4.5 AC resistance against Kelvin
 
 ![Kelvin curve with the measured points](fig/kelvin_curve.png)
 
