@@ -11,6 +11,9 @@ planned as a deferred later phase, not part of the initial (v1) solver.
 This project is built from the published literature only (see `docs/REFERENCES.md`). No proprietary
 or employer-derived material is used in its design.
 
+**To set up and run a case, start with [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)** -- the input
+file section by section, how to run it, and how to get pictures out.
+
 ## Status
 
 Early development — **no field has been solved yet.** Everything below is
