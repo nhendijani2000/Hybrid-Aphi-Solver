@@ -405,8 +405,22 @@ step, with real values from this run:</p>
 <code>J = &sigma;E</code> there &mdash; one complex vector per tet
 (<code>src/postprocess.cpp:388</code>). So every tetrahedron in the conductor holds exactly
 <em>one</em> <code>J_z</code> number. Nothing is interpolated, and this is the per-cell field, not
-the volume-averaged nodal one &mdash; the nodal average straddles the conductor surface and is
-meaningless there.</p>
+the volume-averaged nodal one.</p>
+
+<div class="note">
+<p><strong>The figures above are nodal; every number below is per&#8209;cell.</strong> They are not
+in conflict, and the difference is worth stating because an earlier version of this sentence
+overstated it. Point data is Gouraud&#8209;shaded, so the colour ramps across each triangle instead
+of filling it flat &mdash; that is the only reason the cross&#8209;sections read as smooth rings
+rather than a mosaic of tets.</p>
+<p>For <b>J the two agree</b>: the nodal accumulation is guarded at material interfaces, so
+<code>J_node</code> is exactly zero in the air and the profile survives &mdash; <code>|J|</code>/core
+at <code>0.98&ndash;1.00a</code> reads <b>3.91</b> nodal against <b>3.76</b> per cell. For
+<b>E it would not</b>: averaging across the conductor surface is genuinely meaningless there, and the
+band just outside the wire is <code>E</code>&rsquo;s worst at &minus;20.9 %
+(<code>FIELD_POSTPROCESSING.md</code> &sect;12). The analysis stays per&#8209;cell because it is
+averaged nowhere at all, which is the stronger reason.</p>
+</div>
 
 <p><b>2. &ldquo;Mid cross-section&rdquo; is a slab, not a plane.</b> Of the <b>98,204</b> tets in the
 conductor, <b>38,294</b> have their centroid in <code>0.3L</code> to <code>0.7L</code> &mdash; a band

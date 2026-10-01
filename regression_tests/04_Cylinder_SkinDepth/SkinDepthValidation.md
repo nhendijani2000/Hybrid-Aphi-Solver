@@ -306,8 +306,18 @@ with real values from this run:
 **1. What one tetrahedron carries.** The solver evaluates `E = −jωA − ∇Φ` at each tet's **centroid**
 and stores `J = σE` there — one complex vector per tet (`src/postprocess.cpp:388`). So every
 tetrahedron in the conductor holds exactly *one* `J_z` number. Nothing is interpolated, and this is
-the per-cell field, not the volume-averaged nodal one — the nodal average straddles the conductor
-surface and is meaningless there.
+the per-cell field, not the volume-averaged nodal one.
+
+> **The figures above are nodal; every number below is per-cell.** They are not in conflict, and the
+> difference is worth stating because an earlier version of this sentence overstated it. Point data
+> is Gouraud-shaded, so the colour ramps across each triangle instead of filling it flat — that is
+> the only reason the cross-sections read as smooth rings rather than a mosaic of tets. For **`J`
+> the two agree**: the nodal accumulation is guarded at material interfaces, so `J_node` is exactly
+> zero in the air and the profile survives — `|J|`/core at `0.98–1.00a` reads **3.91** nodal against
+> **3.76** per cell. For **`E` it would not**: averaging across the conductor surface is genuinely
+> meaningless there, and the band just outside the wire is `E`'s worst at −20.9 %
+> (`FIELD_POSTPROCESSING.md` §12). The analysis stays per-cell because it is averaged nowhere at
+> all, which is the stronger reason.
 
 **2. "Mid cross-section" is a slab, not a plane.** Of the **98,204** tets in the conductor,
 **38,294** have their centroid in `0.3L` to `0.7L` — a band **16 mm tall**, containing many layers of

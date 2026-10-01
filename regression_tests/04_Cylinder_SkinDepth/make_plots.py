@@ -66,10 +66,21 @@ def wire(fn):
 
 # --- the renderings --------------------------------------------------------
 w = wire("J_field.vtk")
+# NODAL, not per-cell, and only for the picture. Point data is Gouraud-shaded --
+# the colour ramps across each triangle -- where cell data is one flat fill per
+# tet and every element reads as a facet. The analysis below, and every number in
+# the report, still uses the per-cell array, which is averaged nowhere.
+#
+# Safe here, and measured rather than assumed: J_node is accumulated only from
+# conducting tets, so it is exactly zero in the air and does not smear across the
+# wire surface. The skin-effect profile survives -- |J|/core at 0.98-1.00a reads
+# 3.91 nodal against 3.76 per cell. (For E the same averaging IS harmful at a
+# material interface, -20.9 % just outside the wire; that is why this is a
+# per-field judgement and not a blanket switch.)
 calc = Calculator(Input=w)
-calc.AttributeType = "Cell Data"
+calc.AttributeType = "Point Data"
 calc.ResultArrayName = "Jmag"
-calc.Function = "sqrt(J_cell_real_Z^2 + J_cell_imag_Z^2)"
+calc.Function = "sqrt(J_real_Z^2 + J_imag_Z^2)"
 
 sl = Slice(Input=calc)
 sl.SliceType = "Plane"
@@ -89,10 +100,11 @@ view.Background = [1, 1, 1]
 view.UseColorPaletteForBackground = 0
 
 d = Show(sl, view)
-ColorBy(d, ("CELLS", "Jmag"))
+ColorBy(d, ("POINTS", "Jmag"))
 d.RescaleTransferFunctionToDataRange(True, False)
 lut = GetColorTransferFunction("Jmag")
 lut.ApplyPreset("Rainbow Uniform", True)
+lut.Discretize = 0        # continuous, not 256 steps -- as case 02 does
 bar = GetScalarBar(lut, view)
 bar.Title = "|J|  A/m2"
 bar.ComponentTitle = ""
@@ -123,7 +135,7 @@ sl2.SliceType.Normal = [0.0, 1.0, 0.0]
 UpdatePipeline(proxy=sl2)
 Hide(sl, view)
 d2 = Show(sl2, view)
-ColorBy(d2, ("CELLS", "Jmag"))
+ColorBy(d2, ("POINTS", "Jmag"))
 d2.RescaleTransferFunctionToDataRange(True, False)
 d2.SetScalarBarVisibility(view, True)
 # THE CAMERA MUST LOOK ALONG THE SLICE NORMAL. The normal is +y, so the slice

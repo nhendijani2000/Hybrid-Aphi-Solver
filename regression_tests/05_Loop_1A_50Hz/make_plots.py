@@ -186,8 +186,13 @@ def plane_shot(fn, array, title, name, scale, preset="Rainbow Uniform",
     clear()
     look(scale)
     base = ring_of(fn) if only_ring else src(fn)
+    # NODAL, and only for the picture -- see the note at the top of this file.
+    # Point data is Gouraud-shaded so the colour ramps across each triangle;
+    # cell data is one flat fill per tet, which is what made these figures read
+    # as a mosaic next to case 02's. Every validated number in this case comes
+    # from the per-cell arrays through analytic_comparison.py and is unchanged.
     calc = Calculator(Input=base)
-    calc.AttributeType = "Cell Data"
+    calc.AttributeType = "Point Data"
     calc.ResultArrayName = "mag"
     calc.Function = ("sqrt(%s_real_X^2+%s_real_Y^2+%s_real_Z^2"
                      "+%s_imag_X^2+%s_imag_Y^2+%s_imag_Z^2)"
@@ -198,7 +203,7 @@ def plane_shot(fn, array, title, name, scale, preset="Rainbow Uniform",
     sl.SliceType.Normal = [0.0, 0.0, 1.0]
     UpdatePipeline(proxy=sl)
     dd = Show(sl, view)
-    ColorBy(dd, ("CELLS", "mag"))
+    ColorBy(dd, ("POINTS", "mag"))
     dd.RescaleTransferFunctionToDataRange(True, False)
     l = GetColorTransferFunction("mag")
     # EVERY "mag" FIGURE SHARES THIS ONE LOOKUP TABLE, and
@@ -210,6 +215,7 @@ def plane_shot(fn, array, title, name, scale, preset="Rainbow Uniform",
     l.UseLogScale = 0
     l.MapControlPointsToLinearSpace()
     l.ApplyPreset(preset, True)
+    l.Discretize = 0   # continuous, not 256 steps
     dd.RescaleTransferFunctionToDataRange(True, False)   # on the DISPLAY, not the LUT
     if pin is not None:
         l.RescaleTransferFunction(pin[0], pin[1])
@@ -221,14 +227,14 @@ def plane_shot(fn, array, title, name, scale, preset="Rainbow Uniform",
     shot(name)
 
 
-plane_shot("B_field.vtk", "B_cell", "|B|  T", "b_xy_ring.png", 1.6 * (R + a))
+plane_shot("B_field.vtk", "B", "|B|  T", "b_xy_ring.png", 1.6 * (R + a))
 # PINNED, NOT AUTO-RANGED, and for a reason that only shows up now the domain
 # is 90 mm: an auto range is set by the single faintest cell in the frame, which
 # sits in a corner and moves whenever the domain or the grading changes. The
 # 90 mm and 30 mm figures would then be drawn on different scales and could not
 # honestly be compared. These bounds span both meshes: |B| runs 1.3e-08 to
 # 3.2e-04 T on the 90 mm cut.
-plane_shot("B_field.vtk", "B_cell", "|B|  T", "b_xy_domain.png", 1.05 * Rd,
+plane_shot("B_field.vtk", "B", "|B|  T", "b_xy_domain.png", 1.05 * Rd,
            logscale=True, pin=(1.0e-8, 4.0e-4))
 # PIN |E| IN THE RING VIEW. Phi jumps across the cut, which is a zero-thickness
 # interface, so grad(Phi) -- and therefore |E| -- SPIKES there: 1.5 V/m against
@@ -244,9 +250,9 @@ plane_shot("B_field.vtk", "B_cell", "|B|  T", "b_xy_domain.png", 1.05 * Rd,
 # that it runs high, and that is the cut, not the ring. What the air's field is
 # NOT is -j*omega*A, which is 2.6e-4 here; it is electrostatic, from the
 # 0.354 mV the loop carries across the cut. See section 4.3.
-plane_shot("E_field.vtk", "E_cell", "|E|  V/m", "e_xy_ring.png", 1.6 * (R + a),
+plane_shot("E_field.vtk", "E", "|E|  V/m", "e_xy_ring.png", 1.6 * (R + a),
            pin=(0.0, 3.0e-2))
-plane_shot("E_field.vtk", "E_cell", "|E|  V/m", "e_xy_domain.png", 1.05 * Rd,
+plane_shot("E_field.vtk", "E", "|E|  V/m", "e_xy_domain.png", 1.05 * Rd,
            logscale=True, pin=(1.0e-5, 2.0))
 
 # ---------------------------------------------------------------------------
@@ -255,17 +261,17 @@ plane_shot("E_field.vtk", "E_cell", "|E|  V/m", "e_xy_domain.png", 1.05 * Rd,
 clear()
 look(1.6 * (R + a), along="y")
 calc = Calculator(Input=src("B_field.vtk"))
-calc.AttributeType = "Cell Data"
+calc.AttributeType = "Point Data"
 calc.ResultArrayName = "mag"
-calc.Function = ("sqrt(B_cell_real_X^2+B_cell_real_Y^2+B_cell_real_Z^2"
-                 "+B_cell_imag_X^2+B_cell_imag_Y^2+B_cell_imag_Z^2)")
+calc.Function = ("sqrt(B_real_X^2+B_real_Y^2+B_real_Z^2"
+                 "+B_imag_X^2+B_imag_Y^2+B_imag_Z^2)")
 sl = Slice(Input=calc)
 sl.SliceType = "Plane"
 sl.SliceType.Origin = [0.0, 0.0, 0.0]
 sl.SliceType.Normal = [0.0, 1.0, 0.0]
 UpdatePipeline(proxy=sl)
 dd = Show(sl, view)
-ColorBy(dd, ("CELLS", "mag"))
+ColorBy(dd, ("POINTS", "mag"))
 dd.RescaleTransferFunctionToDataRange(True, False)
 l = GetColorTransferFunction("mag")
 l.UseLogScale = 0
@@ -377,17 +383,17 @@ geometry("geometry_cut.png", True, 0.85)
 def e_on_plane(name, yoff, focal, scale, pin, title, logscale=False):
     clear()
     calc = Calculator(Input=src("E_field.vtk"))
-    calc.AttributeType = "Cell Data"
+    calc.AttributeType = "Point Data"
     calc.ResultArrayName = "emag"
-    calc.Function = ("sqrt(E_cell_real_X^2+E_cell_real_Y^2+E_cell_real_Z^2"
-                     "+E_cell_imag_X^2+E_cell_imag_Y^2+E_cell_imag_Z^2)")
+    calc.Function = ("sqrt(E_real_X^2+E_real_Y^2+E_real_Z^2"
+                     "+E_imag_X^2+E_imag_Y^2+E_imag_Z^2)")
     sl = Slice(Input=calc)
     sl.SliceType = "Plane"
     sl.SliceType.Origin = [0.0, yoff, 0.0]
     sl.SliceType.Normal = [0.0, 1.0, 0.0]
     UpdatePipeline(proxy=sl)
     dd = Show(sl, view)
-    ColorBy(dd, ("CELLS", "emag"))
+    ColorBy(dd, ("POINTS", "emag"))
     l = GetColorTransferFunction("emag")
     l.UseLogScale = 0
     l.MapControlPointsToLinearSpace()
@@ -427,17 +433,17 @@ e_on_plane("e_port_domain.png", 0.0, (0, 0, 0), 1.03 * FAR,
 def b_on_plane(name, scale, pin, logscale=True):
     clear()
     calc = Calculator(Input=src("B_field.vtk"))
-    calc.AttributeType = "Cell Data"
+    calc.AttributeType = "Point Data"
     calc.ResultArrayName = "bmagp"
-    calc.Function = ("sqrt(B_cell_real_X^2+B_cell_real_Y^2+B_cell_real_Z^2"
-                     "+B_cell_imag_X^2+B_cell_imag_Y^2+B_cell_imag_Z^2)")
+    calc.Function = ("sqrt(B_real_X^2+B_real_Y^2+B_real_Z^2"
+                     "+B_imag_X^2+B_imag_Y^2+B_imag_Z^2)")
     sl = Slice(Input=calc)
     sl.SliceType = "Plane"
     sl.SliceType.Origin = [0.0, 0.0, 0.0]
     sl.SliceType.Normal = [0.0, 1.0, 0.0]
     UpdatePipeline(proxy=sl)
     dd = Show(sl, view)
-    ColorBy(dd, ("CELLS", "bmagp"))
+    ColorBy(dd, ("POINTS", "bmagp"))
     l = GetColorTransferFunction("bmagp")
     l.UseLogScale = 0
     l.MapControlPointsToLinearSpace()
