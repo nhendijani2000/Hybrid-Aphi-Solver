@@ -1,0 +1,73 @@
+# Known-good physics for 06_TwoWires_Quadrature, asserted by ./verify_two_wires.py.
+#
+# WHAT THIS CASE IS FOR. It is the demonstration of the [postprocess] options --
+# thirteen requests covering all three geometries, every display, phase_deg,
+# colormap and data. See README.md for the tour and docs/USER_GUIDE.md Sec. 4
+# for what the options mean.
+#
+# It is also, incidentally, the first case in the suite to use a port
+# `phase_deg` at all. Nothing else would have caught that silently doing
+# nothing.
+#
+# WHY TWO WIRES A QUARTER CYCLE APART. The options that are hardest to
+# understand -- axial_ratio, peak against complex_magnitude, phase -- are all
+# about ELLIPTICAL polarization, and a single conductor has none: B is purely
+# azimuthal, the polarization ellipse collapses to a line, and all three go
+# trivial. Case 05's median axial ratio is 9e-06. Two sources 90 degrees apart
+# make B genuinely rotate, and the two-wire superposition says exactly where:
+#
+#     b/a = 0      on the line of centres, where both contributions point the
+#                  same way so the sum stays linear however it is phased
+#     b/a = 1      at (0, +/- d/2) -- PERFECTLY CIRCULAR, and there
+#                  complex_magnitude overstates the true peak by the full
+#                  sqrt(2) = 41 %, the equality case of the chain
+#                  b <= |B(th)| <= a <= N <= sqrt(2) a
+#
+# THE MESH IS DELIBERATELY COARSE -- about 2 elements per skin depth against
+# case 04's 8 -- because this case is meant to be edited and re-run. The
+# tolerances below are set for that, not for a convergence study. Do not read a
+# skin-depth profile off this case; case 04 is the one for that.
+#
+#   key                value        tol      what sets the tolerance
+# ---------------------------------------------------------------------------
+input                  two_wires.aphi
+
+# geometry
+wire_radius_mm         2.0
+separation_mm          10.0
+length_mm              20.0
+sigma                  5.8e7
+frequency              2500.0
+
+# THE DRIVE. 1 A in each wire. The slab integral of Jz over 0.4L to 0.6L divided
+# by the slab thickness is the current through it; 2 % covers the coarse mesh
+# and the slab's own end effects.
+drive_current          1.0          2.0e-2
+
+# AND THE QUARTER CYCLE, which is the only thing in the suite that exercises a
+# port phase_deg. Measured 90.09 degrees against the 90.0 asked for.
+phase_difference_deg   90.0         1.0
+
+# THE POLARIZATION ELLIPSE, which is what the case exists to show.
+#
+# At (0, +/- d/2) theory says b/a = 1 exactly. Measured 0.975 on this mesh, and
+# the floor is 0.90 rather than a two-sided tolerance because the error can only
+# be one way: discretisation rounds the ellipse off, it does not make a linear
+# field circular.
+axial_ratio_floor      0.90
+#
+# and there N/a must be its maximum, sqrt(2) = 1.41421. Measured 1.3968.
+# This is the equality case of a <= N <= sqrt(2) a, so it ties the three
+# magnitudes of docs/ComplexVectorPhasorConcept.md to a measurement rather than
+# a derivation.
+n_over_peak            1.4142136    0.05
+#
+# A BAND IS NOT A LINE, and the first draft of this file got that wrong by
+# asserting 0 for the median over |y| < 0.08d. b/a is zero ON the axis and grows
+# linearly away from it, so the median over a band is not zero: integrating the
+# analytic superposition over this exact window gives 0.0722, and over
+# |y| < 0.02d, 0.04d, 0.08d it gives 0.0179, 0.0358, 0.0722 -- linear in the
+# half-width, as it should be. The target is therefore the analytic value for
+# the window, which makes this a comparison with theory rather than a loose
+# "approximately zero". Measured 0.0658.
+axis_band_ratio        0.0722       0.02

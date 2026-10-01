@@ -885,6 +885,37 @@ voltage = 0.0
                                     "field = E\ncolormap = chartreuse\n",
                  27, "an unknown colormap");
 
+    // --- data: nodal by default, per_tet only where a cell array exists -----
+    {
+        const ParseResult r = expect_ok(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n",
+            "data is optional");
+        check(r.problem.postprocess[0].data == aphi_solver::PostData::Nodal,
+              "and DEFAULTS to nodal, which is the smooth one");
+    }
+    {
+        const ParseResult r = expect_ok(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = B\n"
+                               "data = per_tet\n",
+            "data = per_tet on B");
+        check(r.problem.postprocess[0].data == aphi_solver::PostData::PerTet, "per_tet selected");
+    }
+    // Phi, A and H have no per-tet array, so asking for one is refused rather
+    // than quietly answered with the nodal data the request was avoiding.
+    for (const char* f : {"phi", "a", "h"}) {
+        const std::string m = expect_error(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = " + f +
+                "\ndata = per_tet\n",
+            27, std::string("data = per_tet on ") + f);
+        check(m.find("only B, E and J") != std::string::npos, "and says which fields have one");
+    }
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = phi\n"
+                                 "data = nodal\n",
+              "control: nodal is fine for a scalar");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\n"
+                                    "field = E\ndata = whatever\n",
+                 27, "an unknown data association");
+
     // --- and a file with no [postprocess] at all is unchanged ---------------
     {
         const ParseResult r = expect_ok(kPP, "no postprocess section at all");

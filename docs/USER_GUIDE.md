@@ -393,7 +393,31 @@ colormap = jet
 > someone colour-blind — it stays monotonic in brightness, which no rainbow
 > does.
 
-### 4.6 Worked examples
+### 4.6 Smooth or faceted — `data`
+
+| `data` | what it colours from | looks like |
+|---|---|---|
+| **`nodal`** | the per-node arrays | **the default.** Smooth: point data is interpolated across each triangle |
+| `per_tet` | the per-element arrays | one flat fill per tetrahedron, so every element shows |
+
+`per_tet` is available for `b`, `e` and `j` only — `phi`, `a` and `h` are
+written per node alone, and asking for `per_tet` on one of them is an error
+rather than a silent fallback.
+
+> **Faceted is not simply the worse one.** `B` is *exactly* constant per
+> tetrahedron — it is `curl A` with first-order edge elements — so the per-tet
+> array is the computed answer and the nodal one is a volume-weighted average of
+> it. More sharply: **at a conductor surface the nodal average is meaningless.**
+> A node on the boundary is touched by elements on both sides, and averaging
+> them blends two values that are different *because the field jumps there*.
+> That produces a ragged fringe along the boundary which is a picture of the
+> mesh, not of the field.
+>
+> So: `nodal` for a picture, `per_tet` when you care about the answer near an
+> interface. `regression_tests/05_Loop_1A_50Hz`'s report §4.5 shows the two side
+> by side, magnified at the boundary.
+
+### 4.7 Worked examples
 
 ```ini
 # Current flow through a conductor, as arrows, at the drive's peak
@@ -512,7 +536,7 @@ something you clearly did not mean.
 | `[output]` | no | `directory` |
 | `[Body NAME]` | yes | `volume`, `sigma`, `eps_r`, `mu_r` |
 | `[port NAME]` | yes | `type`, `surface`, `current`, `voltage`, `phase_deg`, `current_direction` |
-| `[postprocess NAME]` | yes | `geometry`, `field`, `display`, `body`, `plane`, `offset`, `points`, `phase_deg`, `component`, `colormap` |
+| `[postprocess NAME]` | yes | `geometry`, `field`, `display`, `body`, `plane`, `offset`, `points`, `phase_deg`, `component`, `colormap`, `data` |
 
 **Values**
 
@@ -533,6 +557,7 @@ something you clearly did not mean.
 | `plane` | `xy`, `yz`, `zx` |
 | `component` | `x`, `y`, `z` |
 | `colormap` | `rainbow` (default), `jet`, `turbo`, `cool_to_warm`, `viridis`, `blue_to_red`, `black_body`, `grayscale`, `x_ray` |
+| `data` | `nodal` (default), `per_tet` |
 
 ---
 

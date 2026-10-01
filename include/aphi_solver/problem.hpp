@@ -229,6 +229,30 @@ enum class PostDisplay {
 
 enum class PostComponent { None, X, Y, Z };
 
+/// Which array the picture is coloured from, which is a visible choice and not
+/// a detail.
+///
+/// NODAL is the default because it is what a reader expects a field plot to
+/// look like: point data is Gouraud-shaded, so the colour ramps across each
+/// triangle and the picture is smooth. PER-TET is one flat fill per element, so
+/// every tetrahedron reads as a facet.
+///
+/// PER-TET IS NOT MERELY THE UGLY ONE. B is exactly constant per tet -- B =
+/// curl A with first-order Whitney elements -- so the cell array IS the computed
+/// answer and the nodal one is a volume-weighted average of it. More sharply,
+/// at a material interface the nodal average is meaningless: a node on a
+/// conductor surface is touched by tets on both sides, and averaging them blends
+/// two values that differ BECAUSE THE FIELD JUMPS THERE. The result is a ragged
+/// fringe along the boundary that is a picture of the mesh, not of the field.
+/// Case 05's report, section 4.5, shows the two side by side.
+///
+/// So: nodal for a smooth picture, per_tet when the answer matters near an
+/// interface or when the facets are the point.
+enum class PostData {
+    Nodal,  ///< point data, Gouraud-shaded. The default.
+    PerTet  ///< cell data, flat per element. Only B, E and J have one.
+};
+
 /// The colour map. The spelling here is this project's; the renderer maps each
 /// to a ParaView preset name, which is the thing that varies between versions.
 ///
@@ -294,7 +318,16 @@ struct PostprocessRequest {
     /// Applies to every display that produces a colour bar, which is all of
     /// them except `vector` -- and even there the arrows are coloured by it.
     PostColormap colormap = PostColormap::Rainbow;
+
+    PostData data = PostData::Nodal;
 };
+
+/// True for the fields the writers give a per-tet array. Phi, A and H have only
+/// nodal arrays, so `data = per_tet` is refused for them rather than silently
+/// ignored.
+inline bool post_field_has_cell_array(PostField f) {
+    return f == PostField::B || f == PostField::E || f == PostField::J;
+}
 
 /// True for the fields that are vectors. `Phi` is the only scalar, and the
 /// distinction decides which displays are legal.

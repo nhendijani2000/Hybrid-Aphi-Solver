@@ -128,8 +128,14 @@ else:
     if DISPLAY == "peak":
         res = a
     else:
+        # b = |P x Q| / a, so the RATIO b/a needs a twice. Dividing once gives
+        # the semi-minor axis in the field's own units, which is a different
+        # quantity and looks plausible on a colour bar -- case 06 is what caught
+        # it: the analytic two-wire superposition says b/a must reach exactly
+        # 1.0 at (0, +/-d/2), and this read 2.7e-05 there instead.
         cr = np.sqrt((np.cross(P, Q) ** 2).sum(1)) if P.shape[1] == 3 else np.zeros(len(a))
-        res = np.where(a > 0, cr / np.where(a > 0, a, 1.0), 0.0)
+        safe = np.where(a > 0, a, 1.0)
+        res = np.where(a > 0, cr / (safe * safe), 0.0)
 
 arr = numpy_to_vtk(np.ascontiguousarray(res), deep=1)
 arr.SetName("result")
@@ -238,11 +244,11 @@ def render_mesh_request(req, manifest):
     clear()
     src = LegacyVTKReader(FileNames=[vtk])
 
-    # Cell data where the writer produced it. B, E and J are piecewise constant
-    # per tet, so the cell arrays are the computed values and the nodal ones are
-    # an average of them -- drawing the average would be smoothing the answer
-    # before anyone looked at it.
-    use_cell = bool(req["cell_prefix"])
+    # NODAL by default, per-tet on request. Point data is Gouraud-shaded so the
+    # colour ramps across each triangle; cell data is one flat fill per element
+    # and every tet reads as a facet. The manifest carries the choice; the
+    # fallback is only for a manifest written before `data` existed.
+    use_cell = req.get("data", "nodal") == "per_tet" and bool(req["cell_prefix"])
 
     if req["geometry"] == "body":
         base = Threshold(Input=src)

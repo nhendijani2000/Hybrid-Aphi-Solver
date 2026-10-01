@@ -839,6 +839,10 @@ const char* post_colormap_name(PostColormap c) {
     return "rainbow";
 }
 
+const char* post_data_name(PostData d) {
+    return d == PostData::PerTet ? "per_tet" : "nodal";
+}
+
 const char* post_component_name(PostComponent c) {
     switch (c) {
         case PostComponent::None: return "";
@@ -947,6 +951,9 @@ WriteStats write_postprocess_manifest(const std::string& path, const Problem& pr
             buf.put(",\n      ");
             put_key(buf, "display");
             put_json_string(buf, post_display_name(r.display));
+            buf.put(",\n      ");
+            put_key(buf, "data");
+            put_json_string(buf, post_data_name(r.data));
             buf.put(",\n      ");
             put_key(buf, "colormap");
             put_json_string(buf, post_colormap_name(r.colormap));

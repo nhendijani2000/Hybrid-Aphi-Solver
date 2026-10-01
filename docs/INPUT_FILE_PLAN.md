@@ -365,6 +365,7 @@ still catching a typo in a second rather than after a solve.
 | `phase_deg` | see below | the instant `ωt = phase_deg`; default 0 |
 | `component` | see below | `x`, `y` or `z` |
 | `colormap` | no | `rainbow` (default), `jet`, `turbo`, `cool_to_warm`, `viridis`, `blue_to_red`, `black_body`, `grayscale`, `x_ray` |
+| `data` | no | `nodal` (default) or `per_tet`; `per_tet` only for `b`, `e`, `j`, which are the only fields written per element |
 
 **You only write the keys your own choices need**, and a key those choices make
 meaningless is an **error**, not ignored. `offset` on a `body`, `body` on a

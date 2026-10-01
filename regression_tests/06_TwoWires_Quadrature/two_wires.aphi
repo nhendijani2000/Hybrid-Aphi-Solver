@@ -1,0 +1,223 @@
+# ---------------------------------------------------------------------------
+# 06_TwoWires_Quadrature -- a tour of the [postprocess] options.
+#
+#     ../run_case.bat two_wires.aphi
+#     "C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" ..\..\tools\postprocess.py output
+#
+# Two parallel copper wires, driven with equal currents A QUARTER CYCLE APART.
+# Everything below exists to make the post-processing options show something;
+# see README.md for what each picture demonstrates, and docs/USER_GUIDE.md
+# section 4 for what the options mean.
+#
+# WHY THE QUADRATURE. The three options that are hardest to understand --
+# axial_ratio, peak against complex_magnitude, and phase -- are all about
+# ELLIPTICAL polarization, and a single conductor has none: its B is purely
+# azimuthal, the polarization ellipse collapses to a line, and all three become
+# trivial. Two sources 90 degrees apart make B genuinely ROTATE. Worked
+# analytically from the two-wire superposition, b/a is exactly 0 on the line of
+# centres and exactly 1.000 -- perfectly circular -- at (0, +/- d/2), where
+# complex_magnitude overstates the true peak by the full sqrt(2) = 41 %.
+#
+# This is also the first case in the suite to use a port `phase_deg` at all.
+#
+# GEOMETRY: a = 2 mm wires, centres 10 mm apart, 20 mm long, in a 30 x 30 x
+# 20 mm box of air. delta = 1.32 mm at 2.5 kHz, so a/delta = 1.5.
+#
+# THE MESH IS DELIBERATELY COARSE -- about 2 elements per skin depth, where case
+# 04 uses 8 -- because this is a demonstration you are meant to edit and re-run.
+# Do not read a skin-depth profile off it.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = two_wires.msh
+length_unit = mm
+
+[output]
+directory   = output
+
+[analysis]
+type        = frequency
+frequencies = 2500                         # Hz; delta = 1.32 mm in copper
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire1
+sigma       = 5.8e7                        # copper
+
+[Body B2]
+volume      = wire2
+sigma       = 5.8e7
+
+[Body B3]
+volume      = air
+sigma       = 0
+
+# --- the drives -------------------------------------------------------------
+# Each wire is driven independently and so needs its own potential reference:
+# a current source at z = 0, a 0 V terminal at z = Lz. The whole point of the
+# case is in the second `phase_deg`.
+
+[port P1]
+type        = boundary_current
+surface     = wire1_bottom
+current     = 1.0
+phase_deg   = 0
+
+[port P2]
+type        = boundary_voltage
+surface     = wire1_top
+voltage     = 0.0
+
+[port P3]
+type        = boundary_current
+surface     = wire2_bottom
+current     = 1.0
+phase_deg   = 90                           # <-- a quarter cycle later
+
+[port P4]
+type        = boundary_voltage
+surface     = wire2_top
+voltage     = 0.0
+
+[solver]
+conditioning = row_scaled
+backend      = mumps
+
+# ===========================================================================
+# THE TOUR. Twelve pictures. Run postprocess.py after the solve to draw them.
+# ===========================================================================
+
+# --- 1. where the current goes ---------------------------------------------
+# The same field a quarter cycle apart. PP1 catches wire 1 at its peak while
+# wire 2 is at zero; PP2 catches the reverse. This is `phase_deg` doing its job.
+
+[postprocess PP1]
+geometry  = body
+body      = wire1
+field     = J
+display   = vector
+phase_deg = 0
+
+[postprocess PP2]
+geometry  = body
+body      = wire2
+field     = J
+display   = vector
+phase_deg = 0
+
+# --- 2. the three magnitudes, same slice, same field ------------------------
+# PP3, PP4 and PP5 are the heart of the tour: three pictures of one field that
+# look completely different. PP3 is phase-independent and never blinks. PP4 and
+# PP5 are instants a quarter cycle apart, and between them the bright region
+# moves from one wire to the other.
+
+[postprocess PP3]
+geometry = plane
+plane    = xy
+offset   = 10.0                            # mid-length, away from the end caps
+field    = B
+display  = complex_magnitude
+
+[postprocess PP4]
+geometry  = plane
+plane     = xy
+offset    = 10.0
+field     = B
+display   = magnitude_at_phase
+phase_deg = 0
+
+[postprocess PP5]
+geometry  = plane
+plane     = xy
+offset    = 10.0
+field     = B
+display   = magnitude_at_phase
+phase_deg = 90
+
+# --- 3. peak, and how far complex_magnitude is from it ----------------------
+# PP6 against PP3 is the same comparison in numbers: peak is the largest the
+# field ever reaches, complex_magnitude is sqrt(2) x RMS and sits above it.
+
+[postprocess PP6]
+geometry = plane
+plane    = xy
+offset   = 10.0
+field    = B
+display  = peak
+
+# --- 4. THE PAYOFF ----------------------------------------------------------
+# Where the field rotates. Expect 0 along the line joining the wires -- there
+# both contributions point the same way, so adding them out of phase is still
+# linear -- and 1.0 at (0, +/-5 mm), where B traces a circle. That is exactly
+# where PP3 and PP6 differ by 41 %.
+
+[postprocess PP7]
+geometry = plane
+plane    = xy
+offset   = 10.0
+field    = B
+display  = axial_ratio
+
+# --- 5. phase, which needs a component for a vector field -------------------
+# The two wires should come out about 90 degrees apart. Inside each one the
+# phase also varies with radius, because a/delta = 1.5.
+
+[postprocess PP8]
+geometry  = plane
+plane     = xy
+offset    = 10.0
+field     = J
+display   = phase
+component = z
+
+# --- 6. a line plot, not a render -------------------------------------------
+# geometry = points gives a graph. This path runs along x through both wires at
+# mid-length.
+
+[postprocess PP9]
+geometry = points
+points   = -9 0 10  -7 0 10  -5 0 10  -3 0 10  -1 0 10  1 0 10  3 0 10  5 0 10  7 0 10  9 0 10
+field    = E
+
+# --- 7. arrows on a cut, and a different plane ------------------------------
+
+[postprocess PP10]
+geometry  = plane
+plane     = zx
+field     = B
+display   = vector
+phase_deg = 0
+
+# --- 8. a scalar, and the gauge warning the renderer stamps on it -----------
+
+[postprocess PP11]
+geometry = body
+body     = wire1
+field    = phi
+display  = complex_magnitude
+
+# --- 9. the same picture as PP3, in a different colour map ------------------
+
+[postprocess PP12]
+geometry = plane
+plane    = xy
+offset   = 10.0
+field    = B
+display  = complex_magnitude
+colormap = jet
+
+# --- 10. the same slice per-tet, to compare with PP3 ------------------------
+# `data` defaults to nodal, which is Gouraud-shaded and smooth. per_tet is one
+# flat fill per element: uglier, and the honest one near a material interface,
+# where the nodal average blends two values that differ because the field jumps.
+
+[postprocess PP13]
+geometry = plane
+plane    = xy
+offset   = 10.0
+field    = B
+display  = complex_magnitude
+data     = per_tet

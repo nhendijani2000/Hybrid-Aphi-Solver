@@ -669,6 +669,22 @@ void Parser::read_postprocess(const Section& s) {
 
     // Always legal: every display draws a colour bar of some kind.
     allowed.push_back("colormap");
+    allowed.push_back("data");
+    if (const Entry* e = find(s, "data")) {
+        const std::string v = as_keyword(*e, {"nodal", "per_tet"});
+        if (v == "per_tet") {
+            // Refused rather than quietly falling back to nodal, which would
+            // hand back the smoothing the request was asking to avoid.
+            if (!post_field_has_cell_array(r.field)) {
+                fail(e->line, "'data = per_tet' is not available for 'field = " + fld +
+                                  "': only B, E and J are written per tet. Phi, A and H have "
+                                  "nodal arrays only.");
+            }
+            r.data = PostData::PerTet;
+        } else {
+            r.data = PostData::Nodal;
+        }
+    }
     if (const Entry* e = find(s, "colormap")) {
         const std::string c = as_keyword(*e, {"rainbow", "jet", "turbo", "cool_to_warm", "viridis",
                                               "blue_to_red", "black_body", "grayscale", "x_ray"});
