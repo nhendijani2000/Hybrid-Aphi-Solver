@@ -16,11 +16,11 @@ file section by section, how to run it, and how to get pictures out.
 
 ## Status
 
-Early development — **no field has been solved yet.** Everything below is
-built and tested; the assembly that would join it together is the next
-phase. Roughly 1000 checks across ten test executables.
+**The solver runs end to end** — mesh in, fields out, validated against closed
+forms. 1915 checks across 20 test executables, plus five regression cases under
+`regression_tests/`, four of which carry a written validation report.
 
-Implemented:
+### The pipeline
 
 - **Mesh ingestion** — Gmsh `.msh` 2.x and 4.1, with physical names, region
   and surface tags, derived edge/face topology and face→tet adjacency,
@@ -32,18 +32,56 @@ Implemented:
 - **Gauge** — boundary-first tree-cotree over `n×A = 0` surfaces, plus both
   Albanese-Rubinacci and Munteanu reductions (`tree_cotree.hpp`,
   `gauge_variants.hpp`, `docs/TREE_COTREE_GAUGE.md`).
-- **Sparse matrices** — a complex-capable CSR type with Gustavson multiply
-  (`sparse_matrix.hpp`), and the two A-Φ conditioning transforms plus
-  symmetric equilibration (`conditioning.hpp`, `equilibration.hpp`).
-- **Problem description and input file** — a sectioned text format, parsed
-  and validated with errors that name the file and line
-  (`problem.hpp`, `input_file.hpp`, `examples/`).
+- **Input file** — a sectioned text format, parsed and validated with errors
+  that name the file and line, before the mesh is opened
+  (`input_file.hpp`, `docs/USER_GUIDE.md`, `examples/`).
+- **Binding and DOF map** — names resolved against the mesh, ports checked for
+  planarity and placement, unknowns numbered with the gauge applied
+  (`problem_binding.hpp`, `dof_map.hpp`).
+- **Assembly** — element matrices over a quadrature rule, global sparsity built
+  symbolically, then filled per frequency (`element_matrix.hpp`,
+  `sparsity.hpp`, `assembly.hpp`).
+- **Linear solve** — an in-house direct `LDLᵀ` with AMD/RCM ordering, symmetric
+  equilibration and iterative refinement; **MUMPS** available as an optional,
+  never-required backend (`factorization.hpp`, `docs/SOLVER_PLAN.md`,
+  `docs/MUMPS_SETUP.md`).
+- **Post-processing** — Φ, **A**, **B**, **H**, **E**, **J** as text and VTK,
+  plus a `[postprocess]` section that selects pictures and a renderer that
+  draws them (`postprocess.hpp`, `tools/postprocess.py`).
 
-Not yet implemented: binding a parsed problem to a mesh, the DOF map,
-element matrices, global assembly, and the linear solve. See
-`docs/ROADMAP.md` Phase 04 and `docs/INPUT_FILE_PLAN.md`.
+### Validated against
 
-## Planned capabilities
+| case | what it tests | agreement |
+|---|---|---|
+| `02_Ansys_Cylinder_50Hz` | a voltage-driven wire, no skin effect | `R` to **1.3e-05** relative; Φ linear in `z` to 0.08 %; phase lag −0.628° against −0.639° |
+| `04_Cylinder_SkinDepth` | skin effect at `a/δ = 3` | `R_ac/R_dc` **1.7719** against Kelvin's **1.7680**; core/surface phase lag −134.24° against −133.85° |
+| `05_Loop_1A_50Hz` | a ring driven through an internal cut — the multiply-connected gauge | `E` **0.016 %**, `R` **0.13 %**, `L` **0.09 %**, `B` on the axis **0.37 %**, `B` in the air within **±0.75 %** over a decade of distance |
+
+Case 05 is the one that exercises the gauge hardest: the current circulates with
+no terminal anywhere on the boundary, and 1 A injected across the cut is
+measured crossing a plane where nothing is prescribed.
+
+### Not implemented
+
+- **Open boundary.** Only `flux_tangential` (`n × A = 0`). `pec` and `abc` parse
+  and are refused. The ABC/PML work and the FEM-BI hybrid are both still ahead
+  (`docs/OPEN_BOUNDARY_ABC.md`, `docs/FULL_WAVE_SCOPE.md`). Until then the air
+  box has to be large enough that the wall does not interfere — case 05's report
+  measures what happens when it is not.
+- **Iterative solvers and preconditioning.** Direct only.
+- **Unsymmetric factorization.** The matrix is treated as symmetric throughout.
+- **Supernodal factorization** — the largest known performance win, deliberately
+  deferred (`docs/SOLVER_PLAN.md` §10).
+- **Materials** are linear and isotropic: scalar `sigma`, `eps_r`, `mu_r` per
+  body. No nonlinearity, no anisotropy.
+- **The scattering track** (`docs/ROADMAP.md` 07).
+
+See `docs/ROADMAP.md` for where each of these sits.
+
+## Scope and direction
+
+What is built today is in [Status](#status) above; this is the shape of the whole
+thing, including the parts still ahead.
 
 - A-Φ finite-element formulation, all-frequency-stable (DC through full-wave); low-frequency-reduced form available as a cheaper option
 - Gauge treatment: tree-cotree splitting first; generalized/implicit Coulomb gauge as a second track
@@ -90,14 +128,14 @@ prints what it found — tet counts per body, faces and vertices per port, the
 resolved port directions, and where Φ will live. What it does not have is a
 DOF map, assembly or a linear solver, and its closing lines say so.
 
-Three examples, each documenting the physics it encodes:
+Five examples, each documenting the physics it encodes:
 
 | file | what it is |
 |---|---|
 | `examples/cylinder_box.aphi` | a wire in a square box at DC. Targets `R = 0.1388 mΩ` (exact against the meshed cross-section) and `L = 0.3870 nH` |
 | `examples/cylinder_box_sweep.aphi` | the same geometry swept 1 kHz → 10 MHz, which spans the whole skin-effect transition |
 | `examples/loop_internal_port.aphi` | a ring driven through an internal cut, showing `current_direction` as a hint. Built by `tools/loop_cut.geo` |
-| `examples/cylinder_ac.aphi` | the same wire at 100 MHz, which is the form the solver can currently solve end to end — it produces the `potential.out` in docs/POSTPROCESSING_PLAN |
+| `examples/cylinder_ac.aphi` | the same wire at 100 MHz — it produces the `potential.out` quoted in `docs/POSTPROCESSING_PLAN.md` |
 | `examples/loop_sweep.aphi` | the ring swept 10 kHz → 100 MHz, and where `conditioning = row_scaled` or `scaled_phi` can be tried: both are refused at DC |
 
 Worth trying deliberately: misspell a key, delete `current_direction` from
