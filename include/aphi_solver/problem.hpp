@@ -229,6 +229,32 @@ enum class PostDisplay {
 
 enum class PostComponent { None, X, Y, Z };
 
+/// The colour map. The spelling here is this project's; the renderer maps each
+/// to a ParaView preset name, which is the thing that varies between versions.
+///
+/// RAINBOW IS THE DEFAULT, and that is a reversal: the renderer used Viridis
+/// first. Two reasons to prefer the rainbow. It is what every existing figure
+/// in the suite already uses -- cases 01-03 with `Jet`, case 05 with
+/// `Rainbow Uniform` -- so a new picture sits beside the published ones without
+/// reading as a different tool. And it is what the field is read with: blue
+/// cold, red hot, no legend needed to know which end is which.
+///
+/// `Rainbow` rather than `Jet` because Jet is not perceptually uniform: it
+/// compresses the greens and stretches the cyans, which invents contour-like
+/// bands that are not in the data. Rainbow Uniform looks the same at a glance
+/// and does not do that. `Jet` remains available for matching an older figure.
+enum class PostColormap {
+    Rainbow,     ///< blue -> red, perceptually uniform. The default.
+    Jet,         ///< blue -> red, the classic. Bands where the data does not.
+    Turbo,       ///< a modern Jet, uniform
+    CoolToWarm,  ///< blue -> white -> red; for signed data about zero
+    Viridis,     ///< dark blue -> yellow; uniform, colour-blind safe
+    BlueToRed,   ///< a wider rainbow
+    BlackBody,   ///< black -> red -> yellow -> white
+    Grayscale,
+    XRay         ///< white -> black
+};
+
 /// One `[postprocess]` section.
 ///
 /// WHICH FIELDS MATTER DEPENDS ON THE OTHERS, which is why they are optional
@@ -264,6 +290,10 @@ struct PostprocessRequest {
     double phase_deg = 0.0;
 
     PostComponent component = PostComponent::None;  ///< display = Phase, vector
+
+    /// Applies to every display that produces a colour bar, which is all of
+    /// them except `vector` -- and even there the arrows are coloured by it.
+    PostColormap colormap = PostColormap::Rainbow;
 };
 
 /// True for the fields that are vectors. `Phi` is the only scalar, and the

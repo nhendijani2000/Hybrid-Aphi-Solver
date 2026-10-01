@@ -824,6 +824,21 @@ const char* post_display_name(PostDisplay d) {
     return "complex_magnitude";
 }
 
+const char* post_colormap_name(PostColormap c) {
+    switch (c) {
+        case PostColormap::Rainbow: return "rainbow";
+        case PostColormap::Jet: return "jet";
+        case PostColormap::Turbo: return "turbo";
+        case PostColormap::CoolToWarm: return "cool_to_warm";
+        case PostColormap::Viridis: return "viridis";
+        case PostColormap::BlueToRed: return "blue_to_red";
+        case PostColormap::BlackBody: return "black_body";
+        case PostColormap::Grayscale: return "grayscale";
+        case PostColormap::XRay: return "x_ray";
+    }
+    return "rainbow";
+}
+
 const char* post_component_name(PostComponent c) {
     switch (c) {
         case PostComponent::None: return "";
@@ -932,6 +947,9 @@ WriteStats write_postprocess_manifest(const std::string& path, const Problem& pr
             buf.put(",\n      ");
             put_key(buf, "display");
             put_json_string(buf, post_display_name(r.display));
+            buf.put(",\n      ");
+            put_key(buf, "colormap");
+            put_json_string(buf, post_colormap_name(r.colormap));
             buf.put(",\n      ");
             put_key(buf, "is_vector");
             buf.put(post_field_is_vector(r.field) ? "true" : "false");

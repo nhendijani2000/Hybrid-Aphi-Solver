@@ -860,6 +860,31 @@ voltage = 0.0
               "in the order written");
     }
 
+    // --- colormap: always legal, and it defaults to the rainbow -------------
+    {
+        const ParseResult r = expect_ok(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n",
+            "colormap is optional");
+        check(r.problem.postprocess[0].colormap == aphi_solver::PostColormap::Rainbow,
+              "and DEFAULTS to rainbow, matching every existing figure in the suite");
+    }
+    {
+        const ParseResult r = expect_ok(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                               "colormap = jet\n",
+            "colormap = jet");
+        check(r.problem.postprocess[0].colormap == aphi_solver::PostColormap::Jet, "jet selected");
+    }
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = points\npoints = 1 2 3\n"
+                                 "field = E\ncolormap = viridis\n",
+              "colormap is legal for every geometry");
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                                 "display = vector\nphase_deg = 0\ncolormap = turbo\n",
+              "and for every display -- even vector, whose arrows are coloured by it");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\n"
+                                    "field = E\ncolormap = chartreuse\n",
+                 27, "an unknown colormap");
+
     // --- and a file with no [postprocess] at all is unchanged ---------------
     {
         const ParseResult r = expect_ok(kPP, "no postprocess section at all");

@@ -39,6 +39,25 @@ paraview.simple._DisableFirstRenderCameraReset()
 OUT = sys.argv[1] if len(sys.argv) > 1 else "output"
 MANIFEST = os.path.join(OUT, "postprocess.json")
 
+# This project's colour-map names -> the ParaView preset that implements each.
+#
+# The indirection is not decoration: preset names are ParaView's and they move
+# between versions. "Viridis (matplotlib)" was the spelling in one release and
+# is simply absent in 6.1, where it is "Viridis" -- which this script found out
+# by failing on it. Keeping our own names means a version bump is one edit in
+# this table rather than a hunt through every case.
+PRESET = {
+    "rainbow": "Rainbow Uniform",
+    "jet": "Jet",
+    "turbo": "Turbo",
+    "cool_to_warm": "Cool to Warm",
+    "viridis": "Viridis",
+    "blue_to_red": "Blue to Red Rainbow",
+    "black_body": "Black-Body Radiation",
+    "grayscale": "Grayscale",
+    "x_ray": "X Ray",
+}
+
 # Labels for the annotation stamped on every frame.
 WHAT = {
     "complex_magnitude": "complex magnitude  sqrt(|P|^2+|Q|^2) = sqrt(a^2+b^2) = sqrt(2) x RMS",
@@ -170,7 +189,7 @@ def stamp(req, manifest, extra=""):
     return t
 
 
-def colour(display_proxy, name, assoc, log_ok=True):
+def colour(display_proxy, name, assoc, log_ok=True, cmap="rainbow"):
     """Colour by `result`, auto-ranged, log only when the span earns it."""
     info = display_proxy.Input.GetDataInformation()
     arr = (info.GetPointDataInformation() if assoc == "POINTS"
@@ -187,7 +206,7 @@ def colour(display_proxy, name, assoc, log_ok=True):
     # inherits log spacing with UseLogScale off and comes out quietly miscoloured.
     lut.UseLogScale = 0
     lut.MapControlPointsToLinearSpace()
-    lut.ApplyPreset("Viridis", True)
+    lut.ApplyPreset(PRESET.get(cmap, PRESET["rainbow"]), True)
     display_proxy.RescaleTransferFunctionToDataRange(True, False)
     lo, hi = lut.RGBPoints[0], lut.RGBPoints[-4]
     if log_ok and lo > 0 and hi / lo > 100.0:
@@ -296,12 +315,14 @@ def render_mesh_request(req, manifest):
         g.Stride = n // 1500 if n > 1500 else 1     # ~1500 arrows whatever the mesh
         UpdatePipeline(proxy=g)
         gd = Show(g, view)
-        colour(gd, "%s %s" % (req["field"], req["display"]), "POINTS", log_ok=False)
+        colour(gd, "%s %s" % (req["field"], req["display"]), "POINTS", log_ok=False,
+               cmap=req.get("colormap", "rainbow"))
     else:
         d0 = Show(shown, view)
         d0.Representation = "Surface"
         colour(d0, "%s %s" % (req["field"], req["display"]), assoc,
-               log_ok=req["display"] not in ("phase", "real", "imag"))
+               log_ok=req["display"] not in ("phase", "real", "imag"),
+               cmap=req.get("colormap", "rainbow"))
 
     stamp(req, manifest)
     ResetCamera(view)

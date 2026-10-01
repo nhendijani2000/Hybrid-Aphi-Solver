@@ -357,7 +357,43 @@ its own, and their disagreement is exactly what makes the ellipse an ellipse.
 Picking one for you would be inventing an answer. `field = phi` is a scalar, so
 it has only one phase and needs no component.
 
-### 4.5 Worked examples
+### 4.5 Colours — `colormap`
+
+Optional, legal on every request, and it defaults to **`rainbow`** — blue for
+low, red for high, which is how these fields are usually read and what every
+existing figure in `regression_tests/` already uses.
+
+| `colormap` | looks like | good for |
+|---|---|---|
+| **`rainbow`** | blue → cyan → green → yellow → red | **the default.** Familiar, and uses the whole range |
+| `jet` | the same, classic version | matching an older figure |
+| `turbo` | a brighter rainbow | the same, with more contrast at the ends |
+| `cool_to_warm` | blue → white → red | signed data, where white marks zero |
+| `viridis` | dark blue → green → yellow | printing, and colour-blind readers |
+| `blue_to_red` | a wider rainbow | — |
+| `black_body` | black → red → yellow → white | heat-like quantities |
+| `grayscale`, `x_ray` | black → white, white → black | print without colour |
+
+```ini
+[postprocess PP1]
+geometry = plane
+plane    = xy
+field    = B
+colormap = jet
+```
+
+> **Why `rainbow` and not `jet` as the default.** They look nearly the same, but
+> `jet` is not *perceptually uniform*: it compresses the greens and stretches the
+> cyans, so it draws contour-like bands that are not in your data. `rainbow`
+> (ParaView's "Rainbow Uniform") has the same blue-to-red appearance without
+> that. If you are comparing against an older figure drawn with `jet`, ask for
+> `jet`; otherwise the default is the safer one.
+>
+> `viridis` is the choice if a figure will be printed in grayscale or read by
+> someone colour-blind — it stays monotonic in brightness, which no rainbow
+> does.
+
+### 4.6 Worked examples
 
 ```ini
 # Current flow through a conductor, as arrows, at the drive's peak
@@ -476,7 +512,7 @@ something you clearly did not mean.
 | `[output]` | no | `directory` |
 | `[Body NAME]` | yes | `volume`, `sigma`, `eps_r`, `mu_r` |
 | `[port NAME]` | yes | `type`, `surface`, `current`, `voltage`, `phase_deg`, `current_direction` |
-| `[postprocess NAME]` | yes | `geometry`, `field`, `display`, `body`, `plane`, `offset`, `points`, `phase_deg`, `component` |
+| `[postprocess NAME]` | yes | `geometry`, `field`, `display`, `body`, `plane`, `offset`, `points`, `phase_deg`, `component`, `colormap` |
 
 **Values**
 
@@ -496,6 +532,7 @@ something you clearly did not mean.
 | `display` | `complex_magnitude`, `magnitude_at_phase`, `peak`, `axial_ratio`, `phase`, `vector`, `real`, `imag` |
 | `plane` | `xy`, `yz`, `zx` |
 | `component` | `x`, `y`, `z` |
+| `colormap` | `rainbow` (default), `jet`, `turbo`, `cool_to_warm`, `viridis`, `blue_to_red`, `black_body`, `grayscale`, `x_ray` |
 
 ---
 

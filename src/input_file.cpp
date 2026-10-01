@@ -667,6 +667,22 @@ void Parser::read_postprocess(const Section& s) {
                      "no single phase of a vector.");
     }
 
+    // Always legal: every display draws a colour bar of some kind.
+    allowed.push_back("colormap");
+    if (const Entry* e = find(s, "colormap")) {
+        const std::string c = as_keyword(*e, {"rainbow", "jet", "turbo", "cool_to_warm", "viridis",
+                                              "blue_to_red", "black_body", "grayscale", "x_ray"});
+        if (c == "rainbow") r.colormap = PostColormap::Rainbow;
+        else if (c == "jet") r.colormap = PostColormap::Jet;
+        else if (c == "turbo") r.colormap = PostColormap::Turbo;
+        else if (c == "cool_to_warm") r.colormap = PostColormap::CoolToWarm;
+        else if (c == "viridis") r.colormap = PostColormap::Viridis;
+        else if (c == "blue_to_red") r.colormap = PostColormap::BlueToRed;
+        else if (c == "black_body") r.colormap = PostColormap::BlackBody;
+        else if (c == "grayscale") r.colormap = PostColormap::Grayscale;
+        else r.colormap = PostColormap::XRay;
+    }
+
     reject_unknown_keys(s, allowed);
 
     for (const PostprocessRequest& existing : result_.problem.postprocess) {

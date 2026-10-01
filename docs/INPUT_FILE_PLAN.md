@@ -364,6 +364,7 @@ still catching a typo in a second rather than after a solve.
 | `points` | `geometry = points` | `x y z` per probe, so a multiple of three numbers, in `length_unit` |
 | `phase_deg` | see below | the instant `ωt = phase_deg`; default 0 |
 | `component` | see below | `x`, `y` or `z` |
+| `colormap` | no | `rainbow` (default), `jet`, `turbo`, `cool_to_warm`, `viridis`, `blue_to_red`, `black_body`, `grayscale`, `x_ray` |
 
 **You only write the keys your own choices need**, and a key those choices make
 meaningless is an **error**, not ignored. `offset` on a `body`, `body` on a
@@ -411,6 +412,14 @@ Three further rules, each enforced:
 At `type = dc` there is nothing to be a phase of, so `phase_deg` and any display
 that asks for an instant are both errors — the same rule `[port]` already
 applies.
+
+`colormap` is legal on every request and defaults to `rainbow` — blue low, red
+high, which is what every figure in `regression_tests/` already uses. It is
+`rainbow` (ParaView's "Rainbow Uniform") rather than `jet` because `jet` is not
+perceptually uniform and bands data that has no bands; the two look alike
+otherwise, and `jet` stays available for matching an older figure. The solver
+stores this project's own spelling and the renderer maps it to a preset name,
+because preset names move between ParaView versions.
 
 ```ini
 [postprocess PP1]                  [postprocess PP2]
