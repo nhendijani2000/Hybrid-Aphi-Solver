@@ -134,6 +134,10 @@ rem by distance from the axis. 05_Loop_1A_50Hz is a closed ring with neither --
 rem the current circulates and the terminal voltage is a jump ACROSS A CUT --
 rem so it ships verify_loop.py instead. Contorting one script to cover both
 rem would make neither readable, so a case-local verify_*.py wins where it
+rem NOTE: this keeps the LAST match. One verify_*.py per case -- a second one
+rem silently takes over as the guard, decided by filename order. Analysis
+rem scripts that only print go under another name (see 05's analytic_comparison.py).
+
 rem exists.
 set "VERIFIER="
 set "VNAME="

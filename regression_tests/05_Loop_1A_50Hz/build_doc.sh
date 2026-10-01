@@ -25,7 +25,13 @@ SRC=page.html
 OUT=LoopValidation.html
 PDF=LoopValidation.pdf
 [ -f "$SRC" ] || { echo "error: $SRC missing (the styled page body)"; exit 1; }
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+# The cleanup must not be allowed to fail the script. Headless Edge can still
+# hold a BITS temp file inside its profile for a moment after it exits, and with
+# `set -e` a busy file made `rm -rf` return 1 -- so the script exited non-zero
+# AFTER printing that both the HTML and the PDF were written. That is exactly
+# the confusing failure the PDF notes at the bottom warn about, arriving by a
+# different route. Windows will clear %TEMP% itself.
+TMP=$(mktemp -d); trap 'rm -rf "$TMP" 2>/dev/null || true' EXIT
 
 {
   echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
