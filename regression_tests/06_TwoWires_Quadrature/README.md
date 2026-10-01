@@ -1,7 +1,7 @@
 # 06 — Two wires in quadrature: a tour of the `[postprocess]` options
 
 Two parallel copper wires driven with equal currents **a quarter cycle apart**.
-Thirteen `[postprocess]` requests covering all three geometries, every display,
+Sixteen `[postprocess]` requests covering all three geometries, every display,
 `phase_deg`, `colormap` and `data`.
 
 The point of the geometry is that it is the only case in the suite where the
@@ -16,7 +16,7 @@ gmsh two_wires.geo -3 -o two_wires.msh          # already committed; only if you
 "C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" ..\..\tools\postprocess.py output
 ```
 
-Thirteen PNGs land in `output/`. Edit the `[postprocess]` sections in
+Sixteen PNGs land in `output/`. Edit the `[postprocess]` sections in
 `two_wires.aphi` and re-run the last line — you do **not** need to re-solve
 unless you change the physics.
 
@@ -36,6 +36,7 @@ unless you change the physics.
 | **PP11** | `phi` | the gauge warning the renderer stamps on it |
 | **PP12** | PP3 again with `colormap = jet` | the colour maps |
 | **PP13** | PP3 again with `data = per_tet` | nodal vs per-tet — PP13 is faceted, PP3 is smooth |
+| **PP14, PP15, PP16** | the PP3/4/5 comparison again, for `J` | the current is what is *driven*, so this is the most direct view of what a port `phase_deg` does |
 
 **PP3, PP4 and PP5 are the ones to look at first.** Three pictures of the same
 field that look completely different, and nothing is wrong with any of them —
@@ -85,6 +86,26 @@ solve. **Do not read a skin-depth profile off it** — case 04 is the one for th
 The last one is the analytic value **for that window**, not zero: `b/a` is zero
 *on* the axis and grows linearly away from it, so a band median is not a line
 value. The first draft of this case asserted zero and was wrong.
+
+## A note on PP8, and on phase plots generally
+
+`display = phase` needs masking wherever the field is zero, and this case is
+what showed it. In the air `sigma = 0`, so `J` is exactly zero and has **no
+phase** — a zero vector points nowhere. But `atan2` returns an angle regardless,
+and which angle depends on the **sign bit of the zero**: of 37,706 air nodes,
+21,727 hold *negative* zero, and `atan2(+0.0, -0.0)` is `pi`. So the first
+version of PP8 painted half the frame a confident, uniform **+180 degrees**,
+indistinguishable from a measurement.
+
+The renderer now writes NaN where the component's magnitude is below `1e-9` of
+its maximum, and draws NaN in white — a colour the scale cannot produce. Drawing
+it at the *bottom* of the map instead would read as a real value at the low end
+of the range, which is the same mistake in a nicer colour. **Absent data must
+never be drawn in a colour the data itself can take.**
+
+Nothing is wrong in the solver: a scan of all six output files finds no NaN and
+no Inf anywhere, and `J` in air is a clean `0.0` exactly as `J = sigma E`
+requires. The NaN is a display instruction, added by the renderer.
 
 ## It found a bug on its first run
 

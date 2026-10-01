@@ -109,6 +109,17 @@ elif DISPLAY == "complex_magnitude":
 elif DISPLAY == "phase":
     k = {"x": 0, "y": 1, "z": 2}.get(COMPONENT, 0)
     res = np.degrees(np.arctan2(Q[:, k], P[:, k]))
+    # BLANK WHERE THERE IS NO FIELD TO HAVE A PHASE. Without this, an insulator
+    # -- where J is exactly zero -- does not come out as "no data": it comes out
+    # as a confident +180 degrees, because the stored real part is NEGATIVE ZERO
+    # and atan2(+0.0, -0.0) is pi, not 0. Half of case 06's PP8 was that: a
+    # uniform magenta field covering every air cell, indistinguishable from a
+    # real measurement. NaN renders in the LUT's NaN colour instead, which reads
+    # as absent rather than as 180.
+    cmag = np.hypot(P[:, k], Q[:, k])
+    big = cmag.max()
+    if big > 0:
+        res = np.where(cmag > 1e-9 * big, res, np.nan)
 else:
     # peak and axial_ratio both need the ellipse's semi-axes.
     #
@@ -213,6 +224,14 @@ def colour(display_proxy, name, assoc, log_ok=True, cmap="rainbow"):
     lut.UseLogScale = 0
     lut.MapControlPointsToLinearSpace()
     lut.ApplyPreset(PRESET.get(cmap, PRESET["rainbow"]), True)
+    # WHITE, and deliberately a colour the scale cannot produce. The masked
+    # region has no value, so it must not be drawn in anything the data could
+    # take -- painting it at the bottom of the map (dark blue) would read as a
+    # measurement at the low end of the range, which is the same mistake as the
+    # false 180 degrees this masking exists to remove. White matches the page,
+    # so the empty region simply is not there.
+    lut.NanColor = [1.0, 1.0, 1.0]
+    lut.NanOpacity = 1.0
     display_proxy.RescaleTransferFunctionToDataRange(True, False)
     lo, hi = lut.RGBPoints[0], lut.RGBPoints[-4]
     if log_ok and lo > 0 and hi / lo > 100.0:

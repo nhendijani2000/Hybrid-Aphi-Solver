@@ -221,3 +221,32 @@ offset   = 10.0
 field    = B
 display  = complex_magnitude
 data     = per_tet
+
+# --- 11. the SAME comparison as PP3/4/5, but for the current ----------------
+# PP14 is phase-independent; PP15 and PP16 are instants a quarter cycle apart.
+# At wt = 0 wire 1 carries its full current while wire 2 is at its zero
+# crossing, and at wt = 90 they swap. The current is the thing being driven, so
+# this is the most direct view of what `phase_deg` on a port actually does.
+
+[postprocess PP14]
+geometry = plane
+plane    = xy
+offset   = 10.0
+field    = J
+display  = complex_magnitude
+
+[postprocess PP15]
+geometry  = plane
+plane     = xy
+offset    = 10.0
+field     = J
+display   = magnitude_at_phase
+phase_deg = 0
+
+[postprocess PP16]
+geometry  = plane
+plane     = xy
+offset    = 10.0
+field     = J
+display   = magnitude_at_phase
+phase_deg = 90
