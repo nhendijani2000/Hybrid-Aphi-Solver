@@ -778,6 +778,245 @@ void put_magnitude(TextBuffer& buf, const char* name, const std::vector<Vec3C>& 
 
 }  // namespace
 
+namespace {
+
+const char* post_geometry_name(PostGeometry g) {
+    switch (g) {
+        case PostGeometry::Body: return "body";
+        case PostGeometry::Plane: return "plane";
+        case PostGeometry::Points: return "points";
+    }
+    return "body";
+}
+
+const char* post_plane_name(PostPlane p) {
+    switch (p) {
+        case PostPlane::XY: return "xy";
+        case PostPlane::YZ: return "yz";
+        case PostPlane::ZX: return "zx";
+    }
+    return "xy";
+}
+
+const char* post_field_name(PostField f) {
+    switch (f) {
+        case PostField::Phi: return "phi";
+        case PostField::A: return "A";
+        case PostField::B: return "B";
+        case PostField::H: return "H";
+        case PostField::E: return "E";
+        case PostField::J: return "J";
+    }
+    return "E";
+}
+
+const char* post_display_name(PostDisplay d) {
+    switch (d) {
+        case PostDisplay::ComplexMagnitude: return "complex_magnitude";
+        case PostDisplay::MagnitudeAtPhase: return "magnitude_at_phase";
+        case PostDisplay::Peak: return "peak";
+        case PostDisplay::AxialRatio: return "axial_ratio";
+        case PostDisplay::Phase: return "phase";
+        case PostDisplay::Vector: return "vector";
+        case PostDisplay::Real: return "real";
+        case PostDisplay::Imag: return "imag";
+    }
+    return "complex_magnitude";
+}
+
+const char* post_component_name(PostComponent c) {
+    switch (c) {
+        case PostComponent::None: return "";
+        case PostComponent::X: return "x";
+        case PostComponent::Y: return "y";
+        case PostComponent::Z: return "z";
+    }
+    return "";
+}
+
+/// The file a field lives in, and the prefix of its arrays there.
+///
+/// Phi is the odd one: it rides in potential.vtk under `phi_*`, and it is a
+/// SCALAR, so it has no `_cell_` companion. A, H likewise have no per-cell
+/// arrays -- only B, E and J are written per tet as well as per node. Saying so
+/// here rather than in Python keeps one place to edit when a writer changes.
+struct FieldFiles {
+    const char* file;
+    const char* point_prefix;
+    const char* cell_prefix;  // empty when the writer produces none
+};
+
+FieldFiles field_files(PostField f) {
+    switch (f) {
+        case PostField::Phi: return {"potential", "phi", ""};
+        case PostField::A: return {"A_field", "A", ""};
+        case PostField::B: return {"B_field", "B", "B_cell"};
+        case PostField::H: return {"H_field", "H", ""};
+        case PostField::E: return {"E_field", "E", "E_cell"};
+        case PostField::J: return {"J_field", "J", "J_cell"};
+    }
+    return {"E_field", "E", "E_cell"};
+}
+
+void put_json_string(TextBuffer& buf, const char* text) {
+    buf.put('"');
+    for (const char* c = text; *c != '\0'; ++c) {
+        if (*c == '"' || *c == '\\') buf.put('\\');
+        buf.put(*c);
+    }
+    buf.put('"');
+}
+
+void put_json_string(TextBuffer& buf, const std::string& text) {
+    put_json_string(buf, text.c_str());
+}
+
+void put_key(TextBuffer& buf, const char* key) {
+    put_json_string(buf, key);
+    buf.put(": ");
+}
+
+}  // namespace
+
+WriteStats write_postprocess_manifest(const std::string& path, const Problem& problem,
+                                      const BoundProblem& bound, double frequency,
+                                      const std::string& suffix, const RunInfo* run) {
+    WriteStats stats;
+    if (problem.postprocess.empty()) return stats;
+
+    const auto started = std::chrono::steady_clock::now();
+    std::FILE* out = std::fopen(path.c_str(), "wb");
+    if (out == nullptr) {
+        throw std::runtime_error("write_postprocess_manifest: could not open '" + path +
+                                 "' for writing");
+    }
+    {
+        TextBuffer buf(out);
+        const double to_metres = length_scale(problem.length_unit);
+
+        buf.put("{\n  ");
+        put_key(buf, "generated_by");
+        put_json_string(buf, "aphi_solver write_postprocess_manifest");
+        buf.put(",\n  ");
+        put_key(buf, "note");
+        put_json_string(buf,
+                        "Lengths are METRES: the mesh is scaled before any VTK is written, so "
+                        "offset and points are converted from the input file's length_unit here.");
+        buf.put(",\n  ");
+        put_key(buf, "input_file");
+        put_json_string(buf, run != nullptr ? run->input_file : std::string());
+        buf.put(",\n  ");
+        put_key(buf, "frequency_hz");
+        buf.put(frequency);
+        buf.put(",\n  ");
+        put_key(buf, "file_suffix");
+        put_json_string(buf, suffix);
+        buf.put(",\n  ");
+        put_key(buf, "requests");
+        buf.put(" [");
+
+        bool first = true;
+        for (const PostprocessRequest& r : problem.postprocess) {
+            buf.put(first ? "\n    {" : ",\n    {");
+            first = false;
+
+            buf.put("\n      ");
+            put_key(buf, "name");
+            put_json_string(buf, r.name);
+            buf.put(",\n      ");
+            put_key(buf, "geometry");
+            put_json_string(buf, post_geometry_name(r.geometry));
+            buf.put(",\n      ");
+            put_key(buf, "field");
+            put_json_string(buf, post_field_name(r.field));
+            buf.put(",\n      ");
+            put_key(buf, "display");
+            put_json_string(buf, post_display_name(r.display));
+            buf.put(",\n      ");
+            put_key(buf, "is_vector");
+            buf.put(post_field_is_vector(r.field) ? "true" : "false");
+
+            const FieldFiles ff = field_files(r.field);
+            buf.put(",\n      ");
+            put_key(buf, "vtk");
+            put_json_string(buf, std::string(ff.file) + suffix + ".vtk");
+            buf.put(",\n      ");
+            put_key(buf, "point_prefix");
+            put_json_string(buf, ff.point_prefix);
+            buf.put(",\n      ");
+            put_key(buf, "cell_prefix");
+            put_json_string(buf, ff.cell_prefix);
+
+            if (r.geometry == PostGeometry::Body) {
+                // Resolved here because only binding knows the mapping. The
+                // input file names a Physical Volume; the VTK's body_tag array
+                // holds integers.
+                int tag = -1;
+                for (const BoundBody& b : bound.bodies) {
+                    if (b.volume == r.body) {
+                        tag = b.tag;
+                        break;
+                    }
+                }
+                buf.put(",\n      ");
+                put_key(buf, "body");
+                put_json_string(buf, r.body);
+                buf.put(",\n      ");
+                put_key(buf, "body_tag");
+                buf.put(tag);
+            } else if (r.geometry == PostGeometry::Plane) {
+                buf.put(",\n      ");
+                put_key(buf, "plane");
+                put_json_string(buf, post_plane_name(r.plane));
+                buf.put(",\n      ");
+                put_key(buf, "offset_m");
+                buf.put(r.offset * to_metres);
+            } else {
+                buf.put(",\n      ");
+                put_key(buf, "points_m");
+                buf.put(" [");
+                bool fp = true;
+                for (const Vec3& q : r.points) {
+                    buf.put(fp ? "[" : ", [");
+                    fp = false;
+                    buf.put(q.x * to_metres);
+                    buf.put(", ");
+                    buf.put(q.y * to_metres);
+                    buf.put(", ");
+                    buf.put(q.z * to_metres);
+                    buf.put("]");
+                }
+                buf.put("]");
+            }
+
+            if (post_display_uses_phase(r.display)) {
+                buf.put(",\n      ");
+                put_key(buf, "phase_deg");
+                buf.put(r.phase_deg);
+            }
+            if (r.component != PostComponent::None) {
+                buf.put(",\n      ");
+                put_key(buf, "component");
+                put_json_string(buf, post_component_name(r.component));
+            }
+            buf.put("\n    }");
+        }
+        buf.put("\n  ]\n}\n");
+        // flush() FIRST: bytes_written() counts what has reached the file, and
+        // the destructor has not run yet, so asking before the flush reports 0
+        // for anything that still fits in the buffer -- which a manifest always
+        // does.
+        buf.flush();
+        stats.bytes = buf.bytes_written();
+    }
+    std::fclose(out);
+    stats.nodes = static_cast<int>(problem.postprocess.size());
+    stats.milliseconds =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+            .count();
+    return stats;
+}
+
 WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPotential& potential,
                      const Solution& solution, const FieldOutput* fields, FieldSet which,
                      const RunInfo* run) {

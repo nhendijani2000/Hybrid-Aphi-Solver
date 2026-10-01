@@ -389,4 +389,33 @@ WriteStats write_vtk(const std::string& path, const Mesh& mesh, const NodalPoten
                      const Solution& solution, const FieldOutput* fields = nullptr,
                      FieldSet which = FieldSet::All, const RunInfo* run = nullptr);
 
+/// Writes the `[postprocess]` requests as JSON, for `tools/postprocess.py`.
+///
+/// THE SOLVER RENDERS NOTHING. It owns the grammar, the validation and the
+/// naming; the Python tool owns ParaView. This file is the whole interface
+/// between them, which is why it carries more than the requests themselves:
+///
+///   * **the resolved `body_tag`** for each `geometry = body` request. The
+///     input file names a Physical Volume; the VTK carries integer tags. Only
+///     binding knows the mapping, so resolving it here means the renderer never
+///     has to open a mesh.
+///   * **metres.** `offset` and `points` are written in the file's
+///     `length_unit`, but `scale_mesh_to_metres` has already run by the time
+///     any VTK is written, so the manifest converts them. A renderer slicing at
+///     a millimetre offset in a metre mesh would miss by a factor of 1000 and
+///     produce an empty, plausible-looking picture.
+///   * **which file holds which field, and what its arrays are called.**
+///     Hard-coding `E_cell_real` in Python would be a second place to edit
+///     whenever a writer changes its mind.
+///
+/// `frequency` is the solve this manifest belongs to, and `suffix` is the
+/// filename suffix that distinguishes a sweep's solves (empty for a single
+/// one), so the renderer reads the files that go with it.
+///
+/// Writes nothing and reports zero bytes when there are no requests: a file
+/// that asked for no pictures should not grow an empty manifest.
+WriteStats write_postprocess_manifest(const std::string& path, const Problem& problem,
+                                      const BoundProblem& bound, double frequency,
+                                      const std::string& suffix, const RunInfo* run = nullptr);
+
 }  // namespace aphi_solver

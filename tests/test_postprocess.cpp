@@ -1362,6 +1362,128 @@ void test_current_density() {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// write_postprocess_manifest
+//
+// The manifest is the entire interface between the solver and the renderer, so
+// the two things it must get right are the ones no caller can check for itself:
+// the resolved body tag, and METRES. A millimetre offset left unconverted would
+// slice a metre mesh 1000x too far out and produce an empty picture that looks
+// like a modelling mistake rather than a unit bug.
+
+std::string read_all(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
+    if (f == nullptr) return {};
+    std::string out;
+    char buf[4096];
+    std::size_t n = 0;
+    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.append(buf, n);
+    std::fclose(f);
+    return out;
+}
+
+void test_postprocess_manifest() {
+    using aphi_solver::PostComponent;
+    using aphi_solver::PostDisplay;
+    using aphi_solver::PostField;
+    using aphi_solver::PostGeometry;
+    using aphi_solver::PostPlane;
+    using aphi_solver::PostprocessRequest;
+
+    aphi_solver::Problem p;
+    p.length_unit = aphi_solver::LengthUnit::Millimetre;
+
+    PostprocessRequest a;
+    a.name = "PP1";
+    a.geometry = PostGeometry::Body;
+    a.body = "ring";
+    a.field = PostField::J;
+    a.display = PostDisplay::Vector;
+    a.phase_deg = 90.0;
+    p.postprocess.push_back(a);
+
+    PostprocessRequest b;
+    b.name = "PP2";
+    b.geometry = PostGeometry::Plane;
+    b.plane = PostPlane::YZ;
+    b.offset = 2.5;  // millimetres
+    b.field = PostField::B;
+    p.postprocess.push_back(b);
+
+    PostprocessRequest c;
+    c.name = "PP3";
+    c.geometry = PostGeometry::Points;
+    c.points.push_back(aphi_solver::Vec3(6.5, 0.0, 0.0));  // millimetres
+    c.field = PostField::Phi;
+    c.display = PostDisplay::Phase;
+    p.postprocess.push_back(c);
+
+    aphi_solver::BoundProblem bound;
+    aphi_solver::BoundBody bb;
+    bb.name = "B1";
+    bb.volume = "ring";
+    bb.tag = 7;
+    bound.bodies.push_back(bb);
+
+    const std::string path = "test_manifest.json";
+    const aphi_solver::WriteStats st =
+        aphi_solver::write_postprocess_manifest(path, p, bound, 50.0, "");
+    check(st.nodes == 3, "manifest reports three requests");
+    check(st.bytes > 0, "manifest wrote something");
+
+    const std::string text = read_all(path);
+
+    // The resolved tag, which only binding knows.
+    check(text.find("\"body_tag\": 7") != std::string::npos,
+          "the Physical Volume name resolved to its tag");
+    check(text.find("\"body\": \"ring\"") != std::string::npos, "and the name is carried too");
+
+    // METRES. 2.5 mm is 0.0025 m, and 6.5 mm is 0.0065 m.
+    check(text.find("0.0025") != std::string::npos,
+          "a plane offset is converted from the file's length_unit to metres");
+    check(text.find("2.5,") == std::string::npos && text.find(" 2.5\n") == std::string::npos,
+          "and the unconverted millimetre value is NOT present");
+    check(text.find("0.0065") != std::string::npos, "probe points converted to metres as well");
+
+    // Which file, and what the arrays there are called.
+    check(text.find("\"vtk\": \"J_field.vtk\"") != std::string::npos, "J lives in J_field.vtk");
+    check(text.find("\"cell_prefix\": \"J_cell\"") != std::string::npos, "with per-cell arrays");
+    check(text.find("\"vtk\": \"potential.vtk\"") != std::string::npos,
+          "Phi lives in potential.vtk");
+    check(text.find("\"point_prefix\": \"phi\"") != std::string::npos, "under phi_*");
+    check(text.find("\"cell_prefix\": \"\"") != std::string::npos,
+          "and has no per-cell companion, being a scalar");
+    check(text.find("\"is_vector\": false") != std::string::npos, "phi is flagged as a scalar");
+
+    // phase_deg appears only where the display reads it.
+    const std::size_t pp1 = text.find("\"name\": \"PP1\"");
+    const std::size_t pp2 = text.find("\"name\": \"PP2\"");
+    const std::size_t ph = text.find("\"phase_deg\"");
+    check(ph != std::string::npos && ph > pp1 && ph < pp2,
+          "phase_deg is written for the vector display and only there");
+    check(text.find("\"phase_deg\"", pp2) == std::string::npos,
+          "and not for the phase-independent one");
+
+    std::remove(path.c_str());
+
+    // A file that asked for no pictures must not grow an empty manifest.
+    aphi_solver::Problem none;
+    const aphi_solver::WriteStats empty =
+        aphi_solver::write_postprocess_manifest("should_not_exist.json", none, bound, 50.0, "");
+    check(empty.bytes == 0, "no requests writes nothing");
+    check(read_all("should_not_exist.json").empty(), "and leaves no file behind");
+
+    // A sweep's suffix reaches the filenames, so two solves do not read each
+    // other's fields.
+    const std::string sp = "test_manifest_2.json";
+    aphi_solver::write_postprocess_manifest(sp, p, bound, 1000.0, "_f2");
+    const std::string swept = read_all(sp);
+    check(swept.find("\"vtk\": \"J_field_f2.vtk\"") != std::string::npos,
+          "the suffix reaches the field filenames");
+    check(swept.find("\"frequency_hz\": 1000") != std::string::npos, "and the frequency is its own");
+    std::remove(sp.c_str());
+}
+
 int main() {
     test_node_layout_and_positions();
     test_every_status_is_honoured();
@@ -1380,6 +1502,7 @@ int main() {
     test_write_solution();
     test_field_set_selection();
     test_current_density();
+    test_postprocess_manifest();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

@@ -432,6 +432,24 @@ component = y
 not: this stage never opens the mesh, and resolving a name is the binding
 stage's job. See the contract at the top of `input_file.hpp`.
 
+**How it reaches a picture.** The solver writes
+`<output>/postprocess.json` beside the fields, carrying the requests plus three
+things only it knows: the **resolved `body_tag`** (the file names a Physical
+Volume, the VTK carries integers), the geometry **in metres** (the mesh is
+scaled before any VTK is written, so a millimetre offset left unconverted would
+slice 1000x too far out), and **which file holds which field** and what its
+arrays are called. Then:
+
+```bash
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" tools/postprocess.py output
+```
+
+writes one PNG per request. `geometry = points` produces a line plot rather
+than a render. Every figure is **annotated with which magnitude it is and at
+what phase**, because that difference is invisible in the picture and a
+screenshot outlives its caption; a plot of `phi` additionally carries the
+reminder that it is gauge-dependent.
+
 ### 1.3 Deliberately not in this format yet
 
 Written down so these read as decisions rather than oversights, and so they

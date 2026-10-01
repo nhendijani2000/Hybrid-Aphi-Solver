@@ -346,6 +346,23 @@ int main(int argc, char** argv) {
                           << (ts.milliseconds + vv.milliseconds) << " ms\n";
                 write_ms += ts.milliseconds + vv.milliseconds;
             }
+
+            // The [postprocess] requests, for tools/postprocess.py. Written
+            // beside the fields it refers to and with the same suffix, so a
+            // sweep's solves do not read each other's pictures. Nothing is
+            // written when the file asked for none.
+            const std::string manifest =
+                dir + "postprocess" +
+                (suffix == "potential" ? "" : suffix.substr(std::strlen("potential"))) + ".json";
+            const std::string msuffix =
+                suffix == "potential" ? std::string() : suffix.substr(std::strlen("potential"));
+            const WriteStats ms =
+                write_postprocess_manifest(manifest, p, bound, f, msuffix, &run);
+            if (ms.bytes > 0) {
+                std::cout << "                wrote " << manifest << "   " << ms.nodes
+                          << " request(s), " << ms.bytes << " bytes\n";
+                write_ms += ms.milliseconds;
+            }
         }
 
         // Where the time went. Printed unconditionally because a run that is
