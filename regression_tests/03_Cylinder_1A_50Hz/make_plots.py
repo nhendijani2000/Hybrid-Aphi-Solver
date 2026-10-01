@@ -155,7 +155,12 @@ def legend(array, title, fmt="{:.3g}", bands=None):
     """Colour map and scalar bar. `bands` defaults to the BANDS constant above;
     pass 11 for banded contours on a single figure."""
     lut = GetColorTransferFunction(array)
-    lut.ApplyPreset("Jet", True)      # blue low -> red high
+    # Rainbow Uniform, not Jet. They look alike, but Jet is not perceptually
+    # uniform: it compresses the greens and stretches the cyans, so it draws
+    # contour-like bands that are not in the data. Same blue-low-to-red-high
+    # reading, without inventing structure. Cases 04 and 05 already use it,
+    # and so does the shared tools/postprocess.py.
+    lut.ApplyPreset("Rainbow Uniform", True)   # blue low -> red high
     n = BANDS if bands is None else bands
     if n:
         lut.Discretize = 1
