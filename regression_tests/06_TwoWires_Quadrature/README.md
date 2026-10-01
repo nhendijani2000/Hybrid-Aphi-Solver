@@ -78,19 +78,27 @@ no such scale. Two gmsh `Cylinder` fields instead.
 
 ### What the skin effect actually comes out as
 
-`pvbatch skin_profile.py output` — azimuthal mean of `|J|` against Kelvin's
-`J₀(kr)/J₀(ka)` at `a/δ = 1.51`:
+`pvbatch ../../tools/skin_profile.py output` — azimuthal mean of `|J|` against
+Kelvin's `J₀(kr)/J₀(ka)` at `a/δ = 1.511`, 4.2 elements per `δ`:
 
 | `r/a` | measured | Kelvin | err | lag | Kelvin | err |
 |---|---|---|---|---|---|---|
-| 0.00–0.20 | 0.8035 | 0.8003 | **+0.39 %** | −53.14° | −53.20° | **+0.06°** |
-| 0.20–0.40 | 0.8047 | 0.8027 | +0.26 % | −47.90° | −48.07° | +0.16° |
-| 0.40–0.60 | 0.8183 | 0.8173 | +0.12 % | −37.56° | −37.75° | +0.19° |
-| 0.60–0.80 | 0.8629 | 0.8629 | −0.00 % | −22.65° | −22.89° | +0.24° |
-| 0.80–0.92 | 0.9345 | 0.9357 | −0.12 % | −8.70° | −8.93° | +0.23° |
+| 0.00–0.20 | 0.8034 | 0.8005 | **+0.36 %** | −53.09° | −53.18° | **+0.09°** |
+| 0.20–0.40 | 0.8048 | 0.8029 | +0.24 % | −47.86° | −48.05° | +0.19° |
+| 0.40–0.60 | 0.8182 | 0.8174 | +0.10 % | −37.54° | −37.76° | +0.22° |
+| 0.60–0.80 | 0.8624 | 0.8628 | −0.05 % | −22.64° | −22.93° | +0.29° |
+| 0.80–0.92 | 0.9343 | 0.9353 | −0.11 % | −8.78° | −9.00° | +0.22° |
 
-A 53° lag from surface to core, reproduced to **0.06°**, and the magnitude
+A 53° lag from surface to core, reproduced to **0.09°**, and the magnitude
 profile to better than 0.4 % everywhere.
+
+The script is `tools/skin_profile.py` and takes nothing but an output directory:
+it reads the frequency from the `.out` header, finds the conductors from the
+per-cell `sigma` array, and infers each one's axis and radius from its own
+cells — so the same table can be read across cases. **Case 04** at `a/δ = 2.998`
+and 3.2 elements per `δ` gives +1.20 % in the core and a 138° lag reproduced to
+0.09°, which is the comparison worth making: case 06 is the better-resolved of
+the two per skin depth, and case 04 the more demanding problem.
 
 > **BOTH SIDES MUST BE ANCHORED AT THE SAME RADIUS**, and an earlier version of
 > this table did not. Kelvin's profile is normalised at `r = a`; a cell band "at
