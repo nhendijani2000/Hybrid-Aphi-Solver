@@ -14,7 +14,8 @@
 # ---------------------------------------------------------------------------
 input                  loop_50hz.aphi
 
-# geometry. A 20-gon tube cross-section revolved about z.
+# geometry. A 20-gon tube cross-section revolved about z, in a 90 mm x 90 mm
+# cylinder of air -- see the L block below for why the domain is that large.
 loop_radius_mm         6.5
 wire_radius_mm         0.8
 ngon                   20
@@ -25,8 +26,8 @@ frequency              50.0
 drive_current          1.0          1.0e-3
 
 # AND THE CHECK NO OTHER CASE CAN MAKE: the same 1 A must cross theta = pi/2,
-# a plane with NOTHING prescribed on it. Measured 1.000183 against the cut's
-# 0.999953 -- the current really does circulate the whole way round. This is
+# a plane with NOTHING prescribed on it. Measured 1.000176 against the cut's
+# 1.000503 -- the current really does circulate the whole way round. This is
 # the multiply-connected test, and it is the reason the case exists.
 circulation_tol        1.0e-3
 
@@ -35,64 +36,63 @@ circulation_tol        1.0e-3
 # the path length is 2 pi rho and varies across the section, and the
 # conductance is sigma * integral(dA / 2 pi rho) -- the current crowds toward
 # the inner radius. Ignoring that is a 0.44 % error, an order above the
-# solver's own. Measured 3.543192e-04 against 3.546954e-04 exact, -0.106 %.
+# solver's own. Measured 3.542415e-04 against 3.546953e-04 exact, -0.128 %.
 # Derived and compared in full in section 5.1/5.3 of LoopValidation; the numbers
 # come from ./analytic_comparison.py.
 R_rel_tol              2.0e-3
 
 # ---------------------------------------------------------------------------
-# L IS PINNED, NOT VALIDATED -- AND THE REASON IS NOW KNOWN: THE DOMAIN.
+# L IS NOW A VALIDATION, NOT ONLY A REGRESSION GUARD -- AND THAT TOOK MOVING
+# THE OUTER BOUNDARY, WHICH TWO EARLIER TESTS HERE WRONGLY RULED OUT.
 #
-# Measured 19.3770 nH, against the published closed form for a circular loop of
-# round wire, L = mu0 R [ln(8R/a) - 2 + 1/4] = 19.8027 nH: -2.15 %.
+# Measured 19.7854 nH against the published closed form for a circular loop of
+# round wire, L = mu0 R [ln(8R/a) - 2 + 1/4] = 19.8027 nH: -0.09 %. For scale,
+# using the 20-gon's equal-area radius a_eq = 0.79343 mm instead of its
+# circumradius gives 19.8704 nH, so WHICH RADIUS you call `a` is itself worth
+# 0.34 % and no comparison here means anything below that.
 #
-# THE WHOLE OF THAT GAP IS THE OUTER BOUNDARY. `outer = flux_tangential` sets
-# n.B = 0 on the domain wall, which confines the return flux and acts like a
-# flux-excluding shell -- an image loop of opposing current. Less flux links the
-# ring, so L reads low. At Rd = Hd = 30 mm the wall is only 2.3 loop radii out.
-# Re-meshed at 90 mm, graded so element size ON THE AXIS matches this mesh to
-# within 10 % (loop_big.geo, 230569 tets against 223879, 41.2 s against 43.9 s):
+# IT WAS -2.15 %, AND ALL OF THAT WAS THE AIR DOMAIN. `outer = flux_tangential`
+# sets n.B = 0 on the wall, which confines the return flux and acts like a
+# flux-EXCLUDING shell -- an image loop of opposing current. Less flux links the
+# ring, so L reads low; flux is pushed out of the middle, so B on the axis reads
+# low; the excluded flux crowds along the wall, so B out there reads high. At
+# the 30 mm this case used to ship, the wall was 2.3 loop radii out.
 #
-#     L      19.377 -> 19.785 nH      -2.15 % -> -0.09 %
+# Moving it to 90 mm (loop.geo; loop_small.geo keeps the 30 mm as the control,
+# graded so element size ON THE LOOP AXIS matches to within 10 %, which is what
+# makes it a control) fixes three independent observables at once:
 #
-# The same change fixes two other observables in the same stroke, which is what
-# makes the diagnosis solid rather than a coincidence:
+#     L                                   -2.15 %  ->  -0.09 %
+#     B on the loop axis, at the centre   -2.51 %  ->  -0.37 %
+#     B in the air, 12-20 wire radii out +24.69 %  ->  +0.73 %
 #
-#     B on the loop axis, at the centre    -2.51 % -> -0.37 %
-#     B in the air, 12-20 wire radii out  +24.69 % -> +0.73 %
+# AND IT IS CHEAPER, which is why there was never a reason not to: Threshold
+# grades linearly in distance, so scaling lc_far and d_far with the domain
+# reproduces the old grading where the fields are while putting far fewer
+# elements in the empty mid-field.
 #
-# See section 5.7 of LoopValidation. Reproduce with:
-#     gmsh loop_big.geo -3 -o loop_big.msh
-#     ..\run_case.bat loop_50hz_big.aphi
-#     pvbatch analytic_comparison.py output_big
+#                        90 mm       30 mm
+#     tets             217,719     223,879
+#     unknowns         509,598     524,050
+#     MUMPS fill       674.1 M     724.0 M
 #
-# THIS CASE STILL SHIPS THE 30 mm DOMAIN, so the number pinned below is still
-# 2 % from theory. It is kept because every figure in the report is framed on
-# it; the fix is documented, not adopted.
+# TWO RETRACTIONS, AND THEY ARE THE SAME MISTAKE TWICE. This file used to say
+# (a) "refining the tube moved L the wrong way, so resolution is NOT the cause"
+# and (b) "the domain is ruled out -- doubling it to 60 mm moved L by +0.2 %".
+# Test (a) refined lc_ring globally while half the ring was still being meshed
+# coarse by the +Pi/-Pi sweep bug below, so it was measuring the bug. Test (b)
+# used a mesh that still carried that same bug AND coarsened the far field so
+# much that elements near the loop grew from 4 mm to 8.8 mm -- two variables,
+# neither controlled. Both were negative results from an experiment that moved
+# more than one thing, and between them they pointed away from the real cause
+# for months. That is the lesson worth keeping from this case.
 #
-# IT WAS -4.02 %, AND THE FIRST HALF OF THE GAP WAS A MESH BUG. The ring used to
-# be revolved as one +Pi sweep and one -Pi sweep. Both halves came out with the
-# right volume -- 40.386 against 40.307 mm3 -- but the negative-angle half got
-# 4557 tets against 11621, elements 23 % larger and two and a half times fewer.
-# Half the conductor was quietly meshed coarse. Chaining two POSITIVE sweeps
-# instead gives a count ratio of 0.988, and L moved 19.038 -> 19.377, closing
-# 1.87 of the 4.02 points.
-#
-# That also retracts an earlier conclusion recorded here: "refining the tube
-# moved L the wrong way, so resolution is NOT the cause". That test refined
-# lc_ring globally while half the ring stayed relatively coarse, so it was
-# measuring the wrong thing. Resolution IS part of it.
-#
-# A SECOND RETRACTION, AND IT IS THE SAME MISTAKE TWICE. This file used to say
-# "the domain is ruled out -- doubling it to 60 mm moved L by +0.2 %, and a
-# dipole estimate puts the field energy beyond 30 mm at about 0.09 nH", and
-# blamed the gap on resolution of the air beyond one wire radius. That test was
-# invalid two ways at once: the mesh it used still carried the +Pi/-Pi sweep bug
-# above, AND it coarsened the far field so much that elements near the loop grew
-# from 4 mm to 8.8 mm. It changed two things and controlled neither.
-#
-# Both retractions in this file have the same shape -- a negative result from a
-# test that moved more than one variable. That is the lesson worth keeping.
+# THE HALF THAT WAS A MESH BUG, for the record. The ring used to be revolved as
+# one +Pi sweep and one -Pi sweep. Both halves came out with the right volume --
+# 40.386 against 40.307 mm3 -- but the negative-angle half got 4557 tets against
+# 11621, elements 23 % larger and two and a half times fewer. Half the conductor
+# was quietly meshed coarse. Chaining two POSITIVE sweeps gives a count ratio of
+# 0.988, and on the 30 mm domain of the day L moved 19.038 -> 19.377.
 #
 # EXTRACTING L HERE IS ILL-CONDITIONED, worth knowing before reading any of it.
 # omega*L/R is 0.017: the reactance is 1.7 % of the resistance, so Im(Z) is a
@@ -101,7 +101,7 @@ R_rel_tol              2.0e-3
 # answer and moves L by 1.3 %, fifty times its own size. The verifier divides by
 # the imposed current and says why.
 #
-# The tolerance below is therefore a REGRESSION GUARD on a number still 2 %
-# from theory, for a reason now understood. Do not read a pass here as agreement
-# with the closed form -- for that, run the 90 mm domain.
-L_nH                   19.3770      0.05
+# The tolerance below is 0.25 % of the value, which is a regression guard; the
+# agreement with theory is the 0.09 % above, and section 5.6 of LoopValidation
+# carries the comparison.
+L_nH                   19.7854      0.05

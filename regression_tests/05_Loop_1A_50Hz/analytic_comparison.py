@@ -68,7 +68,8 @@ follow that the report must not blur:
 
   * at the wall, the boundary conditions still bind: E_tangential is continuous
     and E_normal jumps by the surface charge, so |E_out| >= |E_in| always.
-    That is a bound, not a value.                <-- checked in section 4
+    That is a bound, not a value, and at this element size it is only weakly
+    testable -- see the correction in section 4.  <-- checked in section 4
   * AT THE CUT the analytic answer is that E DIVERGES: a finite voltage across
     a zero-thickness interface is a singularity. There is no finite number to
     compare against, and what the solver returns there is V/h for the local
@@ -197,7 +198,28 @@ print()
 # --- 2. R -------------------------------------------------------------------
 print("2. RESISTANCE  vs  R = 2 pi/(sigma K)")
 Rex = 2 * math.pi / (sigma * K)
-Rm = 3.543192e-04           # measured terminal V per 1 A, from verify_loop.py
+
+# MEASURED R IS COMPUTED HERE, not pasted from a verify_loop.py run. It used to
+# be a literal, and the moment the shipped mesh changed from 30 mm to 90 mm that
+# literal was quietly a different mesh's answer than everything around it. The
+# extraction is four lines, so there is no excuse for the copy.
+#
+# One side of the cut is the port's 0 V reference and the other floats to V, and
+# Phi is single valued on each side, so max - min over the ring IS the terminal
+# voltage. Average over each plateau rather than taking single extreme nodes, so
+# one stray node cannot set the answer. Divide by the IMPOSED 1 A, not the
+# measured current -- see the note in verify_loop.py.
+_p = LegacyVTKReader(FileNames=[os.path.join(OUT, "potential.vtk")])
+_t = Threshold(Input=_p)
+_t.Scalars = ["CELLS", "body_tag"]
+_t.LowerThreshold = _t.UpperThreshold = 1.0
+_t.ThresholdMethod = "Between"
+UpdatePipeline(proxy=_t)
+_d = sm.Fetch(_t)
+_pr = vtk_to_numpy(_d.GetPointData().GetArray("phi_real"))
+_eps = 1e-12 * max(abs(_pr.max()), 1.0) + 1e-15
+Rm = _pr[_pr > _pr.max() - _eps].mean() - _pr[_pr < _pr.min() + _eps].mean()
+
 print("   exact    %.6e ohm" % Rex)
 print("   measured %.6e ohm   -> %+.3f %%" % (Rm, 100 * (Rm / Rex - 1)))
 print("   (the naive 2 pi R/(sigma A) gives %.6e, %+.3f %% -- it ignores the"
@@ -292,16 +314,53 @@ print("     B far field     +47.9 %  ->  +3.0 %")
 print()
 
 # --- 4. the bound at the wall -----------------------------------------------
-print("4. AT THE WALL: |E_out| >= |E_in| is a BOUND, not a value")
+print("4. AT THE WALL: |E_out| >= |E_in| is a BOUND, not a value --")
+print("   and it has to be measured PAIRWISE, which is a correction.")
 win = np.abs(((th - math.pi + math.pi) % (2 * math.pi)) - math.pi) < 0.25
+hw = h[win & (dist > 0.9 * a) & (dist < 1.2 * a)]
+print("   theta = pi +/- 14 deg, element size at the wall %.3f a" % (np.median(hw) / a))
+print()
+
+# THE SHELL STATISTIC THIS USED TO QUOTE, kept only to show why it is no good.
 mi = win & cond & (dist > 0.95 * a) & (dist < 0.99 * a)
 mo = win & air & (dist > 1.01 * a) & (dist < 1.05 * a)
-print("   theta = pi +/- 14 deg, thin shells either side of the wall:")
-print("     just inside  %.6e V/m  (n=%d)" % (np.median(Emag[mi]), mi.sum()))
-print("     just outside %.6e V/m  (n=%d)   ratio %.3f"
+print("   the old statistic -- median over 0.95-0.99a against 1.01-1.05a:")
+print("     inside  %.6e  (n=%d)" % (np.median(Emag[mi]), mi.sum()))
+print("     outside %.6e  (n=%d)    ratio %.3f"
       % (np.median(Emag[mo]), mo.sum(), np.median(Emag[mo]) / np.median(Emag[mi])))
-print("   E_t is continuous and E_n jumps by the surface charge, so the ratio")
-print("   must be >= 1. It is. The VALUE needs the exterior problem solved.")
+print("   IT DOES NOT TEST THE BOUND. The bound is pointwise -- the two")
+print("   one-sided limits AT THE SAME POINT -- and this compares medians over")
+print("   different points from samples of a few dozen cells. On the 30 mm mesh")
+print("   it reads 1.086 and on the 90 mm mesh 0.984, from the same physics.")
+print("   The air's own field is not even monotonic across those shells:")
+for lo, hi in ((1.01, 1.05), (1.05, 1.10), (1.10, 1.20), (1.20, 1.40)):
+    m = win & air & (dist > lo * a) & (dist < hi * a)
+    if m.sum() > 10:
+        print("     %.2f-%.2f a   n=%5d   median %.6e" % (lo, hi, m.sum(), np.median(Emag[m])))
+print()
+
+# THE PAIRED TEST: each near-wall conductor cell against its nearest air cell.
+ci = np.where(win & cond & (dist > 0.90 * a))[0]
+ai = np.where(win & air & (dist < 1.30 * a))[0]
+if ci.size and ai.size:
+    rat = np.empty(ci.size)
+    sep = np.empty(ci.size)
+    for n, i in enumerate(ci):
+        dd = np.linalg.norm(q[ai] - q[i], axis=1)
+        k = int(np.argmin(dd))
+        rat[n] = Emag[ai[k]] / Emag[i]
+        sep[n] = dd[k]
+    print("   PAIRED, each conductor cell against its nearest air cell:")
+    print("     n = %d pairs, median centre separation %.3f a" % (rat.size, np.median(sep) / a))
+    print("     |E_air|/|E_cond|   median %.3f   10th %.3f   90th %.3f"
+          % (np.median(rat), np.percentile(rat, 10), np.percentile(rat, 90)))
+    print("     fraction >= 1      %.0f %%" % (100.0 * (rat >= 1).mean()))
+    print("   The median is above 1 and two thirds of pairs are, which is as")
+    print("   much as this discretisation can say. It CANNOT say more: E is")
+    print("   piecewise constant per tet, the paired centres straddle the wall")
+    print("   at about +/-0.08 a, and the air's field varies by ~10 % over that")
+    print("   distance -- comparable to the jump being looked for. Individual")
+    print("   pairs falling below 1 are that averaging, not a violation.")
 print()
 
 # --- 5. the cut is a singularity --------------------------------------------

@@ -3,8 +3,9 @@
     "C:\\Program Files\\ParaView 6.1.1\\bin\\pvbatch.exe" make_analytic_plots.py
 
 Writes fig/analytic_E.png and fig/analytic_B.png. Needs output/ from
-loop_50hz.aphi; uses output_big/ from loop_50hz_big.aphi as well when it is
-there, which is what shows the outer boundary is the far-field error.
+loop_50hz.aphi -- the 90 mm domain this case ships -- and draws the 30 mm
+control from output_small/ beside it when loop_50hz_small.aphi has been run,
+which is what shows the outer boundary was the far-field error.
 
 The closed forms and where they come from are derived in analytic_comparison.py's
 docstring; this only plots them. Every number the report quotes comes from that
@@ -96,7 +97,7 @@ def axis_probe(out, zs):
     return np.sqrt((br ** 2).sum(1) + (bi ** 2).sum(1))
 
 
-HAVE_BIG = os.path.isdir("output_big") and os.path.isfile("output_big/B_field.vtk")
+HAVE_SMALL = os.path.isdir("output_small") and os.path.isfile("output_small/B_field.vtk")
 
 # ===========================================================================
 # figure 1 -- E inside the conductor against the exact 1/rho law
@@ -176,6 +177,10 @@ fig, (A, B) = plt.subplots(1, 2, figsize=(11.0, 4.3))
 
 zs = np.array([0.0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8.5, 10]) * 1e-3
 qb, volb, btb, _ = load("output", "B_field.vtk", ("B_cell_real", "B_cell_imag"))
+# NOTE the exact curve is built from the SHIPPED mesh's conductor cells. The
+# conductor is identical in both meshes -- only the air domain differs -- so the
+# same reference is correct for both, which is what lets the residual inset put
+# them on one axis.
 cb = btb == 1
 rhob = np.hypot(qb[:, 0], qb[:, 1])
 exact = np.array([(mu0 * I / (4 * math.pi * K)) *
@@ -183,11 +188,11 @@ exact = np.array([(mu0 * I / (4 * math.pi * K)) *
                   for z0 in zs])
 A.plot(zs * 1e3, exact * 1e6, color=C_EX, lw=2.0, zorder=5,
        label="exact, superposed over the real\ncurrent distribution")
-A.plot(zs * 1e3, axis_probe("output", zs) * 1e6, "o--", ms=5, lw=1.1,
-       color=C_B, label="solver, $R_d=H_d=30$ mm")
-if HAVE_BIG:
-    A.plot(zs * 1e3, axis_probe("output_big", zs) * 1e6, "s-", ms=5, lw=1.1,
-           color=C_S, label="solver, $R_d=H_d=90$ mm")
+if HAVE_SMALL:
+    A.plot(zs * 1e3, axis_probe("output_small", zs) * 1e6, "o--", ms=5, lw=1.1,
+           color=C_B, label="solver, $R_d=H_d=30$ mm (control)")
+A.plot(zs * 1e3, axis_probe("output", zs) * 1e6, "s-", ms=5, lw=1.1,
+       color=C_S, label="solver, $R_d=H_d=90$ mm (shipped)")
 A.set_xlabel("height on the loop axis  $z$  (mm)")
 A.set_ylabel(r"$|B|$  ($\mu$T)")
 A.set_title("(a)  $B$ on the loop axis", fontsize=10.5, color=INK)
@@ -203,20 +208,20 @@ ins.patch.set_alpha(1.0)
 for sp in ins.spines.values():
     sp.set_edgecolor("#999")
 ins.axhline(0.0, color=C_EX, lw=1.0)
-ins.plot(zs * 1e3, 100 * (axis_probe("output", zs) / exact - 1), "o-", ms=3,
-         lw=1.0, color=C_B)
-if HAVE_BIG:
-    ins.plot(zs * 1e3, 100 * (axis_probe("output_big", zs) / exact - 1), "s-",
-             ms=3, lw=1.0, color=C_S)
+if HAVE_SMALL:
+    ins.plot(zs * 1e3, 100 * (axis_probe("output_small", zs) / exact - 1), "o-",
+             ms=3, lw=1.0, color=C_B)
+ins.plot(zs * 1e3, 100 * (axis_probe("output", zs) / exact - 1), "s-",
+         ms=3, lw=1.0, color=C_S)
 ins.set_ylim(-24, 8)
 ins.set_title("error, %", fontsize=8, color="#555", pad=2)
 ins.tick_params(labelsize=7, length=2)
 ins.grid(alpha=0.25, lw=0.5)
 
 bands = ((2, 3), (3, 5), (5, 8), (8, 12), (12, 20), (20, 35))
-for lab, out, col, mk in (("$R_d=H_d=30$ mm", "output", C_B, "o"),
-                          ("$R_d=H_d=90$ mm", "output_big", C_S, "s")):
-    if out == "output_big" and not HAVE_BIG:
+for lab, out, col, mk in (("$R_d=H_d=30$ mm (control)", "output_small", C_B, "o"),
+                          ("$R_d=H_d=90$ mm (shipped)", "output", C_S, "s")):
+    if out == "output_small" and not HAVE_SMALL:
         continue
     qq, vv, tt, BB = load(out, "B_field.vtk", ("B_cell_real", "B_cell_imag"))
     rr2 = np.hypot(qq[:, 0], qq[:, 1])

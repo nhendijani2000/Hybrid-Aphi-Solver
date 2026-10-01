@@ -32,7 +32,7 @@ FIG = "fig"
 if not os.path.isdir(FIG):
     os.makedirs(FIG)
 
-R, a, Rd, Hd = 6.5e-3, 0.8e-3, 30e-3, 30e-3
+R, a, Rd, Hd = 6.5e-3, 0.8e-3, 90e-3, 90e-3
 
 # A slice exactly at z = 0 is DEGENERATE here. The tube cross-section is a
 # 20-gon with vertices at z = +/- a sin(theta), two of which land exactly on
@@ -222,22 +222,32 @@ def plane_shot(fn, array, title, name, scale, preset="Rainbow Uniform",
 
 
 plane_shot("B_field.vtk", "B_cell", "|B|  T", "b_xy_ring.png", 1.6 * (R + a))
+# PINNED, NOT AUTO-RANGED, and for a reason that only shows up now the domain
+# is 90 mm: an auto range is set by the single faintest cell in the frame, which
+# sits in a corner and moves whenever the domain or the grading changes. The
+# 90 mm and 30 mm figures would then be drawn on different scales and could not
+# honestly be compared. These bounds span both meshes: |B| runs 1.3e-08 to
+# 3.2e-04 T on the 90 mm cut.
 plane_shot("B_field.vtk", "B_cell", "|B|  T", "b_xy_domain.png", 1.05 * Rd,
-           logscale=True)
+           logscale=True, pin=(1.0e-8, 4.0e-4))
 # PIN |E| IN THE RING VIEW. Phi jumps across the cut, which is a zero-thickness
 # interface, so grad(Phi) -- and therefore |E| -- SPIKES there: 1.5 V/m against
 # the conductor's own J/sigma = 8.6e-3 V/m, a factor of 175. On an auto range
 # that one spike takes the whole colour map and the conductor reads as flat
 # blue. Pinned to the conductor's own scale, the cut simply saturates and the
-# picture shows what it should. Pinned to 3.0e-2, which spans BOTH the
-# conductor's J/sigma = 8.6e-3 and the surrounding air's 2.0e-2 -- the air is
-# HIGHER, and not because of -j*omega*A (that is only 2.6e-4): it is the
-# electrostatic field of the ring's own varying surface potential, 0.354 mV
-# from one side of the cut to the other.
+# picture shows what it should. 3.0e-2 spans the conductor's J/sigma = 8.6e-3
+# and the air around the port.
+#
+# THE AIR IS NOT GENERALLY BRIGHTER THAN THE CONDUCTOR, which an earlier version
+# of this comment claimed. On the joint side the air just outside the tube is
+# 0.0081 V/m against the conductor's 0.0087 -- LOWER. It is only near the port
+# that it runs high, and that is the cut, not the ring. What the air's field is
+# NOT is -j*omega*A, which is 2.6e-4 here; it is electrostatic, from the
+# 0.354 mV the loop carries across the cut. See section 4.3.
 plane_shot("E_field.vtk", "E_cell", "|E|  V/m", "e_xy_ring.png", 1.6 * (R + a),
            pin=(0.0, 3.0e-2))
 plane_shot("E_field.vtk", "E_cell", "|E|  V/m", "e_xy_domain.png", 1.05 * Rd,
-           logscale=True)
+           logscale=True, pin=(1.0e-5, 2.0))
 
 # ---------------------------------------------------------------------------
 # 4. the y = 0 plane THROUGH THE PORT -- it cuts the tube twice
@@ -398,10 +408,19 @@ def e_on_plane(name, yoff, focal, scale, pin, title, logscale=False):
 # the whole plane: both tube cross-sections
 e_on_plane("e_port_plane.png", 0.0, (0, 0, 0), 1.6 * (R + a),
            (0.0, 3.0e-2), "|E|  V/m")
-# THE SAME CUT OVER THE WHOLE DOMAIN. Log scaled and it has to be: |E| runs
-# from 1.7 V/m at the cut face to under 1e-4 V/m at the 30 mm wall, five
-# decades, and the ring occupies a fifth of the frame.
-e_on_plane("e_port_domain.png", 0.0, (0, 0, 0), 1.03 * Rd,
+# THE SAME CUT, FAR OUT. Log scaled and it has to be: |E| runs from 1.95 V/m at
+# the cut face to 1.8e-5 V/m at the 90 mm wall, five decades.
+#
+# FRAMED AT 30 mm, NOT AT Rd, AND THAT IS DELIBERATE. The y = 0 cut is 2Rd wide
+# by Hd tall -- 180 x 90 mm now -- and the render is square, so framing it at
+# the full domain puts the whole ring inside about 8 % of the frame height and
+# the picture becomes a dot on a blue field. The square xy views above do not
+# have this problem and are still framed at the full Rd, which is where to look
+# for "the far field is dead at the wall". Here 30 mm is the window where
+# anything happens, and it keeps this figure directly comparable with the one
+# the 30 mm control produces. The caption says which window it is.
+FAR = 30e-3
+e_on_plane("e_port_domain.png", 0.0, (0, 0, 0), 1.03 * FAR,
            (1.0e-5, 2.0), "|E|  V/m", logscale=True)
 # B on the same cut over the whole domain, for comparison -- it is continuous
 # across the port, so it has none of E's trouble there.
@@ -433,7 +452,7 @@ def b_on_plane(name, scale, pin, logscale=True):
     shot(name)
 
 
-b_on_plane("b_port_domain.png", 1.03 * Rd, (1.0e-7, 4.0e-4))
+b_on_plane("b_port_domain.png", 1.03 * FAR, (1.0e-8, 4.0e-4))
 # Zoomed onto the PORT cross-section. LOG SCALE, because this view spans more
 # than two decades: the conductor sits at J/sigma = 8.6e-3 while the air right
 # at the cut reaches 1.7 V/m. A linear range that shows the conductor saturates

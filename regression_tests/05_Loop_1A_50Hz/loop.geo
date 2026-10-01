@@ -66,8 +66,22 @@ SetFactory("OpenCASCADE");
 R  = 6.5;     // loop radius, mm -- centreline of the tube
 a  = 0.8;     // tube circumradius, mm
 M  = 20;      // sides of the tube cross-section
-Rd = 30.0;    // air cylinder radius, mm
-Hd = 30.0;    // air cylinder height, mm
+// THE DOMAIN IS 90 mm AND THAT IS NOT GENEROSITY, IT IS THE LARGEST ERROR THIS
+// CASE EVER HAD. `outer = flux_tangential` sets n.B = 0 on the wall, which
+// confines the return flux and behaves like a flux-EXCLUDING shell -- an image
+// loop of opposing current. Less flux links the ring, so L reads low; flux is
+// pushed out of the middle, so B on the axis reads low; and the excluded flux
+// crowds along the wall, so B out there reads high. At the 30 mm this case used
+// to ship -- 2.3 loop radii -- that cost:
+//
+//     L                       -2.15 %      B on the axis, centre   -2.51 %
+//     B in the air, 12-20a   +24.69 %      B in the air, 20-35a   +47.92 %
+//
+// At 90 mm all four land inside 0.75 % (section 5.7 of LoopValidation).
+// loop_small.geo is the 30 mm version, kept because that comparison is the
+// evidence and a reader should be able to rerun it.
+Rd = 90.0;    // air cylinder radius, mm
+Hd = 90.0;    // air cylinder height, mm
 
 // Mesh sizes. lc_ring has to resolve a cross-section 1.6 mm across, so 0.25 mm
 // gives about 20 elements around the tube and 6 across it.
@@ -76,9 +90,28 @@ Hd = 30.0;    // air cylinder height, mm
 // at M = 20, matched to lc_ring. A volume size well ABOVE the facet width makes
 // slivers -- that is what killed the N = 96 experiment in case 02 -- so M and
 // lc_ring move together.
+//
+// lc_far AND d_far GO UP WITH THE DOMAIN, AND TRIPLING IT IS NOT MERELY FREE,
+// IT IS CHEAPER. Threshold grades LINEARLY in distance -- size = lc_ring +
+// (lc_far - lc_ring)(d - a)/(d_far - a) -- so 12 mm at 60 mm reproduces the old
+// 4 mm at 22 mm grading wherever the fields actually are: on the loop axis the
+// element size matches the 30 mm mesh to within 10 % everywhere out to
+// z = 10 mm. 27x the volume, and every measure of cost goes DOWN:
+//
+//                        90 mm       30 mm
+//     tets             217,719     223,879
+//     unknowns         509,598     524,050
+//     MUMPS fill       674.1 M     724.0 M
+//
+// WALL-CLOCK IS A WASH, and do not let anyone quote it either way. Back to back
+// on an idle machine: 43.5 s for the 90 mm against 43.8 s for the 30 mm. An
+// earlier measurement of 103 s against 130 s was taken with gmsh and ParaView
+// running alongside, and the 1.3x it showed was load, not mesh. The three
+// counts above are the property of the mesh; the seconds are the property of
+// whatever else the machine was doing.
 lc_ring = 0.25;
-lc_far  = 4.00;
-d_far   = 22.0;
+lc_far  = 12.00;
+d_far   = 60.0;
 
 // --- the tube cross-section, in the x-z plane centred at (R, 0, 0) ----------
 For i In {0 : M-1}

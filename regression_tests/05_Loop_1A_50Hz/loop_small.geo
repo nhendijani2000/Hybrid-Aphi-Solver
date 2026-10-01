@@ -66,8 +66,14 @@ SetFactory("OpenCASCADE");
 R  = 6.5;     // loop radius, mm -- centreline of the tube
 a  = 0.8;     // tube circumradius, mm
 M  = 20;      // sides of the tube cross-section
-Rd = 90.0;    // air cylinder radius, mm -- 3x loop.geo, to separate domain truncation from discretisation in B
-Hd = 90.0;    // air cylinder height, mm -- 3x loop.geo
+// THE 30 mm DOMAIN, WHICH IS THE POINT OF THIS FILE. It is what the case used
+// to ship, and it is too small: `outer = flux_tangential` sets n.B = 0, the
+// wall behaves like a flux-excluding shell, and at 2.3 loop radii that costs
+// L -2.15 % and B on the axis -2.51 %. loop.geo is the 90 mm version this case
+// now ships. Keep both: section 5.7 of LoopValidation is the comparison, and a
+// negative control is only worth anything if it can be rerun.
+Rd = 30.0;    // air cylinder radius, mm
+Hd = 30.0;    // air cylinder height, mm
 
 // Mesh sizes. lc_ring has to resolve a cross-section 1.6 mm across, so 0.25 mm
 // gives about 20 elements around the tube and 6 across it.
@@ -76,9 +82,14 @@ Hd = 90.0;    // air cylinder height, mm -- 3x loop.geo
 // at M = 20, matched to lc_ring. A volume size well ABOVE the facet width makes
 // slivers -- that is what killed the N = 96 experiment in case 02 -- so M and
 // lc_ring move together.
+//
+// lc_far/d_far are scaled with the domain so that the element size ON THE LOOP
+// AXIS matches loop.geo to within 10 %. That is what makes the comparison a
+// control: the only thing that changes between the two meshes is where the
+// wall is, not how well the field near the ring is resolved.
 lc_ring = 0.25;
-lc_far  = 12.00;  // with d_far = 60 this GRADES so the size on the axis matches loop.geo
-d_far   = 60.0;   // Threshold is linear in distance: 0.25+11.75*(d-a)/(d_far-a)
+lc_far  = 4.00;
+d_far   = 22.0;
 
 // --- the tube cross-section, in the x-z plane centred at (R, 0, 0) ----------
 For i In {0 : M-1}

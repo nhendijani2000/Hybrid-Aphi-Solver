@@ -102,7 +102,7 @@
 <b>multiply connected</b> case in the suite: the current circulates with no terminal anywhere on the
 outer boundary, so the ring can only be driven by cutting it.</p>
 <p class="meta">regression_tests/05_Loop_1A_50Hz &nbsp;·&nbsp; 1&nbsp;A internal current source &nbsp;·&nbsp;
-50&nbsp;Hz &nbsp;·&nbsp; 524,050 unknowns &nbsp;·&nbsp; backward error 9.1e&#8209;23</p>
+50&nbsp;Hz &nbsp;·&nbsp; 509,598 unknowns &nbsp;·&nbsp; backward error 1.0e&#8209;22</p>
 
 <h2>0. What this case establishes</h2>
 
@@ -119,8 +119,8 @@ current crossing a plane where <em>nothing is prescribed</em>:</p>
 <div class="tw"><table>
 <thead><tr><th></th><th>measured</th></tr></thead>
 <tbody>
-<tr><td><code>|I|</code> through the <b>cut</b>, where 1&nbsp;A is injected</td><td><b>0.9999784 A</b></td></tr>
-<tr><td><code>|I|</code> through <b>&theta; = &pi;/2</b>, nothing prescribed</td><td><b>1.000183 A</b></td></tr>
+<tr><td><code>|I|</code> through the <b>cut</b>, where 1&nbsp;A is injected</td><td><b>1.000503 A</b></td></tr>
+<tr><td><code>|I|</code> through <b>&theta; = &pi;/2</b>, nothing prescribed</td><td><b>1.000176 A</b></td></tr>
 </tbody></table></div>
 
 <p>The current circulates the whole way round. A gauge that wrongly killed the loop would show up
@@ -134,24 +134,27 @@ them. The summary:</p>
 <div class="tw"><table>
 <thead><tr><th>quantity</th><th>reference</th><th>error</th></tr></thead>
 <tbody>
-<tr><td><code>E</code> inside the conductor</td><td>exact, <code>I/(&sigma;&rho;K)</code></td><td><span class="ok">0.016 %</span> median, 0.03 % at the 90th pct</td></tr>
-<tr><td><code>R</code></td><td>exact, <code>2&pi;/(&sigma;K)</code></td><td><span class="ok">&minus;0.106 %</span></td></tr>
-<tr><td><code>B</code> on the loop axis</td><td>exact, superposed over the real current</td><td>&minus;2.51 % &rarr; <span class="ok">&minus;0.37 %</span></td></tr>
-<tr><td><code>B</code> in the air, <code>2a</code>&ndash;<code>20a</code></td><td>filament, elliptic integrals</td><td>+24.7 % &rarr; <span class="ok">inside &plusmn;0.75 %</span></td></tr>
-<tr><td><code>L</code></td><td><code>&mu;&#8320;R[ln(8R/a) &minus; 2 + &frac14;]</code></td><td>&minus;2.15 % &rarr; <span class="ok">&minus;0.09 %</span></td></tr>
+<tr><td><code>E</code> inside the conductor</td><td>exact, <code>I/(&sigma;&rho;K)</code></td><td><span class="ok">0.016 %</span> median, 0.035 % at the 90th pct</td></tr>
+<tr><td><code>R</code></td><td>exact, <code>2&pi;/(&sigma;K)</code></td><td><span class="ok">&minus;0.128 %</span></td></tr>
+<tr><td><code>B</code> on the loop axis, at the centre</td><td>exact, superposed over the real current</td><td><span class="ok">&minus;0.37 %</span></td></tr>
+<tr><td><code>B</code> in the air, <code>2a</code>&ndash;<code>20a</code></td><td>filament, elliptic integrals</td><td><span class="ok">inside &plusmn;0.75 %</span></td></tr>
+<tr><td><code>L</code></td><td><code>&mu;&#8320;R[ln(8R/a) &minus; 2 + &frac14;]</code></td><td><span class="ok">&minus;0.09 %</span></td></tr>
 </tbody></table></div>
-
-<div class="note">
-<p><strong>The arrows are one change, not five.</strong> Everything that touches the field
-<em>away</em> from the ring was wrong by 2&ndash;25 %, all in a direction consistent with a
-flux&#8209;excluding wall, because the air domain stops 2.3 loop radii out. Tripling it &mdash; at
-the same element count and the same 41 s &mdash; fixes all of them at once. &sect;5.7 is the
-argument; &sect;5.6 retracts an earlier test of mine that said the domain did not matter.</p>
-</div>
 
 <p>Inside the conductor, where the exact solution is a genuine closed form rather than a
 thin&#8209;wire idealisation, the solver reproduces it to four significant figures in every one of
-23,444 elements.</p>
+23,409 elements.</p>
+
+<div class="note">
+<p><strong>Four of those five used to be 2&ndash;25 % out, and it was one cause: the air
+domain.</strong> It stopped 2.3 loop radii from the ring, and <code>flux_tangential</code> makes the
+wall behave like a flux&#8209;excluding shell. Everything that touches the field <em>away</em> from
+the conductor was wrong, all in the direction that picture predicts. The domain is now 90&nbsp;mm
+&mdash; which costs <b>fewer</b> elements, not more, because the grading scales with it &mdash; and
+<code>loop_small.geo</code> keeps the 30&nbsp;mm version as the control.</p>
+<p>&sect;5.7 is the argument. &sect;5.6 retracts two earlier tests of mine that said the domain did
+not matter; both were negative results from experiments that moved more than one variable.</p>
+</div>
 
 <h2>1. The case</h2>
 
@@ -159,9 +162,9 @@ thin&#8209;wire idealisation, the solver reproduces it to four significant figur
   <figure><img src="fig/geometry.png" alt="The modelled geometry: copper torus inside the air cylinder">
     <figcaption><b>What was modelled.</b> The copper ring at mid height inside the air cylinder,
     drawn transparent. Loop radius 6.5&nbsp;mm and tube radius 0.8&nbsp;mm against a domain
-    30&nbsp;mm in radius and 30&nbsp;mm tall &mdash; the ring is <b>small</b> in it, which is the
-    &sect;5.7 shows that is not small <em>enough</em>: at 2.3 loop radii the outer boundary is
-    the largest error in the whole case.</figcaption></figure>
+    <b>90&nbsp;mm</b> in radius and 90&nbsp;mm tall, so the ring is a small object in a large box.
+    That is deliberate and it is &sect;5.7's subject: at the 30&nbsp;mm this case used to ship, the
+    outer boundary was the largest error in it.</figcaption></figure>
   <figure><img src="fig/geometry_cut.png" alt="The same, cut in half">
     <figcaption><b>Cut at <code>y = 0</code></b>, the plane the port sits on, so the ring is visible
     rather than seen through the domain.</figcaption></figure>
@@ -169,11 +172,11 @@ thin&#8209;wire idealisation, the solver reproduces it to four significant figur
 
 <div class="tw"><table><tbody>
 <tr><td>Conductor</td><td>copper, <code>&sigma; = 5.8e7 S/m</code>; loop radius <code>R = 6.5 mm</code>, tube circumradius <code>a = 0.8 mm</code>, a <b>20&#8209;gon</b> cross-section revolved about <code>z</code></td></tr>
-<tr><td>Domain</td><td>cylinder of air, 30&nbsp;mm radius, 30&nbsp;mm tall, <code>n &times; A = 0</code> on the outer boundary</td></tr>
+<tr><td>Domain</td><td>cylinder of air, <b>90&nbsp;mm</b> radius, 90&nbsp;mm tall, <code>n &times; A = 0</code> on the outer boundary</td></tr>
 <tr><td>Excitation</td><td><b>1.0 A through the cut</b> at <code>&theta; = 0</code>, 50&nbsp;Hz</td></tr>
 <tr><td>Skin depth</td><td><code>&delta; = 9.346 mm</code>, so <code>a/&delta; = 0.086</code> &mdash; no skin effect</td></tr>
 <tr><td>Mesh</td><td>38,248 nodes, 237,031 elements, Netgen-optimised</td></tr>
-<tr><td>Measured</td><td><code>Z = 3.543192e&#8209;04 + 6.087457e&#8209;06 j &Omega;</code></td></tr>
+<tr><td>Measured</td><td><code>Z = 3.542415e&#8209;04 + 6.215758e&#8209;06 j &Omega;</code></td></tr>
 </tbody></table></div>
 
 <h3>1.1 Where the dimensions came from</h3>
@@ -210,7 +213,7 @@ give 39.50&nbsp;nH. It does not matter for what this case checks: <code>a/&delta
 
 <p>This is the picture of what an internal cut actually does, and nothing in cases 01&ndash;04 looks
 like it. One side of the cut is the port's 0&nbsp;V reference; the other floats to whatever the
-solve returns. <b>That jump is the terminal voltage</b> &mdash; 3.543192e&#8209;04&nbsp;V here, for
+solve returns. <b>That jump is the terminal voltage</b> &mdash; 3.542415e&#8209;04&nbsp;V here, for
 1&nbsp;A, which is the impedance.</p>
 
 <p>&Phi; is single-valued on each side: 193 nodes sit exactly on the cut plane and every one reads
@@ -242,8 +245,9 @@ noise: current flowing azimuthally takes a shorter path on the inside, so it cro
     <figcaption><b>|B| through the tube centreline</b>, zoomed. Red at the <b>inner</b> tube surface,
     a minimum at the tube axis, yellow at the outer surface.</figcaption></figure>
   <figure><img src="fig/b_xy_domain.png" alt="B magnitude over the whole domain">
-    <figcaption><b>The whole 30&nbsp;mm domain</b>, log scale, so the decay to the wall is
-    visible.</figcaption></figure>
+    <figcaption><b>The whole 90&nbsp;mm domain</b>, log scale and pinned, so the decay to the wall
+    is visible. The field is flat and dark well before the wall is reached, which is the point of
+    &sect;5.7: the boundary is far enough out to stop interfering.</figcaption></figure>
 </div>
 
 <p>Three things in the zoomed view are worth naming, because each is a check. <code>|B|</code> has a
@@ -276,41 +280,25 @@ outside. This is the plane the cut is made on.</p>
 </div>
 
 <div class="note">
-<p><strong>Two earlier claims in this section were wrong and are withdrawn.</strong> The first was a
-table of &ldquo;median <code>|E|</code> inside the conductor / in the air / at the cut&rdquo; taken as
-<b>volume medians over whole regions</b>. Averaging <code>|E|</code> over a region that is not
-homogeneous does not measure anything: in case 02 the same statistic is dominated by the rod's
-<em>end caps</em>, where <code>|E|</code> reaches 197.8&nbsp;V/m against 25&nbsp;V/m in the body, and
-here it mixes the port's neighbourhood with the far side of the ring, which differ by a factor of 50.
-The second was the claim that the air's field exceeds the conductor's &ldquo;in every other
-case&rdquo;, supported by a cross&#8209;suite table built from those same volume medians. <b>Both are
-replaced below by measurements made on a stated plane, in a stated shell, on a stated side.</b></p>
+<p><b>Two earlier claims in this section were wrong and are withdrawn.</b> The first was a table of "median <code>|E|</code> inside the conductor / in the air / at the cut" taken as <b>volume medians over whole regions</b>. Averaging <code>|E|</code> over a region that is not homogeneous does not measure anything: in case 02 the same statistic is dominated by the rod's <em>end caps</em>, where <code>|E|</code> reaches 197.8 V/m against 25 V/m in the body, and here it mixes the port's neighbourhood with the far side of the ring. The second was the claim that the air's field exceeds the conductor's "in every other case", supported by a cross-suite table built from those same volume medians. <b>Both are replaced below by measurements made on a stated plane, in a stated shell, on a stated side.</b></p>
 </div>
 
-<p>Measured on the <code>y = 0</code> plane &mdash; the plane these figures actually cut &mdash; split
-by side:</p>
+<p>Measured on the <code>y = 0</code> plane &mdash; the plane these figures actually cut &mdash; split by side:</p>
 
 <div class="tw"><table>
 <thead><tr><th>shell around the tube</th><th>port side, <code>x &gt; 0</code></th><th>joint side, <code>x &lt; 0</code></th></tr></thead>
 <tbody>
-<tr><td>inside the conductor</td><td>0.00871 V/m</td><td>0.00870 V/m</td></tr>
-<tr><td>air, <code>1.0&ndash;1.5a</code></td><td><b>0.39797</b></td><td>0.00812</td></tr>
-<tr><td>air, <code>1.5&ndash;2.5a</code></td><td>0.09781</td><td>0.00671</td></tr>
-<tr><td>air, <code>2.5&ndash;5a</code></td><td>0.03413</td><td>&mdash;</td></tr>
+<tr><td>inside the conductor</td><td>0.00867 V/m</td><td>0.00864 V/m</td></tr>
+<tr><td>air, <code>1.0&ndash;1.5a</code></td><td><b>0.18829</b></td><td>0.00860</td></tr>
+<tr><td>air, <code>1.5&ndash;2.5a</code></td><td>0.08383</td><td>0.00685</td></tr>
+<tr><td>air, <code>2.5&ndash;5a</code></td><td>0.03321</td><td>0.00511</td></tr>
 </tbody></table></div>
 
-<p><strong>Inside the conductor the two sides agree to 0.1 %</strong>, as they must: the same current
-flows through both. Outside, they differ by <b>49x</b>. That difference is the port, and nothing
-else.</p>
+<p><b>Inside the conductor the two sides agree to 0.3 %</b>, as they must: the same current flows through both. Immediately outside, they differ by <b>22x</b>. That difference is the port, and nothing else.</p>
 
-<p><strong>On the joint side the air's field is <em>lower</em> than the conductor's</strong> (0.00812
-against 0.00870) once you are a half&#8209;radius out. Right at the wall it is higher, as the boundary
-condition requires &mdash; &sect;5.8 measures 1.086x in a thin shell at <code>1.01&ndash;1.05a</code>
-&mdash; and it then decays outward. So there is no general rule that &ldquo;the air's <code>E</code>
-is larger&rdquo;; there is a boundary condition at the wall and a decay away from it.</p>
+<p><b>On the joint side the air just outside the tube is indistinguishable from the conductor's own field</b> &mdash; 0.00860 against 0.00864, half a per cent apart &mdash; and it then decays outward. So there is no general rule that "the air's <code>E</code> is larger". There is a boundary condition at the wall, which &sect;5.8 shows this mesh can only just resolve, and a decay away from it.</p>
 
-<p>For comparison, case 02's rod measured the same way, on the mid&#8209;height plane its own figure
-cuts:</p>
+<p>For comparison, case 02's rod measured the same way, on the mid-height plane its own figure cuts:</p>
 
 <div class="tw"><table>
 <thead><tr><th></th><th>median <code>|E|</code></th></tr></thead>
@@ -322,28 +310,13 @@ cuts:</p>
 <tr><td>maximum anywhere on that plane</td><td>25.307</td></tr>
 </tbody></table></div>
 
-<p>On the plane the figure shows, case 02's air is <b>not</b> higher than its conductor &mdash; 24.6
-against 24.9. The 55.7&nbsp;V/m that the withdrawn table attributed to &ldquo;air within
-2.5a&rdquo; was the volume median, set by the end caps the figure does not show.</p>
+<p>On the plane the figure shows, case 02's air is <b>not</b> higher than its conductor &mdash; 24.6 against 24.9. The 55.7 V/m that the withdrawn table attributed to "air within 2.5a" was the volume median, set by the end caps the figure does not show.</p>
 
 <div class="note">
-<p><strong>Why the conductor reads blue here.</strong> It is the colour range, not the physics. These
-figures keep the air in frame and must span the cut spike at 1.72&nbsp;V/m, so the conductor &mdash;
-three orders of magnitude below it &mdash; lands at the bottom of the scale. A figure thresholded to
-the conductor alone and auto&#8209;ranged would show the same field spanning the whole colour map.
-Same data, different window.</p>
-<p><strong>The air's field is electrostatic</strong>, not <code>&minus;j&omega;A</code> &mdash; that
-term is only 2.6e&#8209;04&nbsp;V/m here. The loop carries 0.354&nbsp;mV from one side of the cut to
-the other and that voltage appears across the surrounding air, strongest near the cut where the
-gradient is.</p>
-<p><strong>The 1.72&nbsp;V/m at the cut is a mesh artefact, not a field.</strong> It equals the
-potential jump divided by the local element size to within 3 %, so it diverges under refinement.
-&sect;5.8 does the arithmetic.</p>
-<p><strong>Two ranges are pinned, and both had to be.</strong> On an auto range that one cut spike
-takes the whole colour map and everything else reads as flat blue, which is how this figure first
-came out. The port plane in &sect;4.2 has the opposite problem: the slice spans the whole 30&nbsp;mm
-domain while the view is zoomed to 12&nbsp;mm, so an auto range is set by a far&#8209;field minimum
-three decades below anything visible and the picture lands uniformly red.</p>
+<p><b>Why the conductor reads blue here.</b> It is the colour range, not the physics. These figures keep the air in frame and must span the cut spike at 1.95 V/m, so the conductor &mdash; more than two orders of magnitude below it &mdash; lands at the bottom of the scale. A figure thresholded to the conductor alone and auto-ranged would show the same field spanning the whole colour map. Same data, different window.</p>
+<p><b>The air's field is electrostatic</b>, not <code>&minus;j&omega;A</code> &mdash; that term is only 2.6e-04 V/m here. The loop carries 0.354 mV from one side of the cut to the other and that voltage appears across the surrounding air, strongest near the cut where the gradient is.</p>
+<p><b>The 1.95 V/m at the cut is a mesh artefact, not a field.</b> It equals the potential jump divided by the local element size to within 6 %, and the 30 mm mesh reads 1.72 V/m for the same ratio. It diverges under refinement. &sect;5.8 does the arithmetic.</p>
+<p><b>Every range in these figures is pinned, and on the 90 mm domain it has to be.</b> An auto range is set by the single faintest cell in the frame, which sits in a far corner and moves whenever the domain or the grading changes &mdash; so the shipped figure and the control's could not honestly be laid beside each other. Pinning also keeps the cut spike from taking the whole colour map, which is how these figures first came out.</p>
 </div>
 
 <h3>4.4 E on the plane normal to the torus, through the port</h3>
@@ -365,13 +338,13 @@ bright.</p>
 <div class="tw"><table>
 <thead><tr><th>crossing</th><th>conductor <code>|E|</code></th><th>air right around it</th></tr></thead>
 <tbody>
-<tr><td><code>x &gt; 0</code>, &theta; = 0 &mdash; <b>the port</b></td><td>0.008713 V/m</td><td>median <b>0.174</b>, max <b>1.72 V/m</b></td></tr>
-<tr><td><code>x &lt; 0</code>, &theta; = &pi; &mdash; a plain joint</td><td>0.008703 V/m</td><td>median 0.0076, max 0.0099 V/m</td></tr>
+<tr><td><code>x &gt; 0</code>, &theta; = 0 &mdash; <b>the port</b></td><td>0.008669 V/m</td><td>median <b>0.1362</b>, max <b>1.9506 V/m</b></td></tr>
+<tr><td><code>x &lt; 0</code>, &theta; = &pi; &mdash; a plain joint</td><td>0.008641 V/m</td><td>median 0.0081, max 0.0109 V/m</td></tr>
 </tbody></table></div>
 
-<p>Inside the two conductors <code>|E|</code> is the <b>same</b> &mdash; 0.008713 against
-0.008703&nbsp;V/m, both <code>J/&sigma;</code>, because the same current flows through both. Outside
-them it differs by <b>23x</b>. That difference <em>is</em> the port.</p>
+<p>Inside the two conductors <code>|E|</code> is the <b>same</b> &mdash; 0.008669 against
+0.008641&nbsp;V/m, both <code>J/&sigma;</code>, because the same current flows through both. Outside
+them it differs by <b>17x</b>. That difference <em>is</em> the port.</p>
 
 <div class="figs one">
   <figure><img src="fig/e_port_plane.png" alt="E on the y = 0 plane, both tube cross-sections">
@@ -384,8 +357,11 @@ them it differs by <b>23x</b>. That difference <em>is</em> the port.</p>
 
 <div class="figs">
   <figure><img src="fig/e_port_domain.png" alt="E on the y = 0 plane over the whole domain">
-    <figcaption><b>|E|, the full 60 &times; 30&nbsp;mm cut.</b> Log scale over five decades: 1.7 V/m
-    at the cut face down to below 1e&#8209;4 at the wall.</figcaption></figure>
+    <figcaption><b>|E| on the <code>y = 0</code> cut, framed at 30&nbsp;mm.</b> Log scale over five
+    decades: 1.95 V/m at the cut face down to 1.8e&#8209;05 at the 90&nbsp;mm wall. The cut itself is
+    180 &times; 90&nbsp;mm now, and framing a square render on all of it shrinks the ring to a dot
+    &mdash; so this view keeps the 30&nbsp;mm window where the structure is, and the square
+    <code>xy</code> views above are the ones framed on the whole domain.</figcaption></figure>
   <figure><img src="fig/b_port_domain.png" alt="B on the same plane over the whole domain">
     <figcaption><b>|B| on the same cut</b>, for comparison. It is <b>continuous</b> across the port
     and shows both crossings equally &mdash; the asymmetry above is an <code>E</code> effect
@@ -421,381 +397,307 @@ same plane needs none of this care.</p>
 <div class="tw"><table>
 <thead><tr><th>air shell hugging the tube, <code>+x</code> side</th><th>median <code>|E|</code></th></tr></thead>
 <tbody>
-<tr><td>at the cut, <code>|y| &lt; 0.3a</code></td><td><b>0.4207 V/m</b></td></tr>
-<tr><td>one tube radius off, <code>0.7a &lt; |y| &lt; 1.3a</code></td><td>0.1708 V/m</td></tr>
-<tr><td>two to three radii round</td><td>0.0999 V/m</td></tr>
-<tr><td>inside the conductor</td><td>0.008584 V/m &nbsp;(<code>J/&sigma;</code>)</td></tr>
-<tr><td>global maximum, at the cut face</td><td><b>1.7218 V/m</b> &mdash; 200x the conductor</td></tr>
+<tr><td>at the cut, <code>|y| &lt; 0.3a</code></td><td><b>0.4041 V/m</b></td></tr>
+<tr><td>one tube radius off, <code>0.7a &lt; |y| &lt; 1.3a</code></td><td>0.1706 V/m</td></tr>
+<tr><td>two to three radii round</td><td>0.0994 V/m</td></tr>
+<tr><td>inside the conductor</td><td>0.008619 V/m &nbsp;(<code>J/&sigma;</code>)</td></tr>
+<tr><td>global maximum, at the cut face</td><td><b>1.9506 V/m</b> &mdash; 226x the conductor</td></tr>
 </tbody></table></div>
 
-<p>The field falls by 2.5x within one tube radius of the cut and by 4.2x by two or three. Both
+<p>The field falls by 2.4x within one tube radius of the cut and by 4.1x by two or three. Both
 zooms are <b>log scaled</b>: the view spans more than two decades, from the conductor's
-8.6e&#8209;03 to 1.7&nbsp;V/m, and a linear range that resolves the conductor saturates every air
-cell around it into one flat colour.</p>
+8.6e&#8209;03 to 1.95&nbsp;V/m, and a linear range that resolves the conductor saturates every air
+cell around it into one flat colour. The 226x is a property of the mesh, not of the ring &mdash;
+&sect;5.8.</p>
 
 <h2>5. Comparison with the analytical solutions</h2>
 
-<p>Every number in this section comes from <code>analytic_comparison.py</code>, which prints the whole
-set in one run and derives each closed form in its docstring. Nothing here is hand&#8209;copied from
-a previous run.</p>
+<p>Every number in this section comes from <code>analytic_comparison.py</code>, which prints the whole set in one run and derives each closed form in its docstring. Nothing here is hand-copied from a previous run.</p>
 
-<pre><code>"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" analytic_comparison.py output</code></pre>
+<pre><code>"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" analytic_comparison.py output
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" analytic_comparison.py output_small</code></pre>
 
-<p><strong>What has a closed form here, and what does not.</strong> This matters more than it sounds,
-because the place the fields look most dramatic &mdash; the cut &mdash; is exactly the place where no
-finite analytic value exists to compare against.</p>
+<p><b>What has a closed form here, and what does not.</b> This matters more than it sounds, because the two places the fields look most dramatic &mdash; the cut, and the conductor's own surface &mdash; are the two places with the least to compare against.</p>
 
 <div class="tw"><table>
 <thead><tr><th>quantity</th><th>closed form</th><th>status</th></tr></thead>
 <tbody>
-<tr><td><code>E</code> inside the conductor</td><td><code>E(&rho;) = I/(&sigma;&rho;K)</code></td><td><span class="ok">exact</span></td></tr>
-<tr><td><code>R</code></td><td><code>2&pi;/(&sigma;K)</code></td><td><span class="ok">exact</span></td></tr>
-<tr><td><code>B</code> on the loop axis</td><td>superposition over the real current</td><td><span class="ok">exact</span></td></tr>
+<tr><td><code>E</code> inside the conductor</td><td><code>E(&rho;) = I/(&sigma;&rho;K)</code></td><td><b>exact</b></td></tr>
+<tr><td><code>R</code></td><td><code>2&pi;/(&sigma;K)</code></td><td><b>exact</b></td></tr>
+<tr><td><code>B</code> on the loop axis</td><td>superposition over the real current</td><td><b>exact</b></td></tr>
 <tr><td><code>B</code> anywhere in the air</td><td>filament, complete elliptic integrals</td><td>approximate, <code>O((a/R)&sup2;) &asymp; 1.5 %</code></td></tr>
-<tr><td><code>L</code></td><td><code>&mu;&#8320;R[ln(8R/a) &minus; 2 + &frac14;]</code></td><td>approximate, thin&#8209;wire</td></tr>
-<tr><td><code>E</code> in the air</td><td>&mdash;</td><td><span class="warn">none</span>; only a bound at the wall</td></tr>
-<tr><td><code>E</code> at the cut</td><td>diverges</td><td><span class="warn">none exists</span>; see &sect;5.8</td></tr>
+<tr><td><code>L</code></td><td><code>&mu;&#8320;R[ln(8R/a) &minus; 2 + &frac14;]</code></td><td>approximate, thin-wire</td></tr>
+<tr><td><code>E</code> in the air</td><td>&mdash;</td><td><b>none</b>; only a bound at the wall, and &sect;5.8 shows it is barely testable</td></tr>
+<tr><td><code>E</code> at the cut</td><td>diverges</td><td><b>none exists</b>; see &sect;5.8</td></tr>
 </tbody></table></div>
 
-<p><code>K = &int;dA/&rho;</code> is the one quantity every exact form is built on. It is taken off the
-mesh as <code>(1/2&pi;) &int;dV/&rho;&sup2;</code>, which assumes nothing whatever about the
-cross&#8209;section's shape &mdash; not that it is a circle, not that it is a 20&#8209;gon. For this
-mesh <b><code>K = 3.054192e&#8209;04 m</code></b>.</p>
+<p><code>K = &int;dA/&rho;</code> is the one quantity every exact form is built on. It is taken off the mesh as <code>(1/2&pi;) &int;dV/&rho;&sup2;</code>, which assumes nothing whatever about the cross-section's shape &mdash; not that it is a circle, not that it is a 20-gon. For this mesh <b><code>K = 3.054193e-04 m</code></b>.</p>
 
 <h3>5.1 The interior solution, derived</h3>
 
 <p>Current flows azimuthally, so try <code>&Phi; = V&theta;/2&pi;</code> and check it:</p>
 
 <ul>
-<li><b>It conserves charge.</b> <code>&theta;</code> is harmonic &mdash; <code>&nabla;&sup2;&theta; = 0</code>
-in cylindrical coordinates &mdash; so <code>&nabla;&sup2;&Phi; = 0</code> and
-<code>&nabla;&middot;J = &minus;&sigma;&nabla;&sup2;&Phi; = 0</code>.</li>
-<li><b>No current leaks through the wall.</b> <code>&nabla;&Phi; = (V/2&pi;)(1/&rho;) &phi;&#770;</code>
-is purely azimuthal, and the tube wall is a surface of revolution whose normal lies in the
-<code>&rho;</code>&ndash;<code>z</code> plane. So <code>&part;&Phi;/&part;n = 0</code> on it
-identically.</li>
+<li><b>It conserves charge.</b> <code>&theta;</code> is harmonic &mdash; <code>&nabla;&sup2;&theta; = 0</code> in cylindrical coordinates &mdash; so <code>&nabla;&sup2;&Phi; = 0</code> and <code>&nabla;&middot;J = &minus;&sigma;&nabla;&sup2;&Phi; = 0</code>.</li>
+<li><b>No current leaks through the wall.</b> <code>&nabla;&Phi; = (V/2&pi;)(1/&rho;) &phi;&#770;</code> is purely azimuthal, and the tube wall is a surface of revolution whose normal lies in the <code>&rho;</code>&ndash;<code>z</code> plane. So <code>&part;&Phi;/&part;n = 0</code> on it identically.</li>
 </ul>
 
-<p>Both conditions hold exactly, for any cross&#8209;section shape, so this <b>is</b> the solution
-&mdash; not an approximation to it. Therefore</p>
+<p>Both conditions hold exactly, for any cross-section shape, so this <b>is</b> the solution &mdash; not an approximation to it. Therefore</p>
 
-<div class="eq">E(&rho;) = V/(2&pi;&rho;) &nbsp;&nbsp;&nbsp;&nbsp; J(&rho;) = &sigma;V/(2&pi;&rho;)</div>
+<div class="eq">E(&rho;) = V/(2&pi;&rho;)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; J(&rho;) = &sigma;V/(2&pi;&rho;)</div>
 
-<p><strong><code>E</code> is not uniform across the section; it goes as
-<code>1/&rho;</code>.</strong> Every filament at cylindrical radius <code>&rho;</code> closes a path
-of length <code>2&pi;&rho;</code>, and all filaments share the same terminal voltage <code>V</code>,
-so the field along each is <code>V</code> divided by its own path length. The inner filaments have a
-shorter path, so they carry more current: the current <em>crowds toward the inner radius</em>. Across
-this tube the ratio is exactly</p>
+<p><b><code>E</code> is not uniform across the section; it goes as <code>1/&rho;</code>.</b> Every filament at cylindrical radius <code>&rho;</code> closes a path of length <code>2&pi;&rho;</code>, and all filaments share the same terminal voltage <code>V</code>, so the field along each is <code>V</code> divided by its own path length. The inner filaments have a shorter path, so they carry more current: the current <em>crowds toward the inner radius</em>. Across this tube the ratio is exactly</p>
 
 <div class="eq">E(R&minus;a)/E(R+a) = (R+a)/(R&minus;a) = 7.3/5.7 = 1.2807</div>
 
-<p>Integrating <code>J</code> over the section gives <code>I = &sigma;VK/2&pi;</code>, hence
-<code>V = 2&pi;I/(&sigma;K)</code> and the two forms used below:</p>
+<p>Integrating <code>J</code> over the section gives <code>I = &sigma;VK/2&pi;</code>, hence <code>V = 2&pi;I/(&sigma;K)</code> and the two forms used below:</p>
 
-<div class="eq">E(&rho;) = I/(&sigma;&rho;K) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; R = V/I = 2&pi;/(&sigma;K)</div>
+<div class="eq">E(&rho;) = I/(&sigma;&rho;K)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;R = V/I = 2&pi;/(&sigma;K)</div>
 
-<p>This holds while there is no skin effect to redistribute the current. Here
-<code>a/&delta; = 0.086</code>, so there is none &mdash; case 04 is the case where that assumption is
-deliberately broken.</p>
+<p>This holds while there is no skin effect to redistribute the current. Here <code>a/&delta; = 0.086</code>, so there is none &mdash; case 04 is the case where that assumption is deliberately broken.</p>
 
-<h3>5.2 E inside the conductor &mdash; exactly where it was compared</h3>
+<h3>5.2 <code>E</code> inside the conductor &mdash; exactly where it was compared</h3>
 
-<div class="note">
-<p><strong>The comparison is made cell by cell, in the conductor only.</strong> Specifically: every
-tetrahedron with <code>body_tag = 1</code>, taking its complex
-<code>E_cell_real</code>/<code>E_cell_imag</code> at the tet centroid, forming
-<code>|E| = &radic;(Re&sup2; + Im&sup2;)</code>, and dividing by <code>I/(&sigma;&rho;K)</code>
-evaluated at that same centroid's cylindrical radius <code>&rho;</code>. The cells are then binned by
-<code>&rho;</code> and the median and 90th percentile of the relative error are reported per band.
-<b>No comparison is made in the air</b> &mdash; there is no closed form there (&sect;5.8).</p>
-</div>
+<p><b>The comparison is made cell by cell, in the conductor only.</b> Specifically: every tetrahedron with <code>body_tag = 1</code>, taking its complex <code>E_cell_real</code>/<code>E_cell_imag</code> at the tet centroid, forming <code>|E| = &radic;(Re&sup2; + Im&sup2;)</code>, and dividing by <code>I/(&sigma;&rho;K)</code> evaluated at that same centroid's cylindrical radius <code>&rho;</code>. The cells are then binned by <code>&rho;</code> and the median and 90th percentile of the relative error are reported per band. <b>No comparison is made in the air</b> &mdash; there is no closed form there (&sect;5.8).</p>
 
-<p>The reason for splitting by azimuth as well as radius is that the discretisation has to carry a
-<em>discontinuity</em> in <code>&Phi;</code> at the cut, and the question is whether the solution is
-worse there.</p>
+<p>The reason for splitting by azimuth as well as radius is that the discretisation has to carry a <em>discontinuity</em> in <code>&Phi;</code> at the cut, and the question is whether the solution is worse there.</p>
 
 <div class="figs one">
   <figure><img src="fig/analytic_E.png" alt="E inside the conductor against the exact interior solution">
-    <figcaption><b>(a)</b> the <code>1/&rho;</code> law with the solver's per&#8209;band medians on
-    top of it. <b>(b)</b> the same data as a residual, split three ways: at the port, at the joint
-    diametrically opposite it, and at a generic azimuth that is neither.</figcaption></figure>
+    <figcaption><b>Panel (a)</b> is the <code>1/&rho;</code> law with the solver's per-band medians on top of it. <b>Panel (b)</b> is the same data as a residual, split three ways: at the port, at the joint diametrically opposite it, and at a generic azimuth that is neither.</figcaption></figure>
 </div>
 
 <div class="tw"><table>
 <thead><tr><th>region</th><th><code>&rho;</code> band</th><th>cells</th><th>median error</th><th>90th pct <code>|error|</code></th></tr></thead>
 <tbody>
-<tr><td><b>whole conductor</b></td><td>0.88&ndash;0.94R</td><td>4480</td><td><span class="ok">&minus;0.013 %</span></td><td>0.039 %</td></tr>
-<tr><td></td><td>0.94&ndash;1.00R</td><td>6099</td><td><span class="ok">&minus;0.015 %</span></td><td>0.031 %</td></tr>
-<tr><td></td><td>1.00&ndash;1.06R</td><td>6241</td><td><span class="ok">&minus;0.016 %</span></td><td>0.028 %</td></tr>
-<tr><td></td><td>1.06&ndash;1.12R</td><td>6624</td><td><span class="ok">&minus;0.016 %</span></td><td>0.029 %</td></tr>
-<tr><td><b>at the port, &theta; = 0</b></td><td>0.88&ndash;0.94R</td><td>188</td><td>+0.101 %</td><td>0.785 %</td></tr>
-<tr><td></td><td>0.94&ndash;1.00R</td><td>190</td><td>&minus;0.008 %</td><td>0.803 %</td></tr>
-<tr><td></td><td>1.00&ndash;1.06R</td><td>188</td><td>&minus;0.034 %</td><td><b>1.030 %</b></td></tr>
-<tr><td></td><td>1.06&ndash;1.12R</td><td>169</td><td>+0.046 %</td><td><b>1.419 %</b></td></tr>
-<tr><td>at the joint, &theta; = &pi;</td><td>0.88&ndash;0.94R</td><td>182</td><td>+0.026 %</td><td>0.154 %</td></tr>
-<tr><td></td><td>0.94&ndash;1.00R</td><td>194</td><td>&minus;0.010 %</td><td>0.021 %</td></tr>
-<tr><td></td><td>1.00&ndash;1.06R</td><td>184</td><td>&minus;0.013 %</td><td>0.022 %</td></tr>
-<tr><td></td><td>1.06&ndash;1.12R</td><td>185</td><td>&minus;0.015 %</td><td>0.056 %</td></tr>
-<tr><td>generic azimuth, &theta; = &pi;/2</td><td>0.88&ndash;0.94R</td><td>341</td><td>&minus;0.010 %</td><td>0.020 %</td></tr>
-<tr><td></td><td>0.94&ndash;1.00R</td><td>459</td><td>&minus;0.011 %</td><td>0.020 %</td></tr>
-<tr><td></td><td>1.00&ndash;1.06R</td><td>473</td><td>&minus;0.013 %</td><td>0.020 %</td></tr>
+<tr><td><b>whole conductor</b></td><td>0.88&ndash;0.94R</td><td>4500</td><td>&minus;0.013 %</td><td>0.035 %</td></tr>
+<tr><td></td><td>0.94&ndash;1.00R</td><td>6016</td><td>&minus;0.015 %</td><td>0.030 %</td></tr>
+<tr><td></td><td>1.00&ndash;1.06R</td><td>6268</td><td>&minus;0.016 %</td><td>0.027 %</td></tr>
+<tr><td></td><td>1.06&ndash;1.12R</td><td>6625</td><td>&minus;0.016 %</td><td>0.029 %</td></tr>
+<tr><td><b>at the port, &theta; = 0</b></td><td>0.88&ndash;0.94R</td><td>188</td><td>+0.033 %</td><td>0.801 %</td></tr>
+<tr><td></td><td>0.94&ndash;1.00R</td><td>187</td><td>+0.062 %</td><td>0.392 %</td></tr>
+<tr><td></td><td>1.00&ndash;1.06R</td><td>187</td><td>+0.027 %</td><td>0.965 %</td></tr>
+<tr><td></td><td>1.06&ndash;1.12R</td><td>165</td><td>+0.013 %</td><td><b>2.404 %</b></td></tr>
+<tr><td>at the joint, &theta; = &pi;</td><td>0.88&ndash;0.94R</td><td>182</td><td>+0.025 %</td><td>0.153 %</td></tr>
+<tr><td></td><td>0.94&ndash;1.00R</td><td>182</td><td>&minus;0.010 %</td><td>0.020 %</td></tr>
+<tr><td></td><td>1.00&ndash;1.06R</td><td>178</td><td>&minus;0.013 %</td><td>0.021 %</td></tr>
+<tr><td></td><td>1.06&ndash;1.12R</td><td>183</td><td>&minus;0.015 %</td><td>0.053 %</td></tr>
+<tr><td>generic azimuth, &theta; = &pi;/2</td><td>0.88&ndash;0.94R</td><td>343</td><td>&minus;0.010 %</td><td>0.021 %</td></tr>
+<tr><td></td><td>0.94&ndash;1.00R</td><td>460</td><td>&minus;0.011 %</td><td>0.021 %</td></tr>
+<tr><td></td><td>1.00&ndash;1.06R</td><td>469</td><td>&minus;0.012 %</td><td>0.020 %</td></tr>
 <tr><td></td><td>1.06&ndash;1.12R</td><td>503</td><td>&minus;0.011 %</td><td>0.022 %</td></tr>
 </tbody></table></div>
 
-<p><strong>Over the whole conductor the field is within 0.016 % of the exact law</strong>, and the
-90th percentile is 0.03 % &mdash; that is the solver reproducing a closed form to four significant
-figures, everywhere, in 23,444 elements.</p>
+<p><b>Over the whole conductor the field is within 0.016 % of the exact law</b>, and the 90th percentile is 0.035 % &mdash; that is the solver reproducing a closed form to four significant figures, everywhere, in all 23,409 conductor elements. The four bands partition the conductor exactly; nothing is left out of them.</p>
 
-<p><strong>The port costs about a factor of fifty, and only in the spread.</strong> Its
-<em>medians</em> are still at the 0.01&ndash;0.1 % level, so there is no bias; what grows is the
-scatter, from a 90th percentile of 0.02 % at a generic azimuth to 1.42 % next to the cut. Narrowing
-to the 362 cells that actually touch the cut face:</p>
+<p><b>The port costs about a factor of a hundred, and only in the spread.</b> Its <em>medians</em> are still at the 0.01&ndash;0.06 % level, so there is no bias; what grows is the scatter, from a 90th percentile of 0.02 % at a generic azimuth to 2.40 % next to the cut. Narrowing to the cells that actually touch the cut face:</p>
 
 <div class="tw"><table>
 <thead><tr><th>cells touching the cut face (<code>|y| &lt; 0.12 mm</code>, <code>x &gt; 0</code>)</th><th></th></tr></thead>
 <tbody>
-<tr><td>count</td><td>362</td></tr>
-<tr><td>median error</td><td><b>+0.037 %</b></td></tr>
-<tr><td>worst single cell</td><td><b>+2.553 %</b></td></tr>
+<tr><td>count</td><td>353</td></tr>
+<tr><td>median error</td><td><b>+0.058 %</b></td></tr>
+<tr><td>worst single cell</td><td><b>&minus;3.378 %</b></td></tr>
 </tbody></table></div>
 
-<p>That is the honest cost of representing a discontinuity with a finite element: one layer of cells
-gets it wrong by a couple of per cent, the median is unbiased, and one element further in it is
-gone. The joint at <code>&theta; = &pi;</code> &mdash; geometrically identical, two half&#8209;rings
-meeting, but with no potential difference across it &mdash; sits at 0.02 %, which confirms the error
-belongs to the <em>cut</em>, not to the mesh seam.</p>
+<p>That is the honest cost of representing a discontinuity with a finite element: one layer of cells gets it wrong by a few per cent, the median is unbiased, and one element further in it is gone. The joint at <code>&theta; = &pi;</code> &mdash; geometrically identical, two half-rings meeting, but with no potential difference across it &mdash; sits at 0.02 %, which confirms the error belongs to the <em>cut</em>, not to the mesh seam.</p>
 
-<h3>5.3 R &mdash; 0.11 %</h3>
+<h3>5.3 <code>R</code> &mdash; 0.13 %</h3>
 
 <div class="tw"><table>
 <tbody>
-<tr><td>measured</td><td>3.543192e&#8209;04 &Omega;</td></tr>
-<tr><td>exact for <b>this</b> shape, <code>2&pi;/(&sigma;K)</code></td><td>3.546954e&#8209;04 &Omega;</td></tr>
-<tr><td><b>error</b></td><td><span class="ok">&minus;0.106 %</span></td></tr>
+<tr><td>measured</td><td>3.542415e-04 &Omega;</td></tr>
+<tr><td>exact for <b>this</b> shape, <code>2&pi;/(&sigma;K)</code></td><td>3.546953e-04 &Omega;</td></tr>
+<tr><td><b>error</b></td><td><b>&minus;0.128 %</b></td></tr>
 </tbody></table></div>
 
-<p><strong>The exact value is not <code>2&pi;R/(&sigma;A)</code>.</strong> That formula assumes every
-filament has the same path length, and &sect;5.1 shows they do not. Using it gives
-3.560434e&#8209;04 &Omega;, <b>+0.380 %</b> &mdash; nearly four times the solver's own error, and in
-the opposite direction. The naive form is wrong because it ignores the <code>1/&rho;</code>
-crowding.</p>
+<p><b>The exact value is not <code>2&pi;R/(&sigma;A)</code>.</b> That formula assumes every filament has the same path length, and &sect;5.1 shows they do not. Using it gives 3.560434e-04 &Omega;, <b>+0.380 %</b> &mdash; three times the solver's own error, and in the opposite direction. The naive form is wrong because it ignores the <code>1/&rho;</code> crowding.</p>
 
-<p>The 2.5 % gap to the reference tool decomposes exactly: <b>+1.61 %</b> because our
-cross&#8209;section is a 20&#8209;gon with 1.64 % less area than a circle, and 0.91 % between the
-reference and the exact round&#8209;torus value.</p>
+<p>The 2.5 % gap to the reference tool decomposes exactly: <b>+1.61 %</b> because our cross-section is a 20-gon with 1.64 % less area than a circle, and 0.91 % between the reference and the exact round-torus value.</p>
 
-<h3>5.4 B on the loop axis &mdash; exact, no filament approximation</h3>
+<h3>5.4 <code>B</code> on the loop axis &mdash; exact, no filament approximation</h3>
 
-<p>On the axis there is a closed form that uses the <b>real</b> current distribution, not a
-thin&#8209;wire idealisation. A circular filament of radius <code>&rho;</code> carrying
-<code>I_f</code> produces, on its own axis at axial distance <code>d</code>,</p>
+<p>On the axis there is a closed form that uses the <b>real</b> current distribution, not a thin-wire idealisation. A circular filament of radius <code>&rho;</code> carrying <code>I_f</code> produces, on its own axis at axial distance <code>d</code>,</p>
 
 <div class="eq">B = &mu;&#8320; I_f &rho;&sup2; / (2 (&rho;&sup2; + d&sup2;)<sup>3/2</sup>)</div>
 
-<p>Superposing the tube's filaments, each carrying <code>J(&rho;) dA = I dA/(&rho;K)</code>, and
-writing <code>dA = dV/2&pi;&rho;</code>:</p>
+<p>Superposing the tube's filaments, each carrying <code>J(&rho;) dA = I dA/(&rho;K)</code>, and writing <code>dA = dV/2&pi;&rho;</code>:</p>
 
 <div class="eq">B_z(z&#8320;) = (&mu;&#8320;I / 4&pi;K) &int; dV / (&rho;&sup2; + (z&#8320;&minus;z)&sup2;)<sup>3/2</sup></div>
 
-<p>The integral runs over the conductor cells of the mesh, so this reference knows the actual
-cross&#8209;section and the actual <code>1/&rho;</code> current profile. It is exact.</p>
+<p>The integral runs over the conductor cells of the mesh, so this reference knows the actual cross-section and the actual <code>1/&rho;</code> current profile. It is exact.</p>
 
 <div class="figs one">
   <figure><img src="fig/analytic_B.png" alt="B against its two closed forms">
-    <figcaption><b>(a)</b> <code>B</code> on the loop axis, with the residual inset because a 2 %
-    difference is invisible at this scale. <b>(b)</b> <code>B</code> through the air against the
-    filament closed form, for both domain sizes &mdash; this panel is the argument of
-    &sect;5.7.</figcaption></figure>
+    <figcaption></figcaption></figure>
 </div>
 
 <div class="tw"><table>
-<thead><tr><th><code>z&#8320;</code> (mm)</th><th>measured (T)</th><th>exact (T)</th><th>error</th><th>filament <code>&mu;&#8320;IR&sup2;/2(R&sup2;+z&sup2;)<sup>3/2</sup></code></th></tr></thead>
+<thead><tr><th><code>z&#8320;</code> (mm)</th><th>measured (T)</th><th>exact (T)</th><th>error</th><th>error, 30 mm control</th><th>filament <code>&mu;&#8320;IR&sup2;/2(R&sup2;+z&sup2;)^{3/2}</code></th></tr></thead>
 <tbody>
-<tr><td>0.0</td><td>9.441475e&#8209;05</td><td>9.684784e&#8209;05</td><td><b>&minus;2.51 %</b></td><td>9.666439e&#8209;05</td></tr>
-<tr><td>1.0</td><td>9.122770e&#8209;05</td><td>9.349611e&#8209;05</td><td>&minus;2.43 %</td><td>9.333132e&#8209;05</td></tr>
-<tr><td>2.0</td><td>8.185121e&#8209;05</td><td>8.451777e&#8209;05</td><td>&minus;3.16 %</td><td>8.439933e&#8209;05</td></tr>
-<tr><td>3.0</td><td>7.073297e&#8209;05</td><td>7.241927e&#8209;05</td><td>&minus;2.33 %</td><td>7.235454e&#8209;05</td></tr>
-<tr><td>5.0</td><td>4.647239e&#8209;05</td><td>4.812509e&#8209;05</td><td>&minus;3.43 %</td><td>4.813579e&#8209;05</td></tr>
-<tr><td>7.0</td><td>2.788965e&#8209;05</td><td>3.041956e&#8209;05</td><td>&minus;8.32 %</td><td>3.045491e&#8209;05</td></tr>
-<tr><td>10.0</td><td>1.246147e&#8209;05</td><td>1.561402e&#8209;05</td><td><span class="warn">&minus;20.19 %</span></td><td>1.564690e&#8209;05</td></tr>
+<tr><td>0.0</td><td>9.648862e-05</td><td>9.684792e-05</td><td><b>&minus;0.371 %</b></td><td>&minus;2.512 %</td><td>9.666439e-05</td></tr>
+<tr><td>1.0</td><td>9.347581e-05</td><td>9.349618e-05</td><td>&minus;0.022 %</td><td>&minus;2.426 %</td><td>9.333132e-05</td></tr>
+<tr><td>2.0</td><td>8.522485e-05</td><td>8.451782e-05</td><td>+0.837 %</td><td>&minus;3.155 %</td><td>8.439933e-05</td></tr>
+<tr><td>3.0</td><td>7.191648e-05</td><td>7.241929e-05</td><td>&minus;0.694 %</td><td>&minus;2.329 %</td><td>7.235454e-05</td></tr>
+<tr><td>5.0</td><td>4.732007e-05</td><td>4.812508e-05</td><td>&minus;1.673 %</td><td>&minus;3.434 %</td><td>4.813579e-05</td></tr>
+<tr><td>7.0</td><td>3.150876e-05</td><td>3.041954e-05</td><td>+3.581 %</td><td>&minus;8.317 %</td><td>3.045491e-05</td></tr>
+<tr><td>10.0</td><td>1.476315e-05</td><td>1.561401e-05</td><td>&minus;5.449 %</td><td><b>&minus;20.191 %</b></td><td>1.564690e-05</td></tr>
 </tbody></table></div>
 
-<p>Two things to read off this. First, <b>the error is one&#8209;signed and grows with
-<code>z&#8320;</code></b>, which is the signature of the outer boundary, not of the mesh &mdash;
-&sect;5.7. Second, the last column shows the <b>filament idealisation is worth 0.19 %</b> at the
-centre (9.666439e&#8209;05 against the exact 9.684784e&#8209;05): at <code>a/R = 0.123</code> the
-tube's thickness barely matters, which is what licenses &sect;5.5.</p>
+<p>Two things to read off this. First, the shipped column <b>scatters either side of zero</b> while the 30 mm control is <b>one-signed and grows monotonically</b> &mdash; that is the difference between discretisation noise and a systematic boundary error, and it is the heart of &sect;5.7. Second, the last column shows the <b>filament idealisation is worth 0.19 %</b> at the centre (9.666439e-05 against the exact 9.684792e-05): at <code>a/R = 0.123</code> the tube's thickness barely matters, which is what licenses &sect;5.5.</p>
 
-<h3>5.5 B through the air &mdash; the filament's elliptic-integral form</h3>
+<h3>5.5 <code>B</code> through the air &mdash; the filament's elliptic-integral form</h3>
 
-<p>Away from the wire the ring can be treated as a filament of radius <code>R</code>, and then
-<code>B</code> is known in closed form <b>everywhere</b>, not just on the axis, through the complete
-elliptic integrals <code>K(m)</code> and <code>E(m)</code>:</p>
+<p>Away from the wire the ring can be treated as a filament of radius <code>R</code>, and then <code>B</code> is known in closed form <b>everywhere</b>, not just on the axis, through the complete elliptic integrals <code>K(m)</code> and <code>E(m)</code>:</p>
 
-<div class="eq">Q = (R+&rho;)&sup2; + z&sup2; &nbsp;&nbsp;&nbsp; m = 4R&rho;/Q &nbsp;&nbsp;&nbsp; D = (R&minus;&rho;)&sup2; + z&sup2;<br><br>
-B_z &nbsp;&nbsp;= (&mu;&#8320;I/2&pi;) Q<sup>&minus;1/2</sup> [ &nbsp;K(m) + E(m)(R&sup2;&minus;&rho;&sup2;&minus;z&sup2;)/D ]<br>
-B_&rho; &nbsp;= (&mu;&#8320;I/2&pi;)(z/&rho;) Q<sup>&minus;1/2</sup> [ &minus;K(m) + E(m)(R&sup2;+&rho;&sup2;+z&sup2;)/D ]</div>
+<div class="eq">Q = (R+&rho;)&sup2; + z&sup2;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;m = 4R&rho;/Q&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;D = (R&minus;&rho;)&sup2; + z&sup2;<br><br>B_z&nbsp;&nbsp; = (&mu;&#8320;I/2&pi;) Q^{&minus;1/2} [&nbsp;&nbsp;K(m) + E(m)(R&sup2;&minus;&rho;&sup2;&minus;z&sup2;)/D ]<br>B_&rho;&nbsp;&nbsp; = (&mu;&#8320;I/2&pi;)(z/&rho;) Q^{&minus;1/2} [ &minus;K(m) + E(m)(R&sup2;+&rho;&sup2;+z&sup2;)/D ]</div>
 
-<p><code>K</code> and <code>E</code> are evaluated by the arithmetic&ndash;geometric mean, which
-reaches machine precision in about five iterations. <strong>The script checks this against itself
-before using it</strong>: as <code>&rho; &rarr; 0</code> the pair must collapse to the on&#8209;axis
-formula <code>&mu;&#8320;IR&sup2;/2(R&sup2;+z&sup2;)<sup>3/2</sup></code>, and it does, to
-<code>1.8e&#8209;14</code> relative.</p>
+<p><code>K</code> and <code>E</code> are evaluated by the arithmetic&ndash;geometric mean, which reaches machine precision in about five iterations. <b>The script checks this against itself before using it</b>: as <code>&rho; &rarr; 0</code> the pair must collapse to the on-axis formula <code>&mu;&#8320;IR&sup2;/2(R&sup2;+z&sup2;)^{3/2}</code>, and it does, to <code>1.8e-14</code> relative.</p>
 
-<div class="note">
-<p>Unlike &sect;&sect;5.1&ndash;5.4 this form is an <strong>approximation</strong>. It ignores the
-tube's thickness, so it errs <code>O((a/R)&sup2;) &asymp; 1.5 %</code>, and it <em>diverges</em> at
-the ring. It is therefore used only outside <code>2a</code> from the tube axis &mdash; and &sect;5.4
-measured how good it is there: 0.19 %.</p>
-</div>
+<p>Unlike &sect;5.1&ndash;5.4 this form is an <b>approximation</b>. It ignores the tube's thickness, so it errs <code>O((a/R)&sup2;) &asymp; 1.5 %</code>, and it <em>diverges</em> at the ring. It is therefore used only outside <code>2a</code> from the tube axis &mdash; and &sect;5.4 measured how good it is there: 0.19 %.</p>
 
-<p>The comparison is again cell by cell: every air cell (<code>body_tag = 2</code>) outside
-<code>2a</code>, binned by distance <code>d</code> from the tube axis.</p>
+<p>The comparison is again cell by cell: every air cell (<code>body_tag = 2</code>) outside <code>2a</code>, binned by distance <code>d</code> from the tube axis.</p>
 
 <div class="tw"><table>
-<thead><tr><th><code>d/a</code></th><th>cells</th><th>median <code>|B|</code> (T)</th><th>filament (T)</th><th>median error</th><th>90th pct</th><th>median <code>h/d</code></th></tr></thead>
+<thead><tr><th><code>d/a</code></th><th>cells</th><th>median <code>|B|</code> (T)</th><th>filament (T)</th><th>median error</th><th>30 mm control</th><th>median <code>h/d</code></th></tr></thead>
 <tbody>
-<tr><td>2&ndash;3</td><td>50184</td><td>8.895487e&#8209;05</td><td>8.936921e&#8209;05</td><td><span class="ok">&minus;0.31 %</span></td><td>5.16 %</td><td>0.21</td></tr>
-<tr><td>3&ndash;5</td><td>39112</td><td>4.896760e&#8209;05</td><td>4.885796e&#8209;05</td><td><span class="ok">&minus;0.01 %</span></td><td>6.76 %</td><td>0.21</td></tr>
-<tr><td>5&ndash;8</td><td>20568</td><td>2.191737e&#8209;05</td><td>2.147050e&#8209;05</td><td>+1.64 %</td><td>11.38 %</td><td>0.21</td></tr>
-<tr><td>8&ndash;12</td><td>11317</td><td>9.631397e&#8209;06</td><td>8.849652e&#8209;06</td><td>+7.70 %</td><td>21.02 %</td><td>0.22</td></tr>
-<tr><td>12&ndash;20</td><td>10115</td><td>4.480802e&#8209;06</td><td>3.581520e&#8209;06</td><td>+24.69 %</td><td>44.74 %</td><td>0.22</td></tr>
-<tr><td>20&ndash;35</td><td>6362</td><td>1.443252e&#8209;06</td><td>8.536287e&#8209;07</td><td><span class="warn">+47.92 %</span></td><td>111.21 %</td><td>0.20</td></tr>
+<tr><td>2&ndash;3</td><td>48237</td><td>8.940967e-05</td><td>8.990699e-05</td><td><b>&minus;0.36 %</b></td><td>&minus;0.31 %</td><td>0.21</td></tr>
+<tr><td>3&ndash;5</td><td>33704</td><td>4.936850e-05</td><td>4.960650e-05</td><td><b>&minus;0.40 %</b></td><td>&minus;0.01 %</td><td>0.22</td></tr>
+<tr><td>5&ndash;8</td><td>16614</td><td>2.121133e-05</td><td>2.127459e-05</td><td><b>&minus;0.31 %</b></td><td>+1.64 %</td><td>0.23</td></tr>
+<tr><td>8&ndash;12</td><td>8774</td><td>8.940558e-06</td><td>8.931514e-06</td><td><b>&minus;0.06 %</b></td><td>+7.70 %</td><td>0.23</td></tr>
+<tr><td>12&ndash;20</td><td>7567</td><td>3.547741e-06</td><td>3.540672e-06</td><td><b>+0.73 %</b></td><td>+24.69 %</td><td>0.24</td></tr>
+<tr><td>20&ndash;35</td><td>6194</td><td>1.029378e-06</td><td>1.018296e-06</td><td>+3.02 %</td><td>+47.92 %</td><td>0.24</td></tr>
 </tbody></table></div>
 
-<p>Near the wire this is very good &mdash; 0.01&ndash;0.31 % over <code>2a</code>&ndash;<code>5a</code>.
-Then it falls apart, and the last column is in the table to say why it is <b>not</b> the mesh:
-<code>h/d</code>, the element size as a fraction of the distance being resolved, is flat at
-&asymp;0.21 across every band. The resolution is <em>the same</em> everywhere in relative terms while
-the error grows by a factor of 150. That rules out discretisation and points at the boundary.</p>
+<p><b>From <code>2a</code> out to <code>20a</code> the solver tracks the closed form inside &plusmn;0.75 %</b>, across four decades of field magnitude &mdash; 8.9e-05 down to 3.5e-06 T. The +3.02 % in the last band is the 90 mm wall, three times further out than the control's, doing exactly what the control's did at 20&ndash;35a.</p>
 
-<h3>5.6 L &mdash; the closed form, and a retraction</h3>
+<p>The <code>h/d</code> column is in the table to rule out element size as the cause: it is flat at &asymp;0.21&ndash;0.24 across every band, so resolution relative to the distance being resolved is constant while the control's error grows by a factor of 150. That is not discretisation.</p>
+
+<h3>5.6 <code>L</code> &mdash; the closed form, and two retractions</h3>
 
 <p>For a thin circular loop in free space,</p>
 
 <div class="eq">L = &mu;&#8320;R [ ln(8R/a) &minus; 2 + &frac14; ]</div>
 
-<p>The bracket is the external inductance from the loop's own flux
-(<code>ln(8R/a) &minus; 2</code>) plus the internal term <code>&frac14;</code> for uniform current
-inside the wire. With <code>R = 6.5 mm</code> and <code>a = 0.8 mm</code>,
-<code>ln(8R/a) = ln 65</code> and <code>L = 19.803 nH</code>. Using the <em>equal&#8209;area</em>
-radius of the 20&#8209;gon instead, <code>a_eq = 0.79343 mm</code>, gives 19.870 nH &mdash; so the
-choice of which radius to call <code>a</code> is itself worth 0.34 %, and no comparison here is
-meaningful below that.</p>
+<p>The bracket is the external inductance from the loop's own flux (<code>ln(8R/a) &minus; 2</code>) plus the internal term <code>&frac14;</code> for uniform current inside the wire. With <code>R = 6.5 mm</code> and <code>a = 0.8 mm</code>, <code>ln(8R/a) = ln 65</code> and <code>L = 19.803 nH</code>. Using the <em>equal-area</em> radius of the 20-gon instead, <code>a_eq = 0.79343 mm</code>, gives 19.870 nH &mdash; so the choice of which radius to call <code>a</code> is itself worth 0.34 %, and no comparison here is meaningful below that.</p>
 
 <div class="tw"><table>
 <thead><tr><th></th><th>L</th><th>vs closed form (<code>a</code> = circumradius)</th></tr></thead>
 <tbody>
-<tr><td>measured, <code>R_d = H_d = 30 mm</code> (shipped)</td><td>19.377 nH</td><td><span class="warn">&minus;2.15 %</span></td></tr>
-<tr><td>measured, <code>R_d = H_d = 90 mm</code></td><td><b>19.785 nH</b></td><td><span class="ok">&minus;0.09 %</span></td></tr>
+<tr><td><b>measured, shipped (90 mm)</b></td><td><b>19.785 nH</b></td><td><b>&minus;0.09 %</b></td></tr>
+<tr><td>measured, 30 mm control</td><td>19.377 nH</td><td>&minus;2.15 %</td></tr>
 <tr><td>reference tool</td><td>19.748 nH</td><td>&minus;0.27 %</td></tr>
 <tr><td>closed form, free space</td><td>19.803 nH</td><td>&mdash;</td></tr>
 </tbody></table></div>
 
 <div class="note">
-<p><strong>A previous version of this report said &ldquo;the domain is ruled out: doubling it to
-60&nbsp;mm moved <code>L</code> by +0.2 %&rdquo;. That was wrong, and it is retracted.</strong> The
-mesh that test used still carried the <code>+&pi;</code>/<code>&minus;&pi;</code> sweep bug of
-&sect;6.2, <em>and</em> it coarsened the far field so much that elements near the loop grew from
-4&nbsp;mm to 8.8&nbsp;mm &mdash; so it changed two things at once and neither of them cleanly.
-Repeating it properly, with the sweep bug fixed and the grading arranged so element size <b>on the
-axis matches the shipped mesh to within 10 %</b>, moves <code>L</code> by <b>+2.11 %</b> and lands it
-0.09 % from the closed form. The domain was the whole of it.</p>
-<p>This is the second time in this case that &ldquo;I ruled the domain out&rdquo; turned out to rest
-on a test that changed something else as well. The lesson recorded here is the one about controls,
-not about loops.</p>
+<p><b>Two statements previously made here were wrong, and both are retracted.</b></p>
+<p>The first: <em>"refining the tube moved L the wrong way, so resolution is not the cause."</em> That test refined <code>lc_ring</code> globally while half the ring was still being meshed coarse by the <code>+&pi;</code>/<code>&minus;&pi;</code> sweep bug of &sect;6.2, so it was measuring the bug.</p>
+<p>The second: <em>"the domain is ruled out &mdash; doubling it to 60 mm moved L by +0.2 %."</em> That mesh still carried the same sweep bug, <b>and</b> it coarsened the far field so much that elements near the loop grew from 4 mm to 8.8 mm. Two variables, neither controlled.</p>
+<p>Both are negative results produced by a test that moved more than one thing at a time, and both pointed away from the actual cause for months. That is the lesson worth keeping from this case, rather than anything about loops.</p>
 </div>
 
 <div class="note">
-<p><strong>Extracting L here is ill&#8209;conditioned.</strong> <code>&omega;L/R = 0.017</code>: the
-reactance is 1.7 % of the resistance, so <code>Im(Z)</code> is a small difference between large
-numbers. Dividing by the <em>measured</em> current instead of the imposed 1&nbsp;A lets that
-current's own 0.02 % imaginary part into the answer and moves <code>L</code> by 1.3 % &mdash; fifty
-times its own size. <code>verify_loop.py</code> divides by the imposed current.</p>
+<p><b>Extracting <code>L</code> here is ill-conditioned.</b> <code>&omega;L/R = 0.017</code>: the reactance is 1.7 % of the resistance, so <code>Im(Z)</code> is a small difference between large numbers. Dividing by the <em>measured</em> current instead of the imposed 1 A lets that current's own 0.02 % imaginary part into the answer and moves <code>L</code> by 1.3 % &mdash; fifty times its own size. <code>verify_loop.py</code> divides by the imposed current.</p>
 </div>
 
-<h3>5.7 Every far-field error has one cause: the outer boundary</h3>
+<h3>5.7 Why the domain is 90 mm</h3>
 
-<p>Three independent measurements above are all off, all in a way that scales with distance from the
-ring, and <b>all three are the same effect</b>:</p>
-
-<div class="tw"><table>
-<thead><tr><th>observable</th><th><code>R_d = H_d = 30 mm</code></th><th><code>R_d = H_d = 90 mm</code></th></tr></thead>
-<tbody>
-<tr><td><code>B</code> on the axis, at the loop centre</td><td>&minus;2.51 %</td><td><span class="ok">&minus;0.37 %</span></td></tr>
-<tr><td><code>L</code></td><td>&minus;2.15 %</td><td><span class="ok">&minus;0.09 %</span></td></tr>
-<tr><td><code>B</code> in the air, <code>d</code> = 8&ndash;12a</td><td>+7.70 %</td><td><span class="ok">&minus;0.06 %</span></td></tr>
-<tr><td><code>B</code> in the air, <code>d</code> = 12&ndash;20a</td><td>+24.69 %</td><td><span class="ok">+0.73 %</span></td></tr>
-<tr><td><code>B</code> in the air, <code>d</code> = 20&ndash;35a</td><td>+47.92 %</td><td>+3.02 % &nbsp;&larr; <em>the new wall, 3x further out</em></td></tr>
-</tbody></table></div>
-
-<p><code>[boundary] outer = flux_tangential</code> sets <code>n&middot;B = 0</code> on the domain
-wall. That confines the return flux inside the domain and behaves like a <b>flux&#8209;excluding
-shell</b> &mdash; equivalently, an image loop carrying opposing current. The consequences all follow
-from that one picture, and they have the signs observed:</p>
+<p><code>[boundary] outer = flux_tangential</code> sets <code>n&middot;B = 0</code> on the domain wall. That confines the return flux inside the domain and behaves like a <b>flux-excluding shell</b> &mdash; equivalently, an image loop carrying opposing current. Three consequences follow from that one picture, and all three are observed, with the signs it predicts:</p>
 
 <ul>
-<li>flux is pushed <b>out</b> of the middle of the ring &rarr; <code>B</code> on the axis reads
-<b>low</b>;</li>
+<li>flux is pushed <b>out</b> of the middle of the ring &rarr; <code>B</code> on the axis reads <b>low</b>;</li>
 <li>less flux links the loop &rarr; <code>L</code> reads <b>low</b>;</li>
-<li>the excluded flux has to go somewhere, and it crowds <b>along</b> the wall &rarr; <code>B</code>
-out near the wall reads <b>high</b>.</li>
+<li>the excluded flux has to go somewhere, and it crowds <b>along</b> the wall &rarr; <code>B</code> out near the wall reads <b>high</b>.</li>
 </ul>
 
-<p>At <code>R_d = 30 mm</code> the wall is 2.3 loop radii out, which is simply too close. Panel (b)
-of the figure above is the whole argument in one frame: the orange curve is the shipped domain, the
-blue one is three times larger, and over <code>2a</code>&ndash;<code>20a</code> the blue sits inside
-<b>&plusmn;0.75 %</b> against a closed form spanning four decades of field strength.</p>
+<p><code>loop_small.geo</code> is the 30 mm domain this case used to ship, kept as the control that demonstrates it. The grading is scaled with the domain so that element size <b>on the loop axis matches to within 10 %</b> out to <code>z = 10 mm</code>: the only thing that differs between the two meshes is where the wall is.</p>
 
-<p><strong>The larger domain costs nothing.</strong> <code>loop_big.geo</code> grades the far field so
-the tet count lands at 230,569 against the shipped mesh's 223,879, and the solve takes 41.2 s against
-43.9 s. It is not shipped as the default only because every figure in &sect;&sect;2&ndash;4 is framed
-on the 30&nbsp;mm domain; the recommendation is recorded here rather than acted on:</p>
+<div class="tw"><table>
+<thead><tr><th>observable</th><th>30 mm control</th><th><b>90 mm, shipped</b></th></tr></thead>
+<tbody>
+<tr><td><code>B</code> on the axis, at the loop centre</td><td>&minus;2.51 %</td><td><b>&minus;0.37 %</b></td></tr>
+<tr><td><code>L</code></td><td>&minus;2.15 %</td><td><b>&minus;0.09 %</b></td></tr>
+<tr><td><code>B</code> in the air, <code>d</code> = 8&ndash;12a</td><td>+7.70 %</td><td><b>&minus;0.06 %</b></td></tr>
+<tr><td><code>B</code> in the air, <code>d</code> = 12&ndash;20a</td><td>+24.69 %</td><td><b>+0.73 %</b></td></tr>
+<tr><td><code>B</code> in the air, <code>d</code> = 20&ndash;35a</td><td>+47.92 %</td><td>+3.02 % &larr; <em>the new wall</em></td></tr>
+</tbody></table></div>
 
-<pre><code>../run_case.bat loop_50hz_big.aphi
-"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" analytic_comparison.py output_big</code></pre>
+<p>At <code>R_d = 30 mm</code> the wall is 2.3 loop radii out, which is simply too close. Panel (b) of &sect;5.4's figure is the whole argument in one frame.</p>
+
+<p><b>And the larger domain is cheaper.</b> <code>Threshold</code> grades linearly in distance, so raising <code>lc_far</code> and <code>d_far</code> with the domain reproduces the old grading wherever the fields actually are, while putting far fewer elements in the empty mid-field:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>90 mm, shipped</th><th>30 mm control</th></tr></thead>
+<tbody>
+<tr><td>tets</td><td><b>217,719</b></td><td>223,879</td></tr>
+<tr><td>unknowns</td><td><b>509,598</b></td><td>524,050</td></tr>
+<tr><td>MUMPS fill-in</td><td><b>674.1 M</b></td><td>724.0 M</td></tr>
+</tbody></table></div>
+
+<p>27x the volume for 3 % fewer elements and 7 % less fill.</p>
+
+<div class="note">
+<p><strong>Wall-clock is a wash and should not be quoted either way.</strong> Back to back on an idle
+machine, 43.5 s against 43.8 s. An earlier measurement here said 103 s against 130 s; that pair was
+taken with gmsh and ParaView running alongside, and the 1.3x it appeared to show was machine load,
+not the mesh. The three counts above are properties of the mesh. The seconds are a property of
+whatever else was running.</p>
+</div>
 
 <h3>5.8 Where there is no closed form</h3>
 
-<p>Two places in this problem have no analytic value to compare against, and both are places the
-pictures in &sect;4 draw the eye to.</p>
+<p>Two places in this problem have no analytic value to compare against, and both are places the pictures in &sect;4 draw the eye to. One of them also turned out to be barely measurable, which is a correction to an earlier version of this section.</p>
 
-<p><strong>At the tube wall there is a bound, not a value.</strong> <code>E_tangential</code> is
-continuous across any interface and <code>E_normal</code> jumps by the surface charge, so
-<code>|E|</code> just outside a current&#8209;carrying conductor is <b>&ge;</b> <code>|E|</code> just
-inside &mdash; always. Measured in thin shells at <code>&theta; = &pi; &plusmn; 14&deg;</code>, away
-from the port:</p>
+<h4>At the tube wall there is a bound, and this mesh can only just see it</h4>
 
-<div class="tw"><table>
-<thead><tr><th></th><th>median <code>|E|</code></th><th>cells</th></tr></thead>
-<tbody>
-<tr><td>just inside, <code>0.95a &lt; d &lt; 0.99a</code></td><td>8.566634e&#8209;03 V/m</td><td>51</td></tr>
-<tr><td>just outside, <code>1.01a &lt; d &lt; 1.05a</code></td><td>9.299954e&#8209;03 V/m</td><td>66</td></tr>
-<tr><td><b>ratio</b></td><td><b>1.086</b></td><td>&mdash;</td></tr>
-</tbody></table></div>
+<p><code>E_tangential</code> is continuous across any interface and <code>E_normal</code> jumps by the surface charge, so <code>|E|</code> just outside a current-carrying conductor is <b>&ge;</b> <code>|E|</code> just inside &mdash; always, pointwise.</p>
 
-<p>The ratio is &ge; 1 as it must be. Its <em>value</em> would require solving the exterior problem,
-which is what the FEM is for; there is nothing to check it against. Note that &ldquo;the field is
-highest inside the conductor&rdquo; is <b>not</b> a law &mdash; the opposite is, as this measurement
-shows.</p>
+<div class="note">
+<p><b>An earlier version of this report tested that with a shell statistic and declared it confirmed. The statistic does not test the bound.</b> It compared the median over <code>0.95a&ndash;0.99a</code> inside against the median over <code>1.01a&ndash;1.05a</code> outside &mdash; different points, from samples of a few dozen cells. On the 30 mm mesh it reads <b>1.086</b>; on the shipped 90 mm mesh, same physics, it reads <b>0.984</b>. A statistic that changes sides when the far-field boundary moves was never measuring a local boundary condition.</p>
+</div>
 
-<p><strong>At the cut the analytic answer is that <code>E</code> diverges.</strong> A finite voltage
-across a zero&#8209;thickness interface is a singularity: there is no finite number there, and what
-the solver returns is set by the local element size.</p>
+<p>The air's own field is not even monotonic across those shells, which is why a thin band is a bad sample:</p>
 
 <div class="tw"><table>
+<thead><tr><th>shell outside the wall, &theta; = &pi; &plusmn; 14&deg;</th><th>cells</th><th>median <code>|E|</code></th></tr></thead>
 <tbody>
-<tr><td>peak <code>|E|</code> in air</td><td>1.7218 V/m, at 1.04a from the tube axis</td></tr>
-<tr><td>local element size <code>h</code></td><td>0.2001 mm</td></tr>
-<tr><td><code>V/h</code></td><td>1.7724 V/m</td></tr>
-<tr><td><b>ratio peak / (V/h)</b></td><td><b>0.97</b></td></tr>
+<tr><td>1.01&ndash;1.05a</td><td>99</td><td>8.338984e-03</td></tr>
+<tr><td>1.05&ndash;1.10a</td><td>497</td><td><b>9.325833e-03</b></td></tr>
+<tr><td>1.10&ndash;1.20a</td><td>620</td><td>8.865476e-03</td></tr>
+<tr><td>1.20&ndash;1.40a</td><td>806</td><td>8.377270e-03</td></tr>
 </tbody></table></div>
 
-<p>The spike <b>is</b> the potential jump spread over one element. It scales as <code>1/h</code> and
-never converges, so quoting &ldquo;1.72 V/m, 200x the conductor&rdquo; as a result &mdash; as an
-earlier version of this report did &mdash; is meaningless without naming the mesh. Refine the cut
-region and the number goes up.</p>
+<p>The bound is pointwise, so it has to be tested pairwise. Taking each near-wall conductor cell and its <em>nearest</em> air cell:</p>
+
+<div class="tw"><table>
+<thead><tr><th>paired across the wall, &theta; = &pi; &plusmn; 14&deg;</th><th></th></tr></thead>
+<tbody>
+<tr><td>pairs</td><td>577</td></tr>
+<tr><td>median centre separation</td><td>0.153a</td></tr>
+<tr><td><code>|E_air|/|E_cond|</code>, median</td><td><b>1.026</b></td></tr>
+<tr><td>10th / 90th percentile</td><td>0.971 / 1.166</td></tr>
+<tr><td>fraction &ge; 1</td><td><b>67 %</b></td></tr>
+</tbody></table></div>
+
+<p><b>That is as much as this discretisation can say, and the report should not claim more.</b> <code>E</code> is piecewise constant per tet; the element size at the wall is 0.343a; the paired centres straddle the interface at about &plusmn;0.08a; and the air's field varies by ~10 % over that distance &mdash; comparable to the jump being looked for. The median is above 1 and two thirds of pairs are, which is consistent with the bound and too coarse to be a proof of it. Individual pairs below 1 are that averaging, not a violation.</p>
+
+<p>Note also that "the field is highest inside the conductor" is <b>not</b> a law. The opposite is, and even that is only a bound: its <em>value</em> would require solving the exterior problem, which is what the FEM is for and which there is nothing to check against.</p>
+
+<h4>At the cut the analytic answer is that <code>E</code> diverges</h4>
+
+<p>A finite voltage across a zero-thickness interface is a singularity: there is no finite number there, and what the solver returns is set by the local element size.</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>shipped (90 mm)</th><th>30 mm control</th></tr></thead>
+<tbody>
+<tr><td>peak <code>|E|</code> in air</td><td>1.9506 V/m</td><td>1.7218 V/m</td></tr>
+<tr><td>local element size <code>h</code></td><td>0.1928 mm</td><td>0.2001 mm</td></tr>
+<tr><td><code>V/h</code></td><td>1.8397 V/m</td><td>1.7724 V/m</td></tr>
+<tr><td><b>ratio peak / (V/h)</b></td><td><b>1.06</b></td><td><b>0.97</b></td></tr>
+</tbody></table></div>
+
+<p><b>Two different meshes, two different peak values, the same ratio to <code>V/h</code>.</b> The spike <em>is</em> the potential jump spread over one element. It scales as <code>1/h</code> and never converges, so quoting "1.72 V/m, 200x the conductor" as a result &mdash; as an earlier version of this report did &mdash; is meaningless without naming the mesh. Refine the cut region and the number goes up.</p>
 
 <h2>6. The mesh, and two bugs found building it</h2>
 
@@ -842,7 +744,8 @@ ragged lower half in the field plots, and was measured before it was believed. C
 ratio of 0.988.</p>
 
 <div class="note">
-<p><strong>And it moved the physics.</strong> <code>L</code> went 19.038 &rarr; 19.377&nbsp;nH,
+<p><strong>And it moved the physics.</strong> On the 30&nbsp;mm domain of the day, <code>L</code>
+went 19.038 &rarr; 19.377&nbsp;nH,
 closing 1.87 of the 4.02 points of the gap to theory. It also <b>retracts</b> an earlier conclusion
 recorded in this case: that refining the tube moved <code>L</code> the wrong way, so resolution was
 not the cause. That test refined <code>lc_ring</code> globally while half the ring stayed coarse, so
@@ -856,10 +759,10 @@ it was measuring the wrong thing. Resolution <em>is</em> part of it.</p>
 caps, and a ring has none. A case-local <code>verify_*.py</code> wins where one exists.</p>
 
 <div class="tw"><table><tbody>
-<tr><td><code>|I|</code> through the cut</td><td>0.9999784 vs 1.0, tol 1e&#8209;3</td></tr>
-<tr><td><code>|I|</code> at &theta; = &pi;/2</td><td>1.000183 vs 1.0, tol 1e&#8209;3</td></tr>
-<tr><td><code>R</code> vs exact for this shape</td><td>0.99894 vs 1.0, tol 2e&#8209;3</td></tr>
-<tr><td><code>L</code></td><td>19.377 nH, tol 0.05 &mdash; a <b>regression guard</b>, not a validation; &sect;5.6</td></tr>
+<tr><td><code>|I|</code> through the cut</td><td>1.000503 vs 1.0, tol 1e&#8209;3</td></tr>
+<tr><td><code>|I|</code> at &theta; = &pi;/2</td><td>1.000176 vs 1.0, tol 1e&#8209;3</td></tr>
+<tr><td><code>R</code> vs exact for this shape</td><td>0.99872 vs 1.0, tol 2e&#8209;3</td></tr>
+<tr><td><code>L</code></td><td><b>19.7854 nH</b>, tol 0.05 &mdash; now <b>0.09 % from the closed form</b>, so for the first time this line is a validation and not only a regression guard; &sect;5.6</td></tr>
 </tbody></table></div>
 
 <h3>Reproducing</h3>
@@ -873,18 +776,17 @@ caps, and a ring has none. A case-local <code>verify_*.py</code> wins where one 
 "C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_analytic_plots.py
 sh build_doc.sh</code></pre>
 
-<p>And the larger domain, which &sect;5.7 rests on &mdash; same tet count, same runtime, and it needs
-<code>make_analytic_plots.py</code> re&#8209;run afterwards for the second curve in
-<code>fig/analytic_B.png</code> to appear:</p>
+<p>And the 30&nbsp;mm control, which &sect;5.7 rests on. <code>make_analytic_plots.py</code> has to be re&#8209;run after it for the second curve in <code>fig/analytic_B.png</code> to appear:</p>
 
-<pre><code>gmsh loop_big.geo -3 -o loop_big.msh
-..\run_case.bat loop_50hz_big.aphi
-"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" analytic_comparison.py output_big</code></pre>
+<pre><code>gmsh loop_small.geo -3 -o loop_small.msh
+..\run_case.bat loop_50hz_small.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" analytic_comparison.py output_small
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_analytic_plots.py</code></pre>
 
-<p><code>loop_big.geo</code> is that 90&nbsp;mm domain. It was a 60&nbsp;mm one used for a boundary
-test that concluded the domain did not matter; <b>that test was wrong and &sect;5.6 retracts
-it</b>, so the file has been rebuilt from the current <code>loop.geo</code> with only the domain size
-and the grading changed. <b>Run <code>build_doc.sh</code> after regenerating figures</b>, or this
-document keeps showing the previous run's pictures &mdash; they are baked in.</p>
+<p><code>loop_small.geo</code> is the 30&nbsp;mm domain this case shipped until the boundary turned
+out to be the largest error in it. It is kept because &sect;5.7's comparison is the evidence for the
+90&nbsp;mm, and a control nobody can rerun is not evidence. <b>Run <code>build_doc.sh</code> after
+regenerating figures</b>, or this document keeps showing the previous run's pictures &mdash; they
+are baked in.</p>
 
 </div>

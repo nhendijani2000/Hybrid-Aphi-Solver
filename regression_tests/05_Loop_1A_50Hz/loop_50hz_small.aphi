@@ -22,18 +22,20 @@
 # from +z". The side the hint points AWAY from is held at 0 V, which is what
 # makes this port its own potential reference -- a floating loop needs no other.
 #
-# GEOMETRY: R = 6.5 mm loop radius, a = 0.8 mm tube circumradius, a 20-gon
-# cross-section, copper, in a 30 mm radius x 30 mm cylinder of air.
+# THE 30 mm CONTROL for section 5.7 of LoopValidation, not the case itself --
+# run loop_50hz.aphi for that. Identical in every respect except the air
+# domain, which is 30 mm instead of 90 mm, and the far-field grading, which is
+# scaled with it so element size on the loop axis matches to within 10 %.
 # A_poly = 1.977709 mm2 (1.64 % under the circle's pi a^2).
 # delta = 9.346 mm at 50 Hz, so a/delta = 0.086 -- no skin effect.
 # ---------------------------------------------------------------------------
 
 [mesh]
-file        = loop_big.msh
+file        = loop_small.msh
 length_unit = mm
 
 [output]
-directory   = output_big
+directory   = output_small
 
 [analysis]
 type        = frequency
