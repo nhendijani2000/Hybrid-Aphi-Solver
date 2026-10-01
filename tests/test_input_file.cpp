@@ -654,6 +654,219 @@ void test_output_directory() {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// [postprocess]
+//
+// The interesting property of this section is that WHICH KEYS ARE LEGAL DEPENDS
+// ON THE OTHER KEYS, so most of these cases are about a key that is spelled
+// correctly and still wrong. Every rejection is paired with the same file
+// minus the offending detail, which must parse -- without that control, a
+// handler that rejected everything would pass the whole group.
+
+// A 50 Hz preamble, so the phase cases have a frequency to be a phase of.
+const char* kPP = R"([mesh]
+file        = m.msh
+length_unit = mm
+
+[analysis]
+type        = frequency
+frequencies = 50
+
+[Body B1]
+volume = wire
+sigma  = 5.8e7
+
+[port P1]
+type    = boundary_current
+surface = wire_bottom
+current = 1.0
+
+[port P2]
+type    = boundary_voltage
+surface = wire_top
+voltage = 0.0
+)";
+
+void test_postprocess_section() {
+    // --- the default is the complex magnitude, and needs no phase -----------
+    {
+        const ParseResult r = expect_ok(std::string(kPP) + R"(
+[postprocess PP1]
+geometry = body
+body     = wire
+field    = E
+)", "a minimal request parses");
+        check(r.problem.postprocess.size() == 1, "one request recorded");
+        const auto& q = r.problem.postprocess[0];
+        check(q.name == "PP1", "name kept");
+        check(q.geometry == aphi_solver::PostGeometry::Body, "geometry = body");
+        check(q.field == aphi_solver::PostField::E, "field = E");
+        check(q.display == aphi_solver::PostDisplay::ComplexMagnitude,
+              "display DEFAULTS to complex_magnitude");
+        check(q.body == "wire", "body name kept verbatim for the binding stage");
+        check(q.phase_deg == 0.0, "no phase");
+        check(q.component == aphi_solver::PostComponent::None, "no component");
+    }
+
+    // --- a plane, with and without an offset --------------------------------
+    {
+        const ParseResult r = expect_ok(std::string(kPP) + R"(
+[postprocess PP1]
+geometry = plane
+plane    = yz
+offset   = 2.5
+field    = B
+display  = vector
+phase_deg = 45
+)", "a plane request parses");
+        const auto& q = r.problem.postprocess[0];
+        check(q.geometry == aphi_solver::PostGeometry::Plane, "geometry = plane");
+        check(q.plane == aphi_solver::PostPlane::YZ, "plane = yz");
+        check(near(q.offset, 2.5), "offset kept");
+        check(q.display == aphi_solver::PostDisplay::Vector, "display = vector");
+        check(near(q.phase_deg, 45.0), "phase kept");
+    }
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = plane\nplane = xy\nfield = B\n",
+              "offset is optional and defaults to 0");
+
+    // --- points -------------------------------------------------------------
+    {
+        const ParseResult r = expect_ok(std::string(kPP) + R"(
+[postprocess PP1]
+geometry = points
+points   = 6.5 0 0  7.0 0 0  7.3 0 0
+field    = E
+)", "a points request parses");
+        const auto& q = r.problem.postprocess[0];
+        check(q.points.size() == 3, "three probes");
+        check(near(q.points[2].x, 7.3) && near(q.points[0].x, 6.5), "coordinates kept in order");
+    }
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = points\npoints = 1 2 3 4\nfield = E\n",
+                 25, "points not a multiple of three");
+
+    // --- the keys each geometry requires ------------------------------------
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nfield = E\n", 23,
+                 "geometry = body with no body");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = plane\nfield = E\n", 23,
+                 "geometry = plane with no plane");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = points\nfield = E\n", 23,
+                 "geometry = points with no points");
+
+    // --- a key the OTHER keys make meaningless is an error, not ignored ------
+    //
+    // This is the whole point of the section's validation. Each is paired with
+    // the same file minus that one line.
+    {
+        const std::string m = expect_error(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                               "phase_deg = 30\n",
+            27, "phase_deg on a phase-independent display");
+        check(m.find("phase-independent") != std::string::npos,
+              "and says why rather than merely refusing");
+    }
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                                 "display = magnitude_at_phase\nphase_deg = 30\n",
+              "control: the same phase is fine once a display uses it");
+
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\n"
+                                    "field = E\noffset = 1\n",
+                 27, "offset belongs to a plane, not a body");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = plane\nplane = xy\n"
+                                    "field = E\nbody = wire\n",
+                 27, "body belongs to geometry = body");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\n"
+                                    "field = E\ncomponent = z\n",
+                 27, "component without display = phase");
+
+    // --- the phase of a vector is not a quantity ----------------------------
+    {
+        const std::string m = expect_error(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                               "display = phase\n",
+            23, "display = phase on a vector needs a component");
+        check(m.find("each component has its own phase") != std::string::npos ||
+                  m.find("Each component has its own phase") != std::string::npos,
+              "and explains that a vector has no single phase");
+    }
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                                 "display = phase\ncomponent = z\n",
+              "control: with a component it parses");
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = phi\n"
+                                 "display = phase\n",
+              "a SCALAR needs no component -- phi has only one phase");
+
+    // --- a scalar has no polarization ellipse -------------------------------
+    for (const char* d : {"peak", "axial_ratio", "vector"}) {
+        const std::string m = expect_error(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = phi\n"
+                               "display = " + d + "\n",
+            27, std::string("display = ") + d + " on the scalar phi");
+        check(m.find("scalar") != std::string::npos, "and says the field is a scalar");
+    }
+    expect_ok(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = B\n"
+                                 "display = axial_ratio\n",
+              "control: axial_ratio is fine on a vector");
+
+    // --- DC has no phase ----------------------------------------------------
+    const char* kDCPP = R"([mesh]
+file        = m.msh
+length_unit = mm
+
+[analysis]
+type = dc
+
+[Body B1]
+volume = wire
+sigma  = 5.8e7
+
+[port P1]
+type    = boundary_current
+surface = wire_bottom
+current = 1.0
+
+[port P2]
+type    = boundary_voltage
+surface = wire_top
+voltage = 0.0
+)";
+    expect_error(std::string(kDCPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\n"
+                                      "field = E\ndisplay = magnitude_at_phase\n",
+                 22, "a display asking for an instant, at DC");
+    expect_ok(std::string(kDCPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n",
+              "control: the phase-independent default is fine at DC");
+
+    // --- housekeeping -------------------------------------------------------
+    expect_error(std::string(kPP) + "\n[postprocess]\ngeometry = body\nbody = wire\nfield = E\n",
+                 23, "a postprocess section with no name");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                                    "[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n",
+                 27, "two requests with the same name");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                                    "colour = red\n",
+                 27, "an unknown key");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = sphere\nfield = E\n", 24,
+                 "an unknown geometry");
+    expect_error(std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = Q\n",
+                 26, "an unknown field");
+
+    // --- several requests, order preserved ----------------------------------
+    {
+        const ParseResult r = expect_ok(
+            std::string(kPP) + "\n[postprocess PP1]\ngeometry = body\nbody = wire\nfield = E\n"
+                               "[postprocess PP2]\ngeometry = plane\nplane = zx\nfield = J\n",
+            "two requests");
+        check(r.problem.postprocess.size() == 2, "both recorded");
+        check(r.problem.postprocess[0].name == "PP1" && r.problem.postprocess[1].name == "PP2",
+              "in the order written");
+    }
+
+    // --- and a file with no [postprocess] at all is unchanged ---------------
+    {
+        const ParseResult r = expect_ok(kPP, "no postprocess section at all");
+        check(r.problem.postprocess.empty(), "the list is simply empty");
+    }
+}
+
 int main() {
     test_cylinder_example_parses();
     test_frequency_example_parses();
@@ -670,6 +883,7 @@ int main() {
     test_sweep_expansion();
     test_boundary_section();
     test_solver_section();
+    test_postprocess_section();
 
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;

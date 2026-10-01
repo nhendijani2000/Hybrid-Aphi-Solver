@@ -346,6 +346,92 @@ single scalar keeps the parser's value grammar to "number, keyword, name, or
 3-vector" -- in fact, with `direction` since removed, to "number, keyword
 or name" alone.
 
+**`[postprocess NAME]`** — zero or more, each one picture or line plot
+
+Named like `[Body B1]` and `[port P1]`, and recorded in the order written. The
+solver **renders nothing**: it validates the request and records it, and the
+rendering tool reads it back. That split keeps ParaView out of this build while
+still catching a typo in a second rather than after a solve.
+
+| key | required | values |
+|---|---|---|
+| `geometry` | yes | `body`, `plane` or `points` |
+| `field` | yes | `phi`, `a`, `e`, `b`, `h`, `j` |
+| `display` | no | see the table below; defaults to `complex_magnitude` |
+| `body` | `geometry = body` | one Physical Volume name |
+| `plane` | `geometry = plane` | `xy`, `yz` or `zx` |
+| `offset` | no | position along the plane normal, in `length_unit`; default 0 |
+| `points` | `geometry = points` | `x y z` per probe, so a multiple of three numbers, in `length_unit` |
+| `phase_deg` | see below | the instant `ωt = phase_deg`; default 0 |
+| `component` | see below | `x`, `y` or `z` |
+
+**You only write the keys your own choices need**, and a key those choices make
+meaningless is an **error**, not ignored. `offset` on a `body`, `body` on a
+`plane`, `component` without `display = phase` — each is refused with a line
+number. The reasoning is the same as `phase_deg` on a DC port: a key silently
+dropped looks exactly like a solver ignoring its input, and the user has no way
+to tell the difference.
+
+**The displays, and why there are three magnitudes.** A vector phasor
+`Ê = P + jQ` has `E(t) = P cos ωt − Q sin ωt`, whose tip traces an **ellipse**.
+An ellipse has two characteristic lengths, so three different numbers are all
+reasonably called "the magnitude of E". `docs/ComplexVectorPhasorConcept.md`
+derives them; writing `a` and `b` for the semi-major and semi-minor axes:
+
+| `display` | quantity | uses `phase_deg` |
+|---|---|---|
+| `complex_magnitude` | `√(\|P\|² + \|Q\|²) = √(a²+b²) = √2 · RMS` — **the default** | no |
+| `magnitude_at_phase` | `\|P cos θ − Q sin θ\|`, the instantaneous magnitude | **yes** |
+| `peak` | `a`, the largest value the field ever reaches | no |
+| `axial_ratio` | `b/a` ∈ [0,1]; 0 linear, 1 circular | no |
+| `phase` | `atan2(Q, P)` of a scalar, or of one component | no |
+| `vector` | `P cos θ − Q sin θ`, the instantaneous vector | **yes** |
+| `real`, `imag` | `P` alone, `Q` alone | no |
+
+with `b ≤ magnitude_at_phase ≤ peak ≤ complex_magnitude ≤ √2 · peak`.
+
+**`complex_magnitude` is the default** because it is what every figure in the
+regression suite is already coloured by, so a request that says nothing beyond
+`geometry` and `field` produces the picture the suite has always produced. It is
+also the only magnitude that needs no phase.
+
+Three further rules, each enforced:
+
+- **`phase_deg` is refused unless the display reads it.** Only
+  `magnitude_at_phase` and `vector` do.
+- **`display = phase` on a vector field requires `component`.** Each component
+  has its own phase and in general they differ — that difference is precisely
+  what makes the polarization elliptical — so "the phase of `E`" is not a
+  quantity, and defaulting to one component would be inventing an answer.
+  `field = phi` is a scalar and needs no component.
+- **`peak`, `axial_ratio` and `vector` are refused for `field = phi`.** A scalar
+  has no polarization ellipse: its peak *is* its complex magnitude and its axial
+  ratio is identically zero.
+
+At `type = dc` there is nothing to be a phase of, so `phase_deg` and any display
+that asks for an instant are both errors — the same rule `[port]` already
+applies.
+
+```ini
+[postprocess PP1]                  [postprocess PP2]
+geometry  = body                   geometry = plane
+body      = ring                   plane    = xy
+field     = J                      offset   = 0.1
+display   = vector                 field    = B
+phase_deg = 90                     # display defaults to complex_magnitude
+
+[postprocess PP3]
+geometry  = points
+points    = 6.5 0 0  7.0 0 0  7.3 0 0
+field     = E
+display   = phase
+component = y
+```
+
+**`body` is not checked against the mesh here**, exactly as `[Body] volume` is
+not: this stage never opens the mesh, and resolving a name is the binding
+stage's job. See the contract at the top of `input_file.hpp`.
+
 ### 1.3 Deliberately not in this format yet
 
 Written down so these read as decisions rather than oversights, and so they
@@ -355,7 +441,7 @@ are not rediscovered later as gaps:
 |---|---|---|
 | **gauge choice** and **frequency scaling** — the `(gauge, frequency_scaling)` pair `ROADMAP.md` Phase 04 step 6 wants exposed | both are solver-conditioning knobs, not problem description. Method A and one scaling are hard-wired until there is a validated solve to compare against; exposing a knob with one tested setting invites turning it | `[solver]`, once Phase 05 has something to compare |
 | **volumetric `J_imp`** — `ROADMAP.md` Phase 04 step 7's "simple uniform current density" | superseded. That step predates the port abstraction and exists only to have *some* right-hand side; ports give a better-posed excitation with an analytic check attached. Step 7 should be re-pointed at ports rather than implemented as written | not planned |
-| **output destination / field export** | the first milestones are scalar checks (`R`, `L`, `Z(ω)`) printed by the CLI. Field export needs a format decision (VTU) that nothing yet depends on | `[output]`, when there are fields worth looking at |
+| ~~**output destination / field export**~~ | *done.* `[output] directory` landed with the VTK writers, and `[postprocess]` above selects what to draw from them | — |
 | **per-surface boundary conditions** | see `[boundary]` above — the spelling is reserved | with PEC/ABC |
 
 ---

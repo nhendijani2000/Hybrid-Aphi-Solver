@@ -182,6 +182,99 @@ struct Port {
     std::optional<Vec3> current_direction;
 };
 
+// ---------------------------------------------------------------------------
+// Post-processing requests.
+//
+// One [postprocess] section is one picture (or one line plot). The solver does
+// not render anything: it validates the request and records it, and the
+// rendering tool reads it back. That split keeps ParaView out of this build and
+// still catches a typo in a second rather than after a solve.
+
+enum class PostGeometry {
+    Body,   ///< the cells of one named Physical Volume
+    Plane,  ///< a cut plane, normal to x, y or z
+    Points  ///< an explicit list of probe coordinates
+};
+
+enum class PostPlane { XY, YZ, ZX };
+
+enum class PostField { Phi, A, E, B, H, J };
+
+/// What to draw. The names are deliberately unlike each other, because the
+/// first three are easy to confuse and the difference is not cosmetic:
+/// a vector phasor's tip traces an ELLIPSE, so it has two characteristic
+/// lengths, and three different numbers are all reasonably called "the
+/// magnitude". See docs/ComplexVectorPhasorConcept.md for the derivation.
+///
+/// Writing Ehat = P + jQ and E(t) = P cos(wt) - Q sin(wt), with semi-axes
+/// a (major) and b (minor):
+///
+///     ComplexMagnitude  N = sqrt(|P|^2+|Q|^2) = sqrt(a^2+b^2) = sqrt(2)*RMS
+///     MagnitudeAtPhase  |P cos(th) - Q sin(th)|          -- depends on th
+///     Peak              a = max over th                  -- what it reaches
+///
+/// with b <= MagnitudeAtPhase <= Peak <= ComplexMagnitude <= sqrt(2)*Peak.
+enum class PostDisplay {
+    ComplexMagnitude,  ///< DEFAULT. Phase-independent; what every figure in the
+                       ///< regression suite is already coloured by.
+    MagnitudeAtPhase,  ///< the instantaneous magnitude at `phase_deg`
+    Peak,              ///< the semi-major axis: the largest value ever reached
+    AxialRatio,        ///< b/a in [0,1]; 0 linear, 1 circular. A diagnostic that
+                       ///< says whether ComplexMagnitude may be read as a peak.
+    Phase,             ///< arg of a scalar, or of one component of a vector
+    Vector,            ///< the instantaneous vector at `phase_deg`
+    Real,              ///< P alone
+    Imag               ///< Q alone
+};
+
+enum class PostComponent { None, X, Y, Z };
+
+/// One `[postprocess]` section.
+///
+/// WHICH FIELDS MATTER DEPENDS ON THE OTHERS, which is why they are optional
+/// here and why the parser rejects any that the choices make meaningless rather
+/// than ignoring them. A `phase_deg` that is silently dropped because the
+/// display is phase-independent is exactly the kind of thing that makes someone
+/// distrust the solver.
+///
+///     geometry = body    -> `body` is required
+///     geometry = plane   -> `plane` is required, `offset` optional (0)
+///     geometry = points  -> `points` is required
+///     display needs a phase (MagnitudeAtPhase, Vector) -> `phase_deg`, else 0
+///     display = Phase on a VECTOR field -> `component` is required
+///
+/// `body` is not checked against the mesh here. Like `Body::volume`, that is
+/// the binding stage's job -- see the contract at the top of input_file.hpp.
+struct PostprocessRequest {
+    std::string name;  ///< the section's own handle, e.g. "PP1"
+    int line = 0;      ///< its line in the input file; 0 if built in code
+
+    PostGeometry geometry = PostGeometry::Body;
+    PostField field = PostField::E;
+    PostDisplay display = PostDisplay::ComplexMagnitude;
+
+    std::string body;                  ///< geometry = Body
+    PostPlane plane = PostPlane::XY;   ///< geometry = Plane
+    double offset = 0.0;               ///< geometry = Plane, in `length_unit`
+    std::vector<Vec3> points;          ///< geometry = Points, in `length_unit`
+
+    /// The instant wt = phase_deg, under the e^{+jwt} convention: a field
+    /// stored as P + jQ is drawn as P cos(phase) - Q sin(phase). Zero unless
+    /// the display uses it, and the parser refuses it when it does not.
+    double phase_deg = 0.0;
+
+    PostComponent component = PostComponent::None;  ///< display = Phase, vector
+};
+
+/// True for the fields that are vectors. `Phi` is the only scalar, and the
+/// distinction decides which displays are legal.
+inline bool post_field_is_vector(PostField f) { return f != PostField::Phi; }
+
+/// True for the displays that read `phase_deg`.
+inline bool post_display_uses_phase(PostDisplay d) {
+    return d == PostDisplay::MagnitudeAtPhase || d == PostDisplay::Vector;
+}
+
 struct Problem {
     std::string mesh_file;  ///< as written, relative to the input file
 
@@ -213,6 +306,9 @@ struct Problem {
 
     std::vector<Body> bodies;
     std::vector<Port> ports;
+
+    /// Empty unless the file asks for pictures. Order is the order written.
+    std::vector<PostprocessRequest> postprocess;
 };
 
 /// True for the two cut-based port types.

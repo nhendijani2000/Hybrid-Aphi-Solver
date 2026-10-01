@@ -123,6 +123,7 @@ private:
     void read_solver(const Section& s);
     void read_body(const Section& s);
     void read_port(const Section& s);
+    void read_postprocess(const Section& s);
 
     // -- cross-section checks --
     void check_whole_problem(const std::vector<Section>& sections);
@@ -523,6 +524,159 @@ void Parser::read_body(const Section& s) {
     result_.problem.bodies.push_back(std::move(b));
 }
 
+// One [postprocess] section.
+//
+// WHICH KEYS ARE LEGAL DEPENDS ON THE OTHER KEYS, so this cannot use a single
+// fixed allow-list the way every other section does. The allowed set is built
+// from `geometry` and `display`, and a key that is spelled correctly but made
+// meaningless by those choices is REJECTED, not ignored.
+//
+// That is a deliberate choice and the more useful one. A `phase_deg` silently
+// dropped because the display happens to be phase-independent looks exactly
+// like a solver that ignores its input: the user sets a phase, the picture does
+// not move, and nothing says why. The same reasoning already governs
+// `phase_deg` on a DC port a few functions below.
+void Parser::read_postprocess(const Section& s) {
+    if (s.name.empty()) {
+        fail(s.line, "a [postprocess] section needs a name, as in '[postprocess PP1]'");
+    }
+
+    PostprocessRequest r;
+    r.name = s.name;
+    r.line = s.line;
+
+    // --- geometry, which decides half the rest ------------------------------
+    const std::string geom =
+        as_keyword(require(s, "geometry"), {"body", "plane", "points"});
+    if (geom == "body") r.geometry = PostGeometry::Body;
+    else if (geom == "plane") r.geometry = PostGeometry::Plane;
+    else r.geometry = PostGeometry::Points;
+
+    // --- field --------------------------------------------------------------
+    const std::string fld = as_keyword(require(s, "field"), {"phi", "a", "e", "b", "h", "j"});
+    if (fld == "phi") r.field = PostField::Phi;
+    else if (fld == "a") r.field = PostField::A;
+    else if (fld == "e") r.field = PostField::E;
+    else if (fld == "b") r.field = PostField::B;
+    else if (fld == "h") r.field = PostField::H;
+    else r.field = PostField::J;
+
+    // --- display, defaulting to the phase-independent one -------------------
+    //
+    // ComplexMagnitude is the default because it is what every figure in the
+    // regression suite is already coloured by, so a file that asks for a
+    // picture and says nothing more gets the picture it would have got before
+    // this section existed. It is also the only choice that needs no phase.
+    if (const Entry* e = find(s, "display")) {
+        const std::string d = as_keyword(*e, {"complex_magnitude", "magnitude_at_phase", "peak",
+                                              "axial_ratio", "phase", "vector", "real", "imag"});
+        if (d == "complex_magnitude") r.display = PostDisplay::ComplexMagnitude;
+        else if (d == "magnitude_at_phase") r.display = PostDisplay::MagnitudeAtPhase;
+        else if (d == "peak") r.display = PostDisplay::Peak;
+        else if (d == "axial_ratio") r.display = PostDisplay::AxialRatio;
+        else if (d == "phase") r.display = PostDisplay::Phase;
+        else if (d == "vector") r.display = PostDisplay::Vector;
+        else if (d == "real") r.display = PostDisplay::Real;
+        else r.display = PostDisplay::Imag;
+
+        // Three displays describe the polarization ellipse, which a scalar
+        // does not have. For Phi the ellipse is always a degenerate segment:
+        // `peak` would equal `complex_magnitude` and `axial_ratio` would be
+        // identically zero, so both are answers to a question Phi cannot ask.
+        if (!post_field_is_vector(r.field) &&
+            (r.display == PostDisplay::Peak || r.display == PostDisplay::AxialRatio ||
+             r.display == PostDisplay::Vector)) {
+            fail(e->line, "'display = " + d + "' describes a vector; 'field = phi' is a scalar. "
+                          "A scalar phasor has no polarization ellipse -- its peak IS its "
+                          "complex magnitude and its axial ratio is always zero. Use "
+                          "display = complex_magnitude, phase, real or imag.");
+        }
+    }
+
+    // --- the keys each choice brings with it --------------------------------
+    std::vector<std::string> allowed = {"geometry", "field", "display"};
+
+    if (r.geometry == PostGeometry::Body) {
+        allowed.push_back("body");
+        // Not checked against the mesh here; see input_file.hpp's contract --
+        // this stage never opens it. Binding resolves the name, exactly as it
+        // does for [Body] volume.
+        const std::vector<std::string> names = as_names(require(s, "body"));
+        if (names.size() != 1) {
+            fail(require(s, "body").line,
+                 "'body' names exactly one volume; write one [postprocess ...] section each");
+        }
+        r.body = names[0];
+    } else if (r.geometry == PostGeometry::Plane) {
+        allowed.push_back("plane");
+        allowed.push_back("offset");
+        const std::string pl = as_keyword(require(s, "plane"), {"xy", "yz", "zx"});
+        r.plane = pl == "xy" ? PostPlane::XY : (pl == "yz" ? PostPlane::YZ : PostPlane::ZX);
+        if (const Entry* e = find(s, "offset")) r.offset = as_number(*e);
+    } else {
+        allowed.push_back("points");
+        const Entry& e = require(s, "points");
+        const std::vector<double> v = as_numbers(e);
+        if (v.empty() || v.size() % 3 != 0) {
+            fail(e.line, "'points' expects x y z for each probe, so a multiple of three numbers, "
+                         "but found " + std::to_string(v.size()));
+        }
+        for (std::size_t i = 0; i < v.size(); i += 3) {
+            r.points.push_back(Vec3(v[i], v[i + 1], v[i + 2]));
+        }
+    }
+
+    // --- phase, and the refusal to accept one that would be ignored ---------
+    const bool wants_phase = post_display_uses_phase(r.display);
+    if (wants_phase) allowed.push_back("phase_deg");
+    if (const Entry* e = find(s, "phase_deg")) {
+        if (!wants_phase) {
+            fail(e->line, "'phase_deg' has no meaning for this display: it is "
+                          "phase-independent, so the picture would be identical whatever you "
+                          "set. Use display = magnitude_at_phase or vector to ask for an "
+                          "instant.");
+        }
+        if (result_.problem.type == AnalysisType::DC) {
+            fail(e->line, "a 'phase_deg' has no meaning when type = dc");
+        }
+        r.phase_deg = as_number(*e);
+    }
+    if (wants_phase && result_.problem.type == AnalysisType::DC) {
+        fail(s.line, "'display' asks for a particular instant, which needs a time-harmonic "
+                     "solution; this run is type = dc");
+    }
+
+    // --- component, required for the phase of a vector ----------------------
+    const bool wants_component =
+        r.display == PostDisplay::Phase && post_field_is_vector(r.field);
+    if (wants_component) allowed.push_back("component");
+    if (const Entry* e = find(s, "component")) {
+        if (!wants_component) {
+            fail(e->line, "'component' applies only to 'display = phase' on a vector field");
+        }
+        const std::string c = as_keyword(*e, {"x", "y", "z"});
+        r.component = c == "x" ? PostComponent::X
+                               : (c == "y" ? PostComponent::Y : PostComponent::Z);
+    } else if (wants_component) {
+        // Not defaulted. A vector phasor has one phase PER COMPONENT and they
+        // differ -- that difference is exactly what makes the polarization
+        // elliptical -- so "the phase of E" is not a quantity. Picking a
+        // component silently would be inventing an answer.
+        fail(s.line, "'display = phase' on a vector field needs 'component = x, y or z'. "
+                     "Each component has its own phase and in general they differ, so there is "
+                     "no single phase of a vector.");
+    }
+
+    reject_unknown_keys(s, allowed);
+
+    for (const PostprocessRequest& existing : result_.problem.postprocess) {
+        if (existing.name == r.name) {
+            fail(s.line, "a postprocess request named '" + r.name + "' is already defined");
+        }
+    }
+    result_.problem.postprocess.push_back(r);
+}
+
 void Parser::read_port(const Section& s) {
     if (s.name.empty()) fail(s.line, "a [port] section needs a name, as in '[port P1]'");
     reject_unknown_keys(s, {"type", "surface", "current", "voltage", "phase_deg", "current_direction"});
@@ -686,6 +840,8 @@ ParseResult Parser::run() {
             read_body(s);
         } else if (s.kind == "port") {
             read_port(s);
+        } else if (s.kind == "postprocess") {
+            read_postprocess(s);
         } else if (s.kind == "solver") {
             read_solver(s);
         } else if (s.kind == "output") {
@@ -695,7 +851,7 @@ ParseResult Parser::run() {
             saw_output_ = true;
         } else {
             fail(s.line, "unknown section '[" + s.kind + "]'; valid sections are mesh, analysis, "
-                         "boundary, solver, output, Body, port");
+                         "boundary, solver, output, Body, port, postprocess");
         }
     }
 
