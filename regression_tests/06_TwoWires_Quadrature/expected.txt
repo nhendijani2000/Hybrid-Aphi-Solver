@@ -23,10 +23,17 @@
 #                  sqrt(2) = 41 %, the equality case of the chain
 #                  b <= |B(th)| <= a <= N <= sqrt(2) a
 #
-# THE MESH IS DELIBERATELY COARSE -- about 2 elements per skin depth against
-# case 04's 8 -- because this case is meant to be edited and re-run. The
-# tolerances below are set for that, not for a convergence study. Do not read a
-# skin-depth profile off this case; case 04 is the one for that.
+# THE MESH RESOLVES THE SKIN DEPTH, at about 4.2 elements per delta (median
+# element 0.317 mm against delta = 1.32 mm). It did not always: at 0.6 mm, 2.2
+# per delta, |J| in the core read 7.2 % high and the core-to-surface phase lag
+# 7.4 degrees short -- consistently and in one direction, which is what
+# too-coarse elements do to an exponential. Refining to 0.25 mm halved both, to
+# +3.9 % and 4.2 degrees, which is first-order convergence in h.
+#
+# The refinement is spent INSIDE the conductors. A distance-to-the-surface field
+# cannot do that -- distance is positive on both sides, so it refines a shell of
+# air too, and that cost 660k elements of which more than half were air that
+# varies on no such scale. Two gmsh Cylinder fields instead: 192k tets, ~20 s.
 #
 #   key                value        tol      what sets the tolerance
 # ---------------------------------------------------------------------------
@@ -45,29 +52,38 @@ frequency              2500.0
 drive_current          1.0          2.0e-2
 
 # AND THE QUARTER CYCLE, which is the only thing in the suite that exercises a
-# port phase_deg. Measured 90.09 degrees against the 90.0 asked for.
+# port phase_deg. Measured 90.014 degrees against the 90.0 asked for.
 phase_difference_deg   90.0         1.0
 
 # THE POLARIZATION ELLIPSE, which is what the case exists to show.
 #
-# At (0, +/- d/2) theory says b/a = 1 exactly. Measured 0.975 on this mesh, and
-# the floor is 0.90 rather than a two-sided tolerance because the error can only
-# be one way: discretisation rounds the ellipse off, it does not make a linear
-# field circular.
+# At (0, +/- d/2) theory says b/a = 1 exactly; measured 0.9647. The floor is
+# one-sided rather than a tolerance because the error can only go one way:
+# discretisation rounds the ellipse off, it does not make a linear field
+# circular.
 axial_ratio_floor      0.90
 #
-# and there N/a must be its maximum, sqrt(2) = 1.41421. Measured 1.3968.
+# and there N/a must be its maximum, sqrt(2) = 1.41421. Measured 1.3895.
 # This is the equality case of a <= N <= sqrt(2) a, so it ties the three
 # magnitudes of docs/ComplexVectorPhasorConcept.md to a measurement rather than
 # a derivation.
 n_over_peak            1.4142136    0.05
 #
-# A BAND IS NOT A LINE, and the first draft of this file got that wrong by
-# asserting 0 for the median over |y| < 0.08d. b/a is zero ON the axis and grows
-# linearly away from it, so the median over a band is not zero: integrating the
-# analytic superposition over this exact window gives 0.0722, and over
-# |y| < 0.02d, 0.04d, 0.08d it gives 0.0179, 0.0358, 0.0722 -- linear in the
-# half-width, as it should be. The target is therefore the analytic value for
-# the window, which makes this a comparison with theory rather than a loose
-# "approximately zero". Measured 0.0658.
-axis_band_ratio        0.0722       0.02
+# TWO DRAFTS OF THIS CHECK WERE WRONG, and the second failure is the instructive
+# one.
+#
+# b/a is zero ON the line of centres -- both contributions point the same way
+# there -- so the first draft asserted 0 for the median over a BAND around it.
+# But b/a grows linearly away from the axis, so a band has no zero median.
+#
+# The second draft asserted the analytic value obtained by averaging over the
+# window's AREA, 0.0722. That is the cells' median only if the cells are spread
+# uniformly over the window, and they are not: refining the mesh moved the
+# statistic from 0.0658 to 0.0509 while changing no physics. A test that moves
+# when the mesh does, and the field does not, is measuring the mesh.
+#
+# It now evaluates the analytic AT EACH CELL'S OWN CENTROID and compares cell by
+# cell, so both sides are sampled identically whatever the mesh does. Over the
+# 1134 cells in the window the analytic median is 0.0616 and the measured 0.0509
+# -- a residual of -0.0098.
+axis_band_residual     0.0          0.03

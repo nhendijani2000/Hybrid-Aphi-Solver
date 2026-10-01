@@ -67,9 +67,46 @@ b/a = 1   at (0, ±d/2) — perfectly circular
 effect that the phase varies with radius *inside* each conductor, which is what
 makes PP8 worth looking at.
 
-**Why the mesh is coarse.** About 2 elements per skin depth, where case 04 uses
-8. This case is meant to be edited and re-run, so it is sized for an eight-second
-solve. **Do not read a skin-depth profile off it** — case 04 is the one for that.
+**The mesh resolves the skin depth**, at about 4.2 elements per `δ` — median
+element 0.317 mm against `δ = 1.32 mm`. 192k tets, ~20 s.
+
+The refinement is spent **inside** the conductors, which needs a little care: a
+distance-to-the-surface field cannot express it, because distance is positive on
+both sides, so asking for 0.25 mm at the surface also refines a 2 mm shell of
+*air*. That came to 660k elements, more than half of them air, which varies on
+no such scale. Two gmsh `Cylinder` fields instead.
+
+### What the skin effect actually comes out as
+
+Azimuthal mean of `|J|`, normalised to the surface, against Kelvin's
+`J₀(kr)/J₀(ka)` at `a/δ = 1.51`:
+
+| `r/a` | measured | Kelvin | err | measured lag | Kelvin |
+|---|---|---|---|---|---|
+| 0.80–0.92 | 0.9345 | 0.9039 | +3.4 % | −8.7° | −13.1° |
+| 0.40–0.60 | 0.8183 | 0.7895 | +3.6 % | −37.6° | −41.9° |
+| 0.00–0.20 | 0.8035 | 0.7731 | +3.9 % | **−53.1°** | −57.3° |
+
+A ~53° lag from surface to core. The residual +3.5 % is one-signed, which is
+discretisation: at 0.6 mm elements (2.2 per `δ`) it was +7.2 % and the lag was
+7.4° short, so halving `h` halved both — first-order convergence, as expected
+for first-order edge elements.
+
+**Case 04 remains the validated skin-depth case** — 8 elements per `δ`, asserting
+`R_ac/R_dc` against Kelvin to 0.22 %. This one resolves the effect; it does not
+certify it.
+
+### And the proximity effect, which is not an error
+
+| | `\|J\|` facing the other wire / away |
+|---|---|
+| wire 1 | **1.137** |
+| wire 2 | **0.766** |
+
+The neighbour's field redistributes current around the circumference — ±14 % and
+−23 %. It is what makes the arrows in PP1 asymmetric. The two wires are pushed
+**opposite** ways because they are 90° apart: at any instant one is near its peak
+while the other is near its zero crossing.
 
 ## What it asserts
 

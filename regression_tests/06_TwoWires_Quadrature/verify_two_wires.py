@@ -134,17 +134,45 @@ k = int(np.argmax(np.where(spot, ar, -1.0)))
 check("N/a at the most circular cell", math.sqrt(N2[k]) / a[k], math.sqrt(2.0), 0.05)
 
 # On the line joining the wires both contributions point the same way, so the
-# sum is linear however they are phased: b/a = 0 EXACTLY, at y = 0.
+# sum is linear however they are phased: b/a = 0 EXACTLY, at y = 0. Away from
+# the axis it grows, so a BAND does not have a zero median -- a first draft of
+# this check asserted 0 and was wrong about that.
 #
-# A band is not a line, though, and that distinction cost a first draft of this
-# check. b/a grows linearly away from the axis, so the median over |y| < 0.08d
-# is not 0 -- integrating the same analytic superposition over this exact window
-# gives 0.0722, and the medians over |y| < 0.02d, 0.04d, 0.08d come out 0.0179,
-# 0.0358, 0.0722, linear in the half-width as expected. So the target here is
-# the analytic value for the WINDOW, which is a real comparison with theory
-# rather than a loose "approximately zero".
+# A SECOND DRAFT WAS WRONG TOO, AND LESS OBVIOUSLY. It compared the cells'
+# MEDIAN against an analytic value obtained by averaging over the window's AREA.
+# Those are the same number only if the cells are spread uniformly over the
+# window, and they are not: refine the mesh and the cell population shifts, so
+# the statistic moved from 0.0658 to 0.0509 on a change that altered no physics.
+# A test that moves when the mesh does, while the field does not, is measuring
+# the mesh.
+#
+# So the analytic is evaluated AT EACH CELL'S OWN CENTROID and compared cell by
+# cell. Whatever the mesh does, both sides are sampled identically.
 axis = near & (np.abs(qb[:, 1]) < 0.08 * D) & (np.abs(qb[:, 0]) < 0.35 * D)
-check("median b/a over |y| < 0.08d", float(np.median(ar[axis])), 0.0722, 0.02)
+
+
+def analytic_axial_ratio(x, y):
+    """b/a of two infinite wires at x = -+d/2 carrying I and jI."""
+    r1 = np.stack([x + 0.5 * D, y], -1)
+    r2 = np.stack([x - 0.5 * D, y], -1)
+    s1 = (r1 ** 2).sum(-1)
+    s2 = (r2 ** 2).sum(-1)
+    k = MU0 / (2.0 * math.pi)
+    Pa = k * np.stack([-r1[..., 1], r1[..., 0]], -1) / s1[..., None]
+    Qa = k * np.stack([-r2[..., 1], r2[..., 0]], -1) / s2[..., None]
+    n2 = (Pa ** 2).sum(-1) + (Qa ** 2).sum(-1)
+    c = 0.5 * ((Pa ** 2).sum(-1) - (Qa ** 2).sum(-1))
+    dd = (Pa * Qa).sum(-1)
+    aa = np.sqrt(0.5 * n2 + np.hypot(c, dd))
+    cra = np.abs(Pa[..., 0] * Qa[..., 1] - Pa[..., 1] * Qa[..., 0])
+    return np.where(aa > 0, cra / (aa * aa), 0.0)
+
+
+ref = analytic_axial_ratio(qb[axis, 0], qb[axis, 1])
+resid = ar[axis] - ref
+print("    (%d cells in the window, analytic median %.4f over the same cells)"
+      % (axis.sum(), float(np.median(ref))))
+check("median b/a - analytic, per cell", float(np.median(resid)), 0.0, 0.03)
 
 print("\n%s" % ("all %d physics checks passed" % g_checks if g_failures == 0
                 else "FAILED %d of %d checks" % (g_failures, g_checks)))

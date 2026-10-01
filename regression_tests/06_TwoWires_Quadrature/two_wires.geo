@@ -28,12 +28,12 @@
 // skin effect, enough that the phase varies with radius inside each conductor
 // and `display = phase` has structure there rather than being flat.
 //
-// THE MESH IS DELIBERATELY COARSE. This is a demonstration you are meant to
-// edit and re-run, so it is sized for a ten-second solve rather than for
-// accuracy: about 2 elements per skin depth, where case 04 uses 8. The physics
-// it asserts (the port currents, and B between the wires against the two-wire
-// superposition) is insensitive to that; do not read a skin-depth profile off
-// it.
+// MESH SIZING. lc_wire = 0.25 mm against delta = 1.32 mm is about 5 elements per
+// skin depth, enough that the Bessel profile and its phase lag come out right
+// rather than flattened. An earlier version used 0.6 mm -- 2.2 per delta -- and
+// under-read |J| in the core by 7 % and the core-to-surface lag by 7 degrees,
+// consistently and in one direction, which is what too-coarse elements do to an
+// exponential.
 // ---------------------------------------------------------------------------
 
 SetFactory("OpenCASCADE");
@@ -44,7 +44,8 @@ Lz = 20.0;     // length, mm
 W  = 30.0;     // air box half-width is W/2, mm
 H  = 30.0;     // air box half-height is H/2, mm
 
-lc_wire = 0.6;
+lc_wire = 0.25;   // ~5 elements per skin depth (delta = 1.32 mm at 2.5 kHz)
+lc_near = 0.9;    // the air just outside, which does NOT need the skin sizing
 lc_far  = 3.0;
 d_far   = 10.0;
 
@@ -90,19 +91,46 @@ Physical Surface("wire1_top",    12) = { t1() };
 Physical Surface("wire2_bottom", 21) = { b2() };
 Physical Surface("wire2_top",    22) = { t2() };
 
-// --- sizing: fine on the wires, coarsening outward --------------------------
+// --- sizing ------------------------------------------------------------------
+// THE SKIN DEPTH IS INSIDE THE CONDUCTOR, SO THE REFINEMENT HAS TO BE TOO, and a
+// distance-to-the-surface field cannot express that: distance is positive on
+// both sides, so asking for 0.25 mm at the surface also refines a 2 mm shell of
+// AIR around each wire. That was 660k elements, of which the air was more than
+// half, for no gain -- nothing in the air varies on the skin-depth scale.
+//
+// Two Cylinder fields instead, one per wire, which set a size INSIDE a cylinder
+// and leave everything else alone. The air then grades on its own terms from
+// lc_near at the wire surface out to lc_far, and the elements that resolve the
+// Bessel profile are spent where the Bessel profile is.
 Field[1] = Distance;
 Field[1].SurfacesList = { CombinedBoundary{ Volume{ w1(), w2() }; } };
 Field[1].Sampling = 100;
 
 Field[2] = Threshold;
 Field[2].InField = 1;
-Field[2].SizeMin = lc_wire;
+Field[2].SizeMin = lc_near;
 Field[2].SizeMax = lc_far;
-Field[2].DistMin = a;
+Field[2].DistMin = 0.5 * a;
 Field[2].DistMax = d_far;
 
-Background Field = 2;
+Field[3] = Cylinder;
+Field[3].Radius  = 1.02 * a;        // a hair proud, so the surface layer is in
+Field[3].VIn     = lc_wire;
+Field[3].VOut    = lc_far;
+Field[3].XCenter = -d/2;  Field[3].YCenter = 0;  Field[3].ZCenter = Lz/2;
+Field[3].XAxis   = 0;     Field[3].YAxis   = 0;  Field[3].ZAxis   = Lz;
+
+Field[4] = Cylinder;
+Field[4].Radius  = 1.02 * a;
+Field[4].VIn     = lc_wire;
+Field[4].VOut    = lc_far;
+Field[4].XCenter =  d/2;  Field[4].YCenter = 0;  Field[4].ZCenter = Lz/2;
+Field[4].XAxis   = 0;     Field[4].YAxis   = 0;  Field[4].ZAxis   = Lz;
+
+Field[5] = Min;
+Field[5].FieldsList = { 2, 3, 4 };
+
+Background Field = 5;
 Mesh.MeshSizeExtendFromBoundary = 0;
 Mesh.MeshSizeFromPoints = 0;
 Mesh.MeshSizeFromCurvature = 0;
