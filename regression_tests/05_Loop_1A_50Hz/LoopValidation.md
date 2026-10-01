@@ -307,6 +307,64 @@ are **log scaled**: the view spans more than two decades, from the conductor's 8
 and a linear range that resolves the conductor saturates every air cell around it into one flat
 colour. The 226× is a property of the mesh, not of the ring — §5.8.
 
+### 4.5 Nodal or per-tet, and why `E` is drawn per-tet
+
+Every field here can be coloured from either of two arrays, and the choice is
+visible. **Nodal** (point) data is Gouraud-shaded: the colour ramps across each
+triangle between its vertex values, so the picture is smooth. **Per-tet** (cell)
+data is one flat fill per element, so every tetrahedron reads as a facet.
+
+Smooth is better everywhere except at a material interface — and there it is
+actively wrong.
+
+![|E| drawn per-tet and nodal, with the conductor boundary magnified](fig/e_nodal_vs_pertet.png)
+
+**Same slice, same pinned range, same colour map. The only difference is which
+array the colour came from.** Top row, the whole frame; bottom row, the boxed
+part of the conductor's inner wall at 3×.
+
+**What nodal averaging does.** A nodal value is the volume-weighted average of
+the tetrahedra touching that node. For a node sitting *on* the conductor
+surface, those tets are on both sides of it: some hold the conductor's
+`8.7e-03 V/m`, some the air's `4.2e-02`. The average is a blend of two numbers
+that are different **because the field genuinely jumps there** — `E_t` is
+continuous across the interface but `E_n` steps by the surface charge, so there
+is no single value at the wall to average towards.
+
+**Why it comes out ragged rather than merely blurred.** Which tets happen to
+touch a given surface node varies around the ring, so the blend varies node to
+node. The result is the saw-tooth fringe in the bottom-right panel — the shape
+of the mesh, drawn as if it were the field. The per-tet panel beside it has the
+clean discontinuity the physics actually has, because every tetrahedron lies
+wholly in one material and nothing is averaged across anything.
+
+**The solver already knows which nodes these are.** It writes a
+`material_interface` flag, and **14,736 nodes — 5.0 % of the mesh — carry it**.
+That is exactly the set that produces the fringe.
+
+| band, distance from the tube axis | nodal `\|E\|` | per-tet `\|E\|` | nodal vs exact |
+|---|---|---|---|
+| 0.80–0.90a, inside | 8.503694e-03 | 8.521196e-03 | −2.1 % |
+| 0.90–0.97a, inside | 8.893547e-03 | 8.459322e-03 | **+2.4 %** |
+| 1.03–1.10a, outside | 4.251213e-02 | 4.109542e-02 | — |
+| 1.10–1.30a, outside | 3.776337e-02 | 3.786500e-02 | — |
+
+against the exact interior value `I/(σρK) = 8.684847e-03 V/m` at `ρ = R`. So the
+cost is a couple of per cent in the band next to the wall — not a disaster, and
+not the reason for the choice. **The reason is that a ragged fringe at the
+conductor surface is a picture of the mesh, in a report whose §5.8 is about what
+happens at exactly that surface.**
+
+**So: `E` is drawn per-tet, `B` is drawn nodal.** `B` has no interface to fall
+over — `mu_r = 1` in both the ring and the air, so every tet contributes to every
+node and nothing is averaged across a jump. Its only cost is a far-field bias
+from the mesh grading, −7.5 % at the wall against −2.2 % per cell
+(`FIELD_POSTPROCESSING.md`), which matters for numbers and not for a picture.
+
+**None of this touches a validated number.** Every figure in this report is
+illustration; every quantity in §5 is computed from the per-cell arrays by
+`analytic_comparison.py`, which averages nothing anywhere.
+
 ## 5. Comparison with the analytical solutions
 
 Every number in this section comes from `analytic_comparison.py`, which prints the whole set in one

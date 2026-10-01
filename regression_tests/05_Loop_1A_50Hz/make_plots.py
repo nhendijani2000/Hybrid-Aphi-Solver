@@ -182,28 +182,46 @@ shot("j_vectors.png")
 # 3. E and B on the z = 0 plane (the xy plane through the tube centreline)
 # ---------------------------------------------------------------------------
 def plane_shot(fn, array, title, name, scale, preset="Rainbow Uniform",
-               logscale=False, only_ring=False, pin=None):
+               logscale=False, only_ring=False, pin=None, nodal=True):
+    """`nodal` picks which array the colour comes from, and it is a real choice.
+
+    NODAL (point data) is Gouraud-shaded: the colour ramps across each triangle
+    between its vertex values, so the picture is smooth. PER-TET (cell data) is
+    one flat fill per element, so every tet reads as a facet.
+
+    Smooth is better everywhere EXCEPT at a material interface, and there it is
+    actively wrong. A node sitting on the conductor surface is touched by tets on
+    both sides, and the nodal value is their volume-weighted average -- a blend of
+    the conductor's 8.7e-03 V/m and the air's 4.2e-02, two numbers that are
+    different because the field genuinely JUMPS there. Which tets happen to touch
+    each node varies around the ring, so the blend varies, and the boundary comes
+    out as a ragged fringe instead of the clean discontinuity it is. The solver
+    already flags those nodes: 14,736 of them, 5 % of the mesh, carry
+    `material_interface = 1`.
+
+    So: B is drawn nodal (mu_r = 1 in both bodies, so there is no interface for it
+    to fall over), and E is drawn BOTH ways -- per-tet for the report's own
+    figures, and nodal beside it so the artefact can be seen rather than described.
+    Every validated number comes from the per-cell arrays via
+    analytic_comparison.py and is untouched by any of this.
+    """
     clear()
     look(scale)
     base = ring_of(fn) if only_ring else src(fn)
-    # NODAL, and only for the picture -- see the note at the top of this file.
-    # Point data is Gouraud-shaded so the colour ramps across each triangle;
-    # cell data is one flat fill per tet, which is what made these figures read
-    # as a mosaic next to case 02's. Every validated number in this case comes
-    # from the per-cell arrays through analytic_comparison.py and is unchanged.
+    pre = array if nodal else array + "_cell"
     calc = Calculator(Input=base)
-    calc.AttributeType = "Point Data"
+    calc.AttributeType = "Point Data" if nodal else "Cell Data"
     calc.ResultArrayName = "mag"
     calc.Function = ("sqrt(%s_real_X^2+%s_real_Y^2+%s_real_Z^2"
                      "+%s_imag_X^2+%s_imag_Y^2+%s_imag_Z^2)"
-                     % (array, array, array, array, array, array))
+                     % (pre, pre, pre, pre, pre, pre))
     sl = Slice(Input=calc)
     sl.SliceType = "Plane"
     sl.SliceType.Origin = [0.0, 0.0, ZCUT]
     sl.SliceType.Normal = [0.0, 0.0, 1.0]
     UpdatePipeline(proxy=sl)
     dd = Show(sl, view)
-    ColorBy(dd, ("POINTS", "mag"))
+    ColorBy(dd, ("POINTS" if nodal else "CELLS", "mag"))
     dd.RescaleTransferFunctionToDataRange(True, False)
     l = GetColorTransferFunction("mag")
     # EVERY "mag" FIGURE SHARES THIS ONE LOOKUP TABLE, and
@@ -250,10 +268,15 @@ plane_shot("B_field.vtk", "B", "|B|  T", "b_xy_domain.png", 1.05 * Rd,
 # that it runs high, and that is the cut, not the ring. What the air's field is
 # NOT is -j*omega*A, which is 2.6e-4 here; it is electrostatic, from the
 # 0.354 mV the loop carries across the cut. See section 4.3.
+# Drawn BOTH ways. The per-tet one is the figure the report uses, because the
+# conductor surface is a real discontinuity and per-tet renders it as one; the
+# nodal one sits beside it in section 4.5 so the fringe can be seen.
 plane_shot("E_field.vtk", "E", "|E|  V/m", "e_xy_ring.png", 1.6 * (R + a),
-           pin=(0.0, 3.0e-2))
+           pin=(0.0, 3.0e-2), nodal=False)
+plane_shot("E_field.vtk", "E", "|E|  V/m", "e_xy_ring_nodal.png", 1.6 * (R + a),
+           pin=(0.0, 3.0e-2), nodal=True)
 plane_shot("E_field.vtk", "E", "|E|  V/m", "e_xy_domain.png", 1.05 * Rd,
-           logscale=True, pin=(1.0e-5, 2.0))
+           logscale=True, pin=(1.0e-5, 2.0), nodal=False)
 
 # ---------------------------------------------------------------------------
 # 4. the y = 0 plane THROUGH THE PORT -- it cuts the tube twice
@@ -382,18 +405,19 @@ geometry("geometry_cut.png", True, 0.85)
 # where the field is single valued, so the two can be compared.
 def e_on_plane(name, yoff, focal, scale, pin, title, logscale=False):
     clear()
+    # per-tet: these cut the conductor surface too, and the fringe above is why
     calc = Calculator(Input=src("E_field.vtk"))
-    calc.AttributeType = "Point Data"
+    calc.AttributeType = "Cell Data"
     calc.ResultArrayName = "emag"
-    calc.Function = ("sqrt(E_real_X^2+E_real_Y^2+E_real_Z^2"
-                     "+E_imag_X^2+E_imag_Y^2+E_imag_Z^2)")
+    calc.Function = ("sqrt(E_cell_real_X^2+E_cell_real_Y^2+E_cell_real_Z^2"
+                     "+E_cell_imag_X^2+E_cell_imag_Y^2+E_cell_imag_Z^2)")
     sl = Slice(Input=calc)
     sl.SliceType = "Plane"
     sl.SliceType.Origin = [0.0, yoff, 0.0]
     sl.SliceType.Normal = [0.0, 1.0, 0.0]
     UpdatePipeline(proxy=sl)
     dd = Show(sl, view)
-    ColorBy(dd, ("POINTS", "emag"))
+    ColorBy(dd, ("CELLS", "emag"))
     l = GetColorTransferFunction("emag")
     l.UseLogScale = 0
     l.MapControlPointsToLinearSpace()

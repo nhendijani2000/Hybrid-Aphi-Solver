@@ -15,7 +15,9 @@
 #
 # fig/e_port_pair.png is COMPOSED from two of make_plots.py's outputs by
 # make_port_pair.py, so regenerating figures means running BOTH:
-#     pvbatch make_plots.py output  &&  pvbatch make_port_pair.py
+#     pvbatch make_plots.py output
+#     pvbatch make_port_pair.py          -> fig/e_port_pair.png
+#     pvpython make_nodal_comparison.py  -> fig/e_nodal_vs_pertet.png
 # Re-run after regenerating figures with make_plots.py or
 # make_convergence_plot.py, or the documents keep showing the previous run's
 # pictures: they are baked in.

@@ -410,6 +410,71 @@ zooms are <b>log scaled</b>: the view spans more than two decades, from the cond
 cell around it into one flat colour. The 226x is a property of the mesh, not of the ring &mdash;
 &sect;5.8.</p>
 
+<h3>4.5 Nodal or per-tet, and why E is drawn per-tet</h3>
+
+<p>Every field here can be coloured from either of two arrays, and the choice is
+visible. <b>Nodal</b> (point) data is Gouraud&#8209;shaded: the colour ramps across each triangle
+between its vertex values, so the picture is smooth. <b>Per&#8209;tet</b> (cell) data is one flat
+fill per element, so every tetrahedron reads as a facet.</p>
+
+<p>Smooth is better everywhere except at a material interface &mdash; and there it is actively
+wrong.</p>
+
+<div class="figs one">
+  <figure><img src="fig/e_nodal_vs_pertet.png" alt="|E| drawn per-tet and nodal, with the conductor boundary magnified">
+    <figcaption><b>Same slice, same pinned range, same colour map. The only difference is which
+    array the colour came from.</b> Top row, the whole frame; bottom row, the boxed part of the
+    conductor's inner wall at 3x.</figcaption></figure>
+</div>
+
+<p><strong>What nodal averaging does.</strong> A nodal value is the volume&#8209;weighted average of
+the tetrahedra touching that node. For a node sitting <em>on</em> the conductor surface, those tets
+are on both sides of it: some hold the conductor's <code>8.7e&#8209;03 V/m</code>, some the air's
+<code>4.2e&#8209;02</code>. The average is a blend of two numbers that are different <b>because the
+field genuinely jumps there</b> &mdash; <code>E_t</code> is continuous across the interface but
+<code>E_n</code> steps by the surface charge, so there is no single value at the wall to average
+towards.</p>
+
+<p><strong>Why it comes out ragged rather than merely blurred.</strong> Which tets happen to touch a
+given surface node varies around the ring, so the blend varies node to node. The result is the
+saw&#8209;tooth fringe in the bottom&#8209;right panel &mdash; the shape of the mesh, drawn as if it
+were the field. The per&#8209;tet panel beside it has the clean discontinuity the physics actually
+has, because every tetrahedron lies wholly in one material and nothing is averaged across
+anything.</p>
+
+<div class="note">
+<p><strong>The solver already knows which nodes these are.</strong> It writes a
+<code>material_interface</code> flag, and <b>14,736 nodes &mdash; 5.0 % of the mesh &mdash; carry
+it</b>. That is exactly the set that produces the fringe.</p>
+</div>
+
+<div class="tw"><table>
+<thead><tr><th>band, distance from the tube axis</th><th>nodal <code>|E|</code></th><th>per&#8209;tet <code>|E|</code></th><th>nodal vs exact</th></tr></thead>
+<tbody>
+<tr><td>0.80&ndash;0.90a, inside</td><td>8.503694e&#8209;03</td><td>8.521196e&#8209;03</td><td>&minus;2.1 %</td></tr>
+<tr><td>0.90&ndash;0.97a, inside</td><td>8.893547e&#8209;03</td><td>8.459322e&#8209;03</td><td><b>+2.4 %</b></td></tr>
+<tr><td>1.03&ndash;1.10a, outside</td><td>4.251213e&#8209;02</td><td>4.109542e&#8209;02</td><td>&mdash;</td></tr>
+<tr><td>1.10&ndash;1.30a, outside</td><td>3.776337e&#8209;02</td><td>3.786500e&#8209;02</td><td>&mdash;</td></tr>
+</tbody></table></div>
+
+<p>against the exact interior value <code>I/(&sigma;&rho;K) = 8.684847e&#8209;03 V/m</code> at
+<code>&rho; = R</code>. So the cost is a couple of per cent in the band next to the wall &mdash; not
+a disaster, and not the reason for the choice. <strong>The reason is that a ragged fringe at the
+conductor surface is a picture of the mesh, in a report whose &sect;5.8 is about what happens at
+exactly that surface.</strong></p>
+
+<p><strong>So: E is drawn per&#8209;tet, B is drawn nodal.</strong> <code>B</code> has no interface
+to fall over &mdash; <code>mu_r = 1</code> in both the ring and the air, so every tet contributes to
+every node and nothing is averaged across a jump. Its only cost is a far&#8209;field bias from the
+mesh grading, &minus;7.5 % at the wall against &minus;2.2 % per cell
+(<code>FIELD_POSTPROCESSING.md</code>), which matters for numbers and not for a picture.</p>
+
+<div class="note">
+<p><strong>None of this touches a validated number.</strong> Every figure in this report is
+illustration; every quantity in &sect;5 is computed from the per&#8209;cell arrays by
+<code>analytic_comparison.py</code>, which averages nothing anywhere.</p>
+</div>
+
 <h2>5. Comparison with the analytical solutions</h2>
 
 <p>Every number in this section comes from <code>analytic_comparison.py</code>, which prints the whole set in one run and derives each closed form in its docstring. Nothing here is hand-copied from a previous run.</p>
