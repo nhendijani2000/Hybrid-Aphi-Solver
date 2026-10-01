@@ -174,6 +174,40 @@ print("    (%d cells in the window, analytic median %.4f over the same cells)"
       % (axis.sum(), float(np.median(ref))))
 check("median b/a - analytic, per cell", float(np.median(resid)), 0.0, 0.03)
 
+# --- the skin profile, which guards the comparison as much as the solve -----
+#
+# Kelvin's J0(kr)/J0(ka) is normalised at r = a; a cell band "at the surface" is
+# r > 0.92a, whose mean radius is 0.9566a. Anchoring the two sides at different
+# radii inflates every measured ratio by 1/|J0(k*0.9566a)/J0(k*a)| = +3.5 %, with
+# no h in it -- an offset that refinement cannot remove and that once produced a
+# convincing false convergence study here. Both sides are anchored at rbar.
+print("\nskin profile against Kelvin")
+delta = math.sqrt(2.0 / (2.0 * math.pi * 2500.0 * MU0 * 5.8e7))
+kk = (1.0 - 1.0j) / delta
+
+
+def _j0(z):
+    t, tot = 1.0 + 0j, 1.0 + 0j
+    for m in range(1, 60):
+        t *= -(z * z) / (4.0 * m * m)
+        tot += t
+        if abs(t) < 1e-18 * abs(tot):
+            break
+    return tot
+
+
+rr = np.hypot(q[:, 0] + 0.5 * D, q[:, 1])
+w1 = slab & (bt == 1)
+sf = w1 & (rr > 0.92 * A_W)
+rbar = float(rr[sf].mean())
+Jsurf = J[sf].mean()
+core = w1 & (rr < 0.2 * A_W)
+Jcore = J[core].mean()
+kref = _j0(kk * rr[core].mean()) / _j0(kk * rbar)
+check("core |J|/|J(rbar)| vs Kelvin", abs(Jcore) / abs(Jsurf), abs(kref), 0.01 * abs(kref))
+check("core phase lag vs Kelvin, deg",
+      math.degrees(np.angle(Jcore / Jsurf)), math.degrees(np.angle(kref)), 0.5)
+
 print("\n%s" % ("all %d physics checks passed" % g_checks if g_failures == 0
                 else "FAILED %d of %d checks" % (g_failures, g_checks)))
 sys.exit(1 if g_failures else 0)

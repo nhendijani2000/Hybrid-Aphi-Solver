@@ -78,23 +78,49 @@ no such scale. Two gmsh `Cylinder` fields instead.
 
 ### What the skin effect actually comes out as
 
-Azimuthal mean of `|J|`, normalised to the surface, against Kelvin's
+`pvbatch skin_profile.py output` — azimuthal mean of `|J|` against Kelvin's
 `J₀(kr)/J₀(ka)` at `a/δ = 1.51`:
 
-| `r/a` | measured | Kelvin | err | measured lag | Kelvin |
-|---|---|---|---|---|---|
-| 0.80–0.92 | 0.9345 | 0.9039 | +3.4 % | −8.7° | −13.1° |
-| 0.40–0.60 | 0.8183 | 0.7895 | +3.6 % | −37.6° | −41.9° |
-| 0.00–0.20 | 0.8035 | 0.7731 | +3.9 % | **−53.1°** | −57.3° |
+| `r/a` | measured | Kelvin | err | lag | Kelvin | err |
+|---|---|---|---|---|---|---|
+| 0.00–0.20 | 0.8035 | 0.8003 | **+0.39 %** | −53.14° | −53.20° | **+0.06°** |
+| 0.20–0.40 | 0.8047 | 0.8027 | +0.26 % | −47.90° | −48.07° | +0.16° |
+| 0.40–0.60 | 0.8183 | 0.8173 | +0.12 % | −37.56° | −37.75° | +0.19° |
+| 0.60–0.80 | 0.8629 | 0.8629 | −0.00 % | −22.65° | −22.89° | +0.24° |
+| 0.80–0.92 | 0.9345 | 0.9357 | −0.12 % | −8.70° | −8.93° | +0.23° |
 
-A ~53° lag from surface to core. The residual +3.5 % is one-signed, which is
-discretisation: at 0.6 mm elements (2.2 per `δ`) it was +7.2 % and the lag was
-7.4° short, so halving `h` halved both — first-order convergence, as expected
-for first-order edge elements.
+A 53° lag from surface to core, reproduced to **0.06°**, and the magnitude
+profile to better than 0.4 % everywhere.
 
-**Case 04 remains the validated skin-depth case** — 8 elements per `δ`, asserting
-`R_ac/R_dc` against Kelvin to 0.22 %. This one resolves the effect; it does not
-certify it.
+> **BOTH SIDES MUST BE ANCHORED AT THE SAME RADIUS**, and an earlier version of
+> this table did not. Kelvin's profile is normalised at `r = a`; a cell band "at
+> the surface" is `r > 0.92a`, whose **mean radius is 0.9566a**. Dividing the
+> measurement by `J(0.9566a)` while dividing the theory by `J(a)` inflates every
+> measured ratio by `1/0.9660 = +3.5 %` — an offset with **no `h` in it**.
+>
+> It told a convincing false story: errors of 7.2 % that "improved" to 3.9 %
+> under refinement and then stalled, with the apparent convergence order
+> collapsing to 0.37. All of that was a constant offset dominating a real error
+> ten times smaller. What finally placed it was two controls — a **single
+> isolated wire** showed the identical error, ruling out the neighbour, and
+> narrowing the axial sample band changed nothing, ruling out end effects. An
+> error that survives removing the neighbour, ignores position and ignores mesh
+> size is in the instrument, not the model.
+
+### Does the refinement earn its cost?
+
+Measured properly, at three levels:
+
+| median `h` | per `δ` | wire tets | core `\|J\|` err | core lag err |
+|---|---|---|---|---|
+| 0.724 mm | 1.8 | 1,604 | +1.483 % | +0.304° |
+| 0.502 mm | 2.6 | 4,977 | +0.661 % | +0.265° |
+| 0.317 mm | 4.2 | 19,915 | **+0.390 %** | **+0.060°** |
+
+Yes — 1.48 % to 0.39 % for 8 s to 20 s. The pairwise order in `h` comes out
+between 1 and 2 for the magnitude and is too noisy to read for the lag, whose
+errors are already down at a tenth of a degree. **Three points are not enough to
+claim an order**, and this report does not claim one.
 
 ### And the proximity effect, which is not an error
 

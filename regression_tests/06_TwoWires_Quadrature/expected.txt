@@ -24,11 +24,17 @@
 #                  b <= |B(th)| <= a <= N <= sqrt(2) a
 #
 # THE MESH RESOLVES THE SKIN DEPTH, at about 4.2 elements per delta (median
-# element 0.317 mm against delta = 1.32 mm). It did not always: at 0.6 mm, 2.2
-# per delta, |J| in the core read 7.2 % high and the core-to-surface phase lag
-# 7.4 degrees short -- consistently and in one direction, which is what
-# too-coarse elements do to an exponential. Refining to 0.25 mm halved both, to
-# +3.9 % and 4.2 degrees, which is first-order convergence in h.
+# element 0.317 mm against delta = 1.32 mm). Measured against Kelvin, with both
+# sides anchored at the same radius: core |J| +0.39 % and the core-to-surface
+# phase lag +0.06 degrees on a 53 degree lag. At 1.8 per delta it was +1.48 %
+# and +0.30 degrees, so the refinement is worth its 8 s -> 20 s.
+#
+# AN EARLIER VERSION OF THIS FILE QUOTED 7.2 % AND 7.4 DEGREES AND CLAIMED
+# first-order convergence. Both were wrong, and from the same cause: the
+# comparison normalised the measurement at the sample band's mean radius
+# (0.9566a) while normalising Kelvin at a, which inflates every ratio by 3.5 %
+# with no h in it. See the note at the top of skin_profile.py; the verifier now
+# asserts the profile so it cannot drift back.
 #
 # The refinement is spent INSIDE the conductors. A distance-to-the-surface field
 # cannot do that -- distance is positive on both sides, so it refines a shell of
