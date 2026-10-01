@@ -373,6 +373,14 @@ phasor is a pair of real `VECTORS`.
 **not** the length of either the real or the imaginary vector: where the field
 is elliptically polarised neither of those is the physical peak.
 
+It is not the physical peak either. A vector phasor traces an ellipse, and this
+quantity is the hypotenuse of its two semi-axes -- `sqrt(a² + b²)`, equal to
+`sqrt(2)` times the RMS -- so it equals the peak `a` only for linear
+polarisation and exceeds it by up to 41 % for circular.
+`ComplexVectorPhasorConcept.md` derives that, gives the two other quantities a
+post-processing UI has to distinguish from it, and measures how far apart they
+are in this suite's own output.
+
 **Cell data**, one per tet, none of it averaged:
 
 | array | |
