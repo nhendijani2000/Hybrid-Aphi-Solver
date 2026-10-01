@@ -66,8 +66,8 @@ SetFactory("OpenCASCADE");
 R  = 6.5;     // loop radius, mm -- centreline of the tube
 a  = 0.8;     // tube circumradius, mm
 M  = 20;      // sides of the tube cross-section
-Rd = 60.0;    // air cylinder radius, mm -- 2x, to test the boundary effect on L
-Hd = 60.0;    // air cylinder height, mm
+Rd = 90.0;    // air cylinder radius, mm -- 3x loop.geo, to separate domain truncation from discretisation in B
+Hd = 90.0;    // air cylinder height, mm -- 3x loop.geo
 
 // Mesh sizes. lc_ring has to resolve a cross-section 1.6 mm across, so 0.25 mm
 // gives about 20 elements around the tube and 6 across it.
@@ -77,8 +77,8 @@ Hd = 60.0;    // air cylinder height, mm
 // slivers -- that is what killed the N = 96 experiment in case 02 -- so M and
 // lc_ring move together.
 lc_ring = 0.25;
-lc_far  = 10.00;
-d_far   = 40.0;
+lc_far  = 12.00;  // with d_far = 60 this GRADES so the size on the axis matches loop.geo
+d_far   = 60.0;   // Threshold is linear in distance: 0.25+11.75*(d-a)/(d_far-a)
 
 // --- the tube cross-section, in the x-z plane centred at (R, 0, 0) ----------
 For i In {0 : M-1}
@@ -92,12 +92,24 @@ Line(100+M-1) = {100+M-1, 100};
 Curve Loop(1) = {100 : 100+M-1};
 Plane Surface(1) = {1};
 
-// --- revolve it both ways, so the two cross-sections are shared faces -------
-half_pos() = Extrude { {0,0,1}, {0,0,0},  Pi } { Surface{1}; };
-half_neg() = Extrude { {0,0,1}, {0,0,0}, -Pi } { Surface{1}; };
-// Extrude returns [top surface, volume, lateral faces...]; entry 1 is the volume.
-vp = half_pos(1);
-vn = half_neg(1);
+// --- revolve it in two CHAINED POSITIVE sweeps -------------------------------
+// The second sweep starts from the first's END face rather than going the other
+// way round from the original. Both are then +Pi.
+//
+// WHY NOT ONE +Pi AND ONE -Pi, which is the obvious way. It meshes, and the
+// result is WRONG IN A WAY THAT IS EASY TO MISS: both halves come out with the
+// correct volume -- 40.386 against 40.307 mm3, equal to 0.2 % -- but the
+// negative-angle half gets 4557 tets against 11621, a mean element 23 % larger
+// and two and a half times FEWER of them. Same geometry, half the conductor
+// meshed coarsely. It showed up as a ragged lower half in the field plots and
+// was measured before it was believed. Chaining two positive sweeps gives
+// 1.019, symmetric.
+half_1() = Extrude { {0,0,1}, {0,0,0}, Pi } { Surface{1}; };
+// Extrude returns [end surface, volume, lateral faces...]: entry 0 is the face
+// the sweep ended on, at theta = pi, which is where the second one starts.
+half_2() = Extrude { {0,0,1}, {0,0,0}, Pi } { Surface{half_1(0)}; };
+vp = half_1(1);
+vn = half_2(1);
 
 // --- the air, welded to the ring --------------------------------------------
 Cylinder(500) = {0, 0, -Hd/2, 0, 0, Hd, Rd};

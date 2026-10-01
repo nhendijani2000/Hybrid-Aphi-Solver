@@ -35,14 +35,40 @@ circulation_tol        1.0e-3
 # the path length is 2 pi rho and varies across the section, and the
 # conductance is sigma * integral(dA / 2 pi rho) -- the current crowds toward
 # the inner radius. Ignoring that is a 0.44 % error, an order above the
-# solver's own. Measured 3.543745e-04 against 3.544922e-04 exact, -0.033 %.
+# solver's own. Measured 3.543192e-04 against 3.546954e-04 exact, -0.106 %.
+# Derived and compared in full in section 5.1/5.3 of LoopValidation; the numbers
+# come from ./analytic_comparison.py.
 R_rel_tol              2.0e-3
 
 # ---------------------------------------------------------------------------
-# L IS PINNED, NOT VALIDATED. STILL AN OPEN ITEM, BUT HALF OF IT IS SOLVED.
+# L IS PINNED, NOT VALIDATED -- AND THE REASON IS NOW KNOWN: THE DOMAIN.
 #
 # Measured 19.3770 nH, against the published closed form for a circular loop of
 # round wire, L = mu0 R [ln(8R/a) - 2 + 1/4] = 19.8027 nH: -2.15 %.
+#
+# THE WHOLE OF THAT GAP IS THE OUTER BOUNDARY. `outer = flux_tangential` sets
+# n.B = 0 on the domain wall, which confines the return flux and acts like a
+# flux-excluding shell -- an image loop of opposing current. Less flux links the
+# ring, so L reads low. At Rd = Hd = 30 mm the wall is only 2.3 loop radii out.
+# Re-meshed at 90 mm, graded so element size ON THE AXIS matches this mesh to
+# within 10 % (loop_big.geo, 230569 tets against 223879, 41.2 s against 43.9 s):
+#
+#     L      19.377 -> 19.785 nH      -2.15 % -> -0.09 %
+#
+# The same change fixes two other observables in the same stroke, which is what
+# makes the diagnosis solid rather than a coincidence:
+#
+#     B on the loop axis, at the centre    -2.51 % -> -0.37 %
+#     B in the air, 12-20 wire radii out  +24.69 % -> +0.73 %
+#
+# See section 5.7 of LoopValidation. Reproduce with:
+#     gmsh loop_big.geo -3 -o loop_big.msh
+#     ..\run_case.bat loop_50hz_big.aphi
+#     pvbatch analytic_comparison.py output_big
+#
+# THIS CASE STILL SHIPS THE 30 mm DOMAIN, so the number pinned below is still
+# 2 % from theory. It is kept because every figure in the report is framed on
+# it; the fix is documented, not adopted.
 #
 # IT WAS -4.02 %, AND THE FIRST HALF OF THE GAP WAS A MESH BUG. The ring used to
 # be revolved as one +Pi sweep and one -Pi sweep. Both halves came out with the
@@ -57,14 +83,16 @@ R_rel_tol              2.0e-3
 # lc_ring globally while half the ring stayed relatively coarse, so it was
 # measuring the wrong thing. Resolution IS part of it.
 #
-# WHAT IS STILL OPEN: the remaining -2.15 %. The domain is ruled out -- doubling
-# it to 60 mm moved L by +0.2 %, and a dipole estimate puts the field energy
-# beyond 30 mm at about 0.09 nH, 0.4 %. The remaining suspect is resolution of
-# the AIR beyond one wire radius: a wire loop's magnetic energy is
-# logarithmically distributed, roughly half of it between 1 and 10 wire radii
-# from the surface, and that shell is meshed at 0.25 mm growing to 4 mm.
-# Refining it to 0.25 mm out to 2.5 mm needs about 700k tets in the shell alone
-# and does not fit in 32 GB, so it is recorded rather than resolved.
+# A SECOND RETRACTION, AND IT IS THE SAME MISTAKE TWICE. This file used to say
+# "the domain is ruled out -- doubling it to 60 mm moved L by +0.2 %, and a
+# dipole estimate puts the field energy beyond 30 mm at about 0.09 nH", and
+# blamed the gap on resolution of the air beyond one wire radius. That test was
+# invalid two ways at once: the mesh it used still carried the +Pi/-Pi sweep bug
+# above, AND it coarsened the far field so much that elements near the loop grew
+# from 4 mm to 8.8 mm. It changed two things and controlled neither.
+#
+# Both retractions in this file have the same shape -- a negative result from a
+# test that moved more than one variable. That is the lesson worth keeping.
 #
 # EXTRACTING L HERE IS ILL-CONDITIONED, worth knowing before reading any of it.
 # omega*L/R is 0.017: the reactance is 1.7 % of the resistance, so Im(Z) is a
@@ -74,5 +102,6 @@ R_rel_tol              2.0e-3
 # the imposed current and says why.
 #
 # The tolerance below is therefore a REGRESSION GUARD on a number still 2 %
-# from theory. Do not read a pass here as agreement with it.
+# from theory, for a reason now understood. Do not read a pass here as agreement
+# with the closed form -- for that, run the 90 mm domain.
 L_nH                   19.3770      0.05
