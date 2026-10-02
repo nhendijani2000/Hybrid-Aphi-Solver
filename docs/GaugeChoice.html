@@ -1,0 +1,259 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Choosing a gauge</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#15181d; --ink-2:#4a5260; --ink-3:#6f7888;
+    --bg:#fbfaf8; --card:#ffffff; --rule:#e3e0da;
+    --accent:#8a3324; --accent-soft:#f6ece9;
+    --ok:#2c5f2d; --warn:#8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+      --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+      --accent:#e08b74; --accent-soft:#2a1f1c;
+      --ok:#8fc98f; --warn:#e0b467;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+    --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+    --accent:#e08b74; --accent-soft:#2a1f1c;
+    --ok:#8fc98f; --warn:#e0b467;
+    color-scheme: dark;
+  }
+  body{background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif; line-height:1.6; margin:0;}
+  .wrap{max-width:900px; margin:0 auto; padding-inline:16px; padding-block:40px 72px;}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600;
+     font-size:clamp(1.9rem,5vw,2.6rem); line-height:1.15; margin:0 0 .5em;
+     text-wrap:balance; letter-spacing:-.01em;}
+  h2{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:1.5rem;
+     margin:2.6rem 0 .2em; padding-top:1.5rem; border-top:1px solid var(--rule);
+     text-wrap:balance;}
+  h3{font-size:1.02rem; font-weight:600; margin:1.8rem 0 .3em; color:var(--ink);}
+  p{margin:.7em 0; max-width:68ch;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.88em;
+       background:var(--accent-soft); color:var(--accent);
+       padding:.08em .34em; border-radius:3px;}
+  pre{background:var(--card); border:1px solid var(--rule); border-radius:6px;
+      padding:.8rem 1rem; overflow-x:auto; font-family:"IBM Plex Mono",monospace;
+      font-size:.82rem; line-height:1.5; margin:1rem 0;}
+  pre code{background:none; color:var(--ink); padding:0; font-size:1em;}
+  .tw{overflow-x:auto; margin:1.1rem 0;}
+  table{border-collapse:collapse; width:100%; font-size:.88rem;
+        font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.45rem .7rem; border-bottom:1px solid var(--rule);
+        vertical-align:top;}
+  th{font-weight:600; color:var(--ink-2); font-size:.78rem;
+     text-transform:uppercase; letter-spacing:.04em;}
+  tbody tr:last-child td{border-bottom:none;}
+  blockquote{background:var(--card); border:1px solid var(--rule);
+      border-left:3px solid var(--accent); border-radius:6px;
+      padding:.9rem 1.1rem; margin:1.3rem 0;}
+  blockquote p{margin:.35em 0;}
+  blockquote strong{color:var(--accent);}
+  ul,ol{max-width:68ch; padding-left:1.15rem;}
+  li{margin:.35em 0;}
+  hr{border:none; border-top:1px solid var(--rule); margin:2.2rem 0;}
+  a{color:var(--accent);}
+  @media print{
+    :root{ color-scheme: light; }
+    body{ background:#fff; -webkit-print-color-adjust:exact;
+          print-color-adjust:exact; orphans:3; widows:3; }
+    .wrap{ max-width:none; padding-block:0 .5rem; }
+    h1{ font-size:2rem; }
+    h2{ margin-top:1.2rem; padding-top:.7rem; font-size:1.3rem;
+        break-after:avoid; page-break-after:avoid; }
+    h3{ margin-top:.9rem; break-after:avoid; page-break-after:avoid; }
+    .tw, table{ break-inside:avoid; page-break-inside:avoid; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    p, li, blockquote, ul, ol, pre{ break-inside:auto; page-break-inside:auto; }
+    a{ color:inherit; text-decoration:none; }
+  }
+</style></head><body>
+<div class="wrap">
+<h1>Choosing a gauge</h1>
+<p>A decision report for the gauge that replaces tree–cotree, written against the primary sources rather than summaries of them.</p>
+<p><strong>Second edition.</strong> The first draft recommended Zhao &amp; Fu&#x27;s dummy-variable Coulomb gauge on cost-and-fit grounds. That recommendation is <strong>withdrawn</strong>. It was made without the potential-BEM endgame in view and before the primary sources had been obtained; both change the answer.</p>
+<hr>
+<h2>0. Decision</h2>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Recommended gauge</strong></td><td><strong>Chew&#x27;s generalized gauge</strong> — <code>∇·(εA) = −χ ∂Φ/∂t</code>, <code>χ = αε²μ</code></td></tr>
+<tr><td><strong>Why, in one line</strong></td><td>It is the only candidate under which the FEM half, the interface conditions, and the BEM half all come from one formulation.</td></tr>
+<tr><td><strong>Is anything broken today?</strong></td><td>No. <code>E</code>, <code>B</code>, <code>H</code>, <code>J</code>, terminal <code>V</code>, <code>I</code>, <code>R</code>, <code>L</code>, <code>Z</code> are correct and gauge-invariant — <code>07_GaugeInvariance</code> measures 1e‑12.</td></tr>
+<tr><td><strong>What is wrong</strong></td><td>Φ in the interior is not physical; tree–cotree postpones rather than removes low-frequency breakdown; and it offers nothing at a conductor/dielectric port.</td></tr>
+<tr><td><strong>Still open</strong></td><td>Whether <code>A</code> stays a Whitney 1‑form at the boundary-integral surface. This is now the real research question — see §6.</td></tr>
+<tr><td><strong>Who decides</strong></td><td>The mixed-port benchmark the roadmap requires. This report narrows the field to one candidate; it does not retire the benchmark.</td></tr>
+</tbody></table></div>
+<hr>
+<h2>1. Where we stand</h2>
+<p>Tree–cotree sets <code>A = 0</code> on a spanning tree&#x27;s edges. That makes the matrix non-singular and nothing more. <code>07_GaugeInvariance</code> measures the consequence on one problem solved on three different trees:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>change across trees</th>
+</tr></thead>
+<tbody>
+<tr><td><code>Φ</code>, <code>A</code></td><td><strong>0.14 – 0.22 relative</strong></td></tr>
+<tr><td><code>E</code>, <code>B</code>, <code>H</code>, <code>J</code></td><td>4.7e‑13 … 3.2e‑12</td></tr>
+<tr><td>terminal <code>V</code>, <code>R</code>, <code>L</code></td><td>2.7e‑13</td></tr>
+</tbody></table></div>
+<p><code>docs/FIELD_POSTPROCESSING.md</code> §9 quantifies how much of Φ is gauge: about <code>ωL/|Z| = sin(arg Z)</code>. Case 06 sits at <code>ωL/R = 4.48</code>, case 04 at 12.8 — both gauge-dominated, which is why neither asserts Φ.</p>
+<p><strong>A consequence worth stating before anything else.</strong> Our terminal quantities are gauge-independent <em>only</em> because <code>n × A = 0</code> on the outer boundary forces the gauge function ψ to be constant there — measured, <code>|ψ|</code> is 3.6e‑16 on the boundary against 4.6e‑04 inside. <code>n × A = 0</code> is a condition on <strong>A</strong>, so it is not gauge-invariant; that is exactly why it pins ψ.</p>
+<p><strong>Replace it with a radiation, transmission or boundary-integral condition — all of which are written in the gauge-invariant fields — and ψ stops being pinned at all.</strong> The moment the boundary treatment becomes correct for THz, tree–cotree leaves not only interior Φ but the terminal quantities floating. The gauge must become a genuine PDE condition <em>before</em> the boundary condition changes, not after.</p>
+<hr>
+<h2>2. Chew 2014 is the keystone</h2>
+<p>W. C. Chew, <em>Vector Potential Electromagnetics with Generalized Gauge for Inhomogeneous Media: Formulation</em> (Invited Paper), <strong>Progress In Electromagnetics Research, Vol. 149, pp. 69–84, 2014</strong>, DOI 10.2528/PIER14060904. Open access; now in <code>APhi_Papers/Chew2014_GeneralizedGauge_PIER149.pdf</code>.</p>
+<h3>2.1 The gauge</h3>
+<p>His eq. (15), with (18):</p>
+<pre><code>    ∇·(εA) = −χ ∂Φ/∂t        χ = α ε² μ</code></pre>
+<p>where <strong>α may be a function of position</strong>. <code>α = 1</code> recovers the generalized Lorenz gauge <code>ε⁻¹∇·(εA) = −με ∂Φ/∂t</code> (his eq. 14); a homogeneous medium with <code>α = 1</code> recovers the ordinary Lorenz gauge.</p>
+<blockquote><p>**<code>χ = αε²μ</code> is confirmed from the source.** The first edition of this report flagged the roadmap&#x27;s rendering as unverified because it had been read out of garbled PDF text. It is correct.</p></blockquote>
+<p>The resulting equations (16) and (17) decouple, and (16) is derivable from (17) by taking the divergence and using charge continuity. Chew states plainly that, unlike the vector wave equations for the fields, <strong>these do not exhibit the low-frequency catastrophe</strong>, so ordinary FEM/FD solvers work across scales and bandwidth.</p>
+<p>He also rules out the alternative explicitly: under the <strong>Coulomb gauge</strong> the scalar potential has infinite velocity and <em>the vector potential equation is not completely decoupled from the scalar potential equation</em>. That single sentence disqualifies every Coulomb-type candidate for a potential-BEM hybrid, for the reason developed in §4.</p>
+<h3>2.2 It dissolves the port problem — which is why you went looking</h3>
+<p>§3, on the interface between two media:</p>
+<blockquote><p>the boundary conditions at the interface of two homogeneous media are <strong>also embedded in these equations</strong>. Therefore, when one solves the PDEs directly in an inhomogeneous medium, <strong>one need not stipulate the boundary conditions</strong>. The solutions naturally obey the boundary conditions if they are arrived at correctly via a numerical method.</p></blockquote>
+<p>The conditions he then derives are the classical ones:</p>
+<pre><code>    n̂ × A₁ = n̂ × A₂                              (23)
+    n̂ × (1/μ₁)∇×A₁ = n̂ × (1/μ₂)∇×A₂   ≡  n̂ × H₁ = n̂ × H₂     (24),(25)</code></pre>
+<p><strong>So a port face that crosses conductor and dielectric needs no special treatment.</strong> The gauge carries the interface physics. <code>ROADMAP.md</code> Phase 03 identifies exactly this as the reason tree–cotree is inadequate; this is the paper that answers it.</p>
+<p>He also treats the PEC limit: as <code>ε₂ → ∞</code>, <code>n̂ × ∇Φ₂ = 0</code>, so <code>Φ₂</code> is constant in the PEC and <code>n̂ × E₁ = 0</code> <strong>even at ω = 0</strong>.</p>
+<h3>2.3 It already contains the boundary-integral half</h3>
+<p>§6 derives the <strong>generalized Green&#x27;s theorem, the extinction theorem and the surface equivalence principle</strong> for the A‑Φ formulation; §7 derives a <strong>surface integral equation for a PEC scatterer</strong> with its matrix representation. Per the abstract, those integral equations exhibit <strong>neither the low-frequency catastrophe nor the frequency imbalance</strong> of the classical <code>E</code>–<code>H</code> ones.</p>
+<p><strong>This is the decisive architectural fact: the FEM half, the interface conditions, and the BEM half are one formulation under one gauge.</strong> No other candidate offers that.</p>
+<p>Two implementation details from §6–7 worth recording now:</p>
+<ul><li>For the SIE derivation Chew assumes the <strong>simple Lorenz gauge</strong>, because SIEs</li></ul>
+<p>apply to piecewise-<em>homogeneous</em> regions where ε is constant. The generalized gauge is what the inhomogeneous FEM volume needs; the simple one is what the homogeneous exterior needs. They agree where it matters.</p>
+<ul><li>The equivalence principle needs <strong>six scalar quantities</strong> on the surface: two</li></ul>
+<p>tangential components of <code>H₁</code>, two tangential components of <code>A₁</code>, <code>Φ</code>, and <code>n̂·A₁</code>. He notes this parallels the augmented EPA, where six components are likewise needed to keep low-frequency stability.</p>
+<ul><li>The surface current basis must be <strong>divergence-conforming</strong> (RWG-type) so that</li></ul>
+<p>the <code>A</code> it produces is divergence-conforming too.</p>
+<hr>
+<h2>3. A published statement of the problem case 07 measures</h2>
+<p>S. Sharma and P. Triverio, <em>Electromagnetic Modeling of Lossy Interconnects From DC to High Frequencies With a Potential-Based Boundary Element Formulation</em>, IEEE Trans. Electromagn. Compat. <strong>64</strong>(4), 2022 — <a href="https://arxiv.org/abs/2112.07360">arXiv:2112.07360</a>.</p>
+<p>They use the <strong>usual Lorenz gauge outside</strong> and a <strong>modified Lorenz gauge inside</strong> a lossy conductor:</p>
+<pre><code>    ∇·Ã = −jωε₀μ₀ Φ                 in free space        (17)
+    ∇·Ã = −(jωε + σ) μ Φ_r          in the conductor     (19)
+    Φ_r = Φ − Φ_a ,   Φ_a = average of Φ over the object&#x27;s surface   (20),(21)</code></pre>
+<p>Their stated reason is the one this project measured independently:</p>
+<blockquote><p>in order to determine Φ uniquely within V, one must specify a boundary condition on S and a reference point; if the conventional Lorenz gauge is used, **a change in reference for Φ will lead to a change in <code>∇·Ã|_V</code>** — in other words <code>∇·Ã|_V</code> cannot be determined uniquely until a reference is set for Φ.</p></blockquote>
+<p>Subtracting the object&#x27;s own average surface potential makes the interior gauge reference-independent, and both regions then yield clean Helmholtz equations.</p>
+<p><strong>This is the closest published analogue to case 07&#x27;s result</strong> — the potential <em>reference</em> contaminating the vector potential, where ours is the <em>tree</em> doing it. The disease is the same: a bookkeeping choice leaking into a solved quantity. It is worth citing in the case 07 README.</p>
+<p>Note also that they <em>exploit</em> gauge freedom rather than merely tolerating it: they leverage the gauge invariance of the potentials to devise simpler boundary conditions for <code>A</code> than existing potential-integral-equation methods use.</p>
+<hr>
+<h2>4. Why a potential-BEM forces a Lorenz-type gauge</h2>
+<p>This is physics, independent of any citation.</p>
+<p>In the <strong>Lorenz</strong> gauge the exterior potentials satisfy</p>
+<pre><code>    (∇² + k₀²) A = 0        (∇² + k₀²) Φ = 0</code></pre>
+<p>so **every Cartesian component of <code>A</code>, and <code>Φ</code>, satisfies the same scalar Helmholtz equation** — which is exactly what admits the scalar Green&#x27;s function <code>G₀</code> and a boundary representation built from standard single- and double-layer operators.</p>
+<p>In the <strong>Coulomb</strong> gauge this collapses: Φ satisfies Poisson&#x27;s equation (instantaneous, no <code>k₀</code>) and <code>A</code>&#x27;s equation retains a <code>∇(∂Φ/∂t)</code> coupling term — which is precisely Chew&#x27;s objection in §2.1. The clean scalar-Green&#x27;s-function BEM is simply unavailable.</p>
+<p>Corroborated by every potential-BEM paper obtained:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>gauge used</th>
+</tr></thead>
+<tbody>
+<tr><td>Chew 2014 §6–7</td><td>simple Lorenz for the homogeneous regions</td></tr>
+<tr><td>Sharma &amp; Triverio 2022</td><td>Lorenz outside, modified Lorenz inside</td></tr>
+<tr><td>Li, Fu &amp; Shanker 2017</td><td>Lorenz; decoupling is what gives low-frequency stability</td></tr>
+<tr><td>Abdrabou &amp; Gomez 2026</td><td>Lorenz, stated in the abstract</td></tr>
+</tbody></table></div>
+<hr>
+<h2>5. Do hybrids still need gauging? Abdrabou &amp; Gomez answer it</h2>
+<p>A. Abdrabou and L. J. Gomez, <em>A Hybrid DEC-SIE Framework for Potential-Based Electromagnetic Analysis of Heterogeneous Media</em>, J. Comput. Phys. 2026 — <a href="https://arxiv.org/abs/2507.02099">arXiv:2507.02099</a>.</p>
+<p><strong>They use no tree–cotree and no discrete gauging at all.</strong> The gauge is imposed in continuous form before discretization, and they represent **<code>A</code> as three discrete 0‑forms (nodal scalars)** rather than the conventional 1‑form. Their own framing: this sidesteps gauge-freedom issues at the discrete level by treating the components as independent scalars that satisfy the Lorenz constraint identically.</p>
+<p><strong>The null space you gauge away is a property of the 1‑form / edge-element representation.</strong> Drop it and there is nothing to gauge.</p>
+<p>That is the honest answer to &quot;are gauges still needed in a hybrid&quot;: **not if you abandon Whitney 1‑forms for <code>A</code>. If you keep them — and we do — then yes.**</p>
+<p>Their scalar reformulation reduces the surface integral operators <strong>from fourteen to two</strong> (single- and double-layer). The reduction is performed by expressing the problem in Cartesian components and their normal derivatives; <strong>the Lorenz gauge is the necessary enabler</strong>, because it is what makes each component satisfy the same decoupled scalar equation in the first place. Gauge and reformulation are two steps, not one.</p>
+<blockquote><p><strong>A constraint their method carries — and how they dispose of it.</strong> The coupling surface Γ must lie entirely in <strong>free space</strong> for the component-wise continuity of <code>A</code> and Φ to hold naturally: &quot;the surface Γ has to be only in free space.&quot; Their fix is a <strong>buffer region</strong>: the DEC domain is the inhomogeneous body <em>plus</em> a homogeneous free-space collar, <code>Ω₂ = Ω_s ∪ Ω_a</code>, so that <code>Γ = ∂Ω₂</code> is embedded entirely in free space, which in their words greatly simplifies enforcing the boundary conditions.</p><p><strong>This is directly transferable.</strong> A THz array on a substrate puts the boundary-integral surface outside the substrate with a free-space collar, rather than cutting through it. It costs volume elements in the buffer and removes the material-crossing problem at the BI surface entirely.</p><p>Their reported condition number stays on the order of <strong>10³</strong> across the tests, including as <code>k₀a → 0</code>.</p></blockquote>
+<hr>
+<h2>6. The open question is no longer which gauge</h2>
+<p>It is **1‑form vs 0‑form <code>A</code> at the boundary-integral surface.**</p>
+<p>The fourteen operators arise <em>specifically</em> from treating <code>A</code> as a 1‑form at the boundary. Abdrabou &amp; Gomez&#x27;s answer was to stop doing that. Our plan is to couple **Whitney 1‑form <code>A</code>** directly to a potential BEM — i.e. to take on exactly the problem they chose to avoid.</p>
+<p>That is simultaneously the project&#x27;s novelty claim and its principal technical risk, and the proposal should say so rather than treating the fourteen-operator trap as something the gauge disposes of.</p>
+<p>Chew&#x27;s §6 offers a middle path worth evaluating: his equivalence principle needs six scalar surface quantities, not fourteen operators, and his surface currents are divergence-conforming — which is closer to Whitney-compatible than a Cartesian 0‑form decomposition.</p>
+<hr>
+<h2>7. Caveats, including two from Chew himself</h2>
+<p>**Chew prefers <code>E</code>–<code>H</code> in genuinely wave-dominated regimes.** §5:</p>
+<blockquote><p>An advantage of (41) and (42) is that they are derivable from each other, whereas for the A‑Φ formulation, <strong>only the Φ equation is derivable from the A equation.</strong> Hence, when the <code>E</code> and the <code>H</code> fields are equally strong, and strongly coupled to each other, the <code>E</code>–<code>H</code> formulation is preferred, as it describes wave physics better.</p></blockquote>
+<p>This does not sink a THz solver — a phased-array feed is a multiscale problem where local low-frequency breakdown is the binding constraint — but <strong>the A‑Φ advantage is multiscale robustness, not superior wave physics</strong>, and the proposal should claim the former rather than the latter.</p>
+<p>**The low-frequency <em>inaccuracy</em> problem is distinct from breakdown.** At <code>ω = 0</code> the electrostatic solution lives in (16) and the magnetostatic solution in (17), so <strong>both must be solved in tandem</strong> to retrieve both accurately. Chew repeats this for the integral equations: the vector-potential SIE captures magnetoquasistatics, and a <em>scalar-potential</em> SIE is needed alongside it for electroquasistatics. Budget for solving both, not one.</p>
+<p><strong>Topology.</strong> At <code>ω = 0</code> a PEC object of genus &gt; 0 admits non-trivial magnetostatic solutions with no excitation — superconducting loops. Our case 05 is a ring, so this is live for us, not hypothetical.</p>
+<p><strong>What is still not verified.</strong> Equations here were read from text extracted out of PDF content streams; the prose is reliable, the typeset mathematics is not. Every equation above should be checked against the typeset paper before it is implemented. <code>Ansari, Farquharson &amp; MacLachlan (2017)</code> and <code>Rapetti, Alonso Rodríguez &amp; De los Santos (2022)</code> are still absent from <code>APhi_Papers/</code>; the first is the roadmap&#x27;s required benchmark comparison.</p>
+<hr>
+<h2>8. Candidates, final ranking</h2>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>verdict</th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Chew generalized gauge</strong></td><td><strong>Recommended.</strong> Only candidate where FEM, interface conditions and BEM are one formulation. Costs: Hodge/Whitney-mapping machinery, sparse approximate inverse, and the Φ-space question below.</td></tr>
+<tr><td>Zhao &amp; Fu dummy-variable Coulomb</td><td><strong>Withdrawn.</strong> Symmetric, direct-solvable and a good architectural fit — but Coulomb-gauged, so it cannot couple to a potential BEM. Implementing it means implementing a gauge twice.</td></tr>
+<tr><td>Ansari explicit Lagrange-multiplier Coulomb</td><td>Same Coulomb objection. Retain as the roadmap&#x27;s benchmark comparison; the paper is still missing.</td></tr>
+<tr><td>Improve tree–cotree (root choice, MOR)</td><td>Cheap, treats the symptom only. Lee &amp; Jin themselves report the condition number still grows at low frequency.</td></tr>
+<tr><td>Do nothing</td><td>Viable <em>only</em> while the outer boundary stays <code>n × A = 0</code>. §1 explains why that ends.</td></tr>
+</tbody></table></div>
+<p><strong>A design decision the roadmap does not currently mention:</strong> Chew&#x27;s construction places Φ in the Whitney‑0 space, i.e. <strong>P1 nodal</strong>. <strong>Ours is P2.</strong> The compatibility argument rests on the Whitney/de Rham structure, so adopting the method means either moving Φ to P1 or redoing the analysis for P2.</p>
+<hr>
+<h2>9. What to measure before committing</h2>
+<ol><li><strong>Is Φ mesh-independent?</strong> Refine twice; Φ must converge pointwise. Tree–cotree fails this by construction. <strong>Case 07&#x27;s permutation harness is directly reusable</strong> — under a real gauge, its <em>potential-moves</em> assertions should invert while every field assertion holds unchanged.</li><li><strong>Condition number against frequency</strong>, to the static limit, against the tree–cotree baseline.</li><li><strong>The mixed conductor/dielectric port</strong>, with Chew&#x27;s embedded interface conditions — does the port behave with no special-casing?</li><li><strong>Both quasi-static limits in tandem</strong> (§7): electroquasistatic from the Φ equation, magnetoquasistatic from the <code>A</code> equation, both accurate at once.</li><li><strong>Factorization cost and memory</strong> at case 05/06 scale.</li><li><strong>A genus &gt; 0 case</strong> — case 05&#x27;s ring — for the null magnetostatic solution.</li></ol>
+<hr>
+<h2>10. Corrections to the project&#x27;s own bibliography</h2>
+<p>Four entries in <code>Gemini/APhi_FEM_BEM_Comprehensive_Report_Updated.tex</code> are wrong and have propagated into the proposal&#x27;s novelty claims:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>claim</th>
+<th>correction</th>
+</tr></thead>
+<tbody>
+<tr><td>&quot;Bogaert, Cools &amp; Andriulli, arXiv:1705.00265&quot;</td><td>That arXiv ID is <strong>Li, Fu &amp; Shanker</strong>, <em>Potential Integral Equations in Electromagnetics</em>.</td></tr>
+<tr><td>Abdrabou &amp; Gomez use &quot;structured dual grids&quot;</td><td>They use <strong>unstructured meshes</strong>. The real distinction is <strong>0‑form Cartesian components vs Whitney 1‑forms</strong> — the novelty claim must be re-grounded on that axis.</td></tr>
+<tr><td>The generalized Lorenz gauge is what reduces the boundary system to <code>V</code> and <code>K</code></td><td>The <strong>Cartesian scalar reformulation</strong> performs the reduction; the gauge enables it. Two steps.</td></tr>
+<tr><td>Chew 2014: &quot;Generalized Lorenz Gauge … Anisotropic Media&quot;, pp. 69–77</td><td>Actual title <em>Vector Potential Electromagnetics with Generalized <strong>Gauge</strong> for <strong>Inhomogeneous</strong> Media: Formulation</em>, pp. 69–<strong>84</strong>.</td></tr>
+</tbody></table></div>
+<p>Also: <code>AphiFreqDomainTreeCotree_SeungJFlee2003.pdf</code> is mis-filed — it is Lee, Lee &amp; Lee, <em>Hierarchical Vector Finite Elements for Analyzing Waveguiding Structures</em>, IEEE T‑MTT <strong>51</strong>(8) 2003, a 2‑D waveguide eigenanalysis paper that says nothing about Φ&#x27;s non-uniqueness.</p>
+<hr>
+<h2>Bibliography</h2>
+<p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>what it contributes</th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Chew (2014)</strong>, PIER <strong>149</strong>, 69–84</td><td>The generalized gauge <code>∇·(εA) = −χ∂Φ/∂t</code>, <code>χ = αε²μ</code>; interface conditions embedded in the PDEs; generalized Green&#x27;s theorem, extinction theorem, equivalence principle and SIEs for A‑Φ. <strong>The keystone.</strong></td></tr>
+<tr><td><strong>Sharma &amp; Triverio (2022)</strong>, <a href="https://arxiv.org/abs/2112.07360">arXiv:2112.07360</a></td><td>Modified Lorenz gauge inside lossy conductors; explicit statement that the Φ reference contaminates <code>∇·A</code>. DC to high frequency, surface-only conductor modelling.</td></tr>
+<tr><td><strong>Sharma &amp; Triverio (2021)</strong>, <a href="https://arxiv.org/abs/2108.02764">arXiv:2108.02764</a></td><td>Companion: potential-based BEM for lossy materials.</td></tr>
+<tr><td><strong>Abdrabou &amp; Gomez (2026)</strong>, <a href="https://arxiv.org/abs/2507.02099">arXiv:2507.02099</a></td><td>DEC + SIE under Lorenz gauge; no discrete gauging because <code>A</code> is three 0‑forms; 14→2 operator reduction; free-space coupling-surface constraint.</td></tr>
+<tr><td><strong>Li, Fu &amp; Shanker (2017)</strong>, <a href="https://arxiv.org/abs/1705.00265">arXiv:1705.00265</a></td><td>Potential integral equations, Lorenz gauge, decoupling gives low-frequency stability; second-kind, well-conditioned operators.</td></tr>
+</tbody></table></div>
+<p>Previously read, retained from the first edition:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Munteanu</strong>, <em>Tree-cotree condensation properties</em></td><td>Variants A–E and their conditioning. §IV: non-uniqueness of <strong>A</strong> is &quot;in principle irrelevant&quot;; gauging exists for regularity. §V.E: tree-independence possible, costs sparsity. <strong>A-only, magnetostatic — contains no Φ and cannot speak to its uniqueness.</strong></td></tr>
+<tr><td><strong>Li, Sun, Dai &amp; Chew (2015)</strong>, IEEE Trans. Magn.</td><td>Generalized Coulomb gauge (static limit of the Lorenz one). Ungauged systems let iterative solvers converge to different answers; constant gradients live in the edge space.</td></tr>
+<tr><td><strong>Li, Sun, Dai &amp; Chew (2016)</strong>, IEEE TAP <strong>64</strong>(10)</td><td>FEM implementation of the generalized-Lorenz A‑Φ formulation. Two null-space-free Helmholtz equations; conditioning ~1e6 against 1e17. Needs Hodge operators and a sparse approximate inverse.</td></tr>
+<tr><td><strong>Zhao &amp; Fu (2017)</strong>, IEEE Trans. Magn. <strong>53</strong>(6)</td><td>Coulomb gauge via a dummy scalar proven zero; symmetric, direct-solvable, 1.38 M unknowns. Good fit, wrong gauge family.</td></tr>
+<tr><td><strong>Lee &amp; Jin (2008)</strong>, MOTL <strong>50</strong>(6)</td><td>Tree–cotree conditioning; splitting is not unique; root choice matters; conditioning still degrades at low frequency.</td></tr>
+<tr><td><strong>Su Yan (2021)</strong>, PIER M <strong>106</strong></td><td>Auxiliary scalar potential to eliminate tree–cotree graph searches while keeping all-frequency stability.</td></tr>
+</tbody></table></div>
+<p><strong>No paper in this collection states that tree–cotree yields a non-unique Φ.</strong> The nearest are Munteanu&#x27;s tree-dependence remark (about <strong>A</strong>) and Sharma &amp; Triverio&#x27;s reference-dependence of <code>∇·A</code>. Our 15 % measurement in <code>07_GaugeInvariance</code> remains our own result and should keep being presented as such.</p>
+</div>
+</body></html>
