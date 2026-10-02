@@ -1,0 +1,71 @@
+# Known-good gauge behaviour for 07_GaugeInvariance, asserted by verify_gauge.py.
+#
+# THIS CASE CHECKS A PROPERTY, NOT A NUMBER. Every other case in the suite
+# compares one solve against an analytic answer. This one compares SOLVES OF THE
+# SAME PROBLEM against each other, on different spanning trees, so there is no
+# analytic reference and no discretisation error -- it cancels exactly. The
+# thresholds below are round-off and daylight, not tuned tolerances, which is
+# why they are round numbers and why they are so far apart.
+#
+#   key                value      what sets it
+# ---------------------------------------------------------------------------
+
+# Which input to run. The folder holds two -- the voltage drive and the current
+# drive -- and verify_gauge.py runs BOTH itself, five solves in all, into its
+# own directories. check.bat's own solve of this file is therefore redundant,
+# but naming it keeps check.bat from picking gauge_1a.aphi by filename order
+# and writing a current-driven result into output/ where it would mislead
+# anyone who looked.
+input                  gauge.aphi
+
+# THE REGIME, and the reason this key exists. Phi only moves appreciably away
+# from the resistive limit: the gauge-sensitive fraction is about
+# omega*L/|Z| = sin(arg Z), so at omega*L/R << 1 the potentials would barely
+# move and every assertion below would pass for the wrong reason. These
+# proportions at 50 Hz give omega*L/R = 2.89 (01_OneCylinder, same shape,
+# measures the same thing). Asserting the regime makes the test honest about
+# its own premise. Measured here: 2.9 on the coarse mesh.
+wLR_min                1.5
+
+# THE POTENTIALS MUST MOVE. Measured, Phi moves by 0.15 of its own peak and A
+# by 0.22. The floor is well below both because the exact figure depends on the
+# tree the permutation happens to produce, which is not a stable quantity -- but
+# it is eleven orders of magnitude above the field ceiling, so nothing can drift
+# between the two.
+#
+# THIS IS THE HALF THAT IS EASY TO FORGET. Without it the case would still pass
+# if the gauge freedom were accidentally removed by over-constraining Phi, and
+# that is a real regression. An invariance test alone cannot see it.
+potential_moves_min    0.02
+
+# THE FIELDS MUST NOT. Measured, E/B/H/J move by 1.6e-13 to 1.8e-12 relative.
+# That is NOT residual gauge sensitivity: the three runs factorize genuinely
+# different matrices (different edges are gauged away, so the nonzero counts
+# differ), and the arithmetic therefore happens in a different order. 1e-12 is
+# what double precision accumulates through a factorization of this size. The
+# ceiling is 1e-9 -- three decades of headroom over the observed value, and
+# still eight decades below the floor above.
+field_invariance_max   1.0e-9
+
+# PSI VANISHES ON THE OUTER BOUNDARY. n x A = 0 forces psi constant there and
+# the reference port pins it to zero; the box surface is connected and the wire
+# spans its full height, so psi = 0 on the whole boundary including both
+# terminals. That is WHY the terminals stay exact while the interior does not.
+#
+# Measured on this mesh: 3.6e-16 Wb on the boundary against 4.6e-04 inside --
+# twelve orders apart. The boundary figure is round-off rather than an exact
+# zero, because psi is RECOVERED from the solved Phi (psi = j*dPhi/omega) and so
+# carries the solve's accumulated error; only the two terminals, where Phi is
+# Dirichlet, cancel bit-exactly. So the ceiling is set at 1e-12 -- four decades
+# of headroom over what is observed, rather than the 3x a 1e-15 ceiling gave,
+# which would flake on another machine or compiler without indicating anything.
+# Six decades still separate it from the interior floor.
+psi_boundary_max       1.0e-12
+psi_interior_min       1.0e-06
+
+# THE TERMINALS ARE EXACT. Dirichlet values come out bit-exact, so the only
+# question is whether they stay that way across trees; they do, including the
+# current-driven case where the DRIVEN terminal's potential is a free unknown.
+# Measured: 0.0 exactly for the voltage drive, and the current-driven face is an
+# equipotential to 4e-22.
+terminal_exact_max     1.0e-15

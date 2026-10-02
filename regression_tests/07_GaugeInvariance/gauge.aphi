@@ -1,0 +1,67 @@
+# ---------------------------------------------------------------------------
+# 07_GaugeInvariance -- the VOLTAGE-driven base solve.
+#
+#     ../run_case.bat gauge.aphi
+#
+# This is one of five solves the case performs. verify_gauge.py runs the other
+# four itself: the same problem on two further spanning trees, and the
+# current-driven pair in gauge_1a.aphi. See README.md.
+#
+# WHAT THE CASE ASSERTS. That the tree-cotree gauge behaves exactly as the
+# formulation says it must:
+#
+#     Phi and A      MOVE when the spanning tree changes   (they are gauge)
+#     E, B, H, J     DO NOT                                (they are physics)
+#     the terminals  DO NOT, under either drive type
+#
+# Both directions matter. A test that only checked invariance would still pass
+# if the gauge freedom were accidentally removed -- by over-constraining Phi,
+# say -- and that would be a real regression hiding behind a green check.
+#
+# 50 Hz on these proportions gives omega*L/R = 2.89, where the gauge moves Phi
+# by about 15 % of the applied volt. A resistive-limit case would move it by
+# almost nothing and the test would pass for the wrong reason, so
+# verify_gauge.py measures the ratio and asserts the regime.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = gauge.msh
+length_unit = mm
+
+[output]
+directory   = output
+
+[analysis]
+type        = frequency
+frequencies = 50                           # Hz
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire
+sigma       = 5.8e7                        # copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+# Both terminals lie in the air box's end faces, because the wire spans the
+# full height. That is what pins psi to zero on the whole outer boundary and
+# keeps the terminals exact in every gauge -- the case measures it.
+
+[port P1]
+type        = boundary_voltage
+surface     = wire_top
+voltage     = 1.0                          # V
+
+[port P2]
+type        = boundary_voltage
+surface     = wire_bottom
+voltage     = 0.0                          # V, the reference
+
+[solver]
+conditioning = row_scaled

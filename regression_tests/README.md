@@ -35,7 +35,7 @@ It runs every case folder containing an `expected.txt`, and exits non-zero
 naming the ones that drifted. About 6 minutes per case with the internal
 solver; seconds in `verify-only`.
 
-**Run all three, not one.** Each covers something the others cannot.
+**Run them all, not one.** Each covers something the others cannot.
 
 | case | drive | `a/delta` | skin effect in `R` | what only this case can catch |
 |---|---|---|---|---|
@@ -44,6 +44,16 @@ solver; seconds in `verify-only`.
 | `03_Cylinder_1A_50Hz` | **1 A** | 0.16 | ~0 | port current self-consistency; the same mesh as 02 |
 | `04_Cylinder_SkinDepth` | 1 V | **3.00** | **77 %** | the skin effect where it **dominates** — `\|J\|` falls 3.7x and the phase rotates 134° |
 | `05_Loop_1A_50Hz` | **1 A internal** | 0.086 | ~0 | a **closed ring** — multiply connected, driven through a cut |
+| `06_TwoWires_Quadrature` | **1 A each, 0° and 90°** | 1.51 | — | an **elliptically polarized** field; the `[postprocess]` options; the only case using a port `phase_deg` |
+| `07_GaugeInvariance` | 1 V **and** 1 A | 1.07 | — | that the **gauge** moves `Phi` and `A` and nothing else |
+
+**07 is the odd one out and deliberately so.** Every other case compares one
+solve against an analytic answer. 07 compares five solves of the SAME problem
+against each other, on three different spanning trees, so discretisation error
+cancels exactly and its tolerances are round-off rather than modelling error. It
+asserts in both directions — the potentials must MOVE, the fields must NOT —
+because an invariance check alone would still pass if the gauge freedom were
+accidentally removed by over-constraining `Phi`, which is a real regression.
 
 02 and 03 are **duals** — 02 drives 1 V and reads the current out, 03 drives
 1 A on the same mesh and reads the voltage out — and they must report the same
