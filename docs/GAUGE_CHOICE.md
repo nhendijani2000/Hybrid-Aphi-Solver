@@ -18,7 +18,8 @@ sources had been obtained; both change the answer.
 | **Why, in one line** | It is the only candidate under which the FEM half, the interface conditions, and the BEM half all come from one formulation. |
 | **Is anything broken today?** | No. `E`, `B`, `H`, `J`, terminal `V`, `I`, `R`, `L`, `Z` are correct and gauge-invariant — `07_GaugeInvariance` measures 1e‑12. |
 | **What is wrong** | Φ in the interior is not physical; tree–cotree postpones rather than removes low-frequency breakdown; and it offers nothing at a conductor/dielectric port. |
-| **Still open** | Whether `A` stays a Whitney 1‑form at the boundary-integral surface. This is now the real research question — see §6. |
+| **What it costs us** | Less than the first edition assumed: **our Whitney‑1 `A` space is already the one Chew's gauge requires.** Φ moves P2 → P1 and the gauge term is added; the `A` discretization is untouched. |
+| **Still open** | Whether `A` stays a Whitney 1‑form **at the boundary-integral surface**. This is now the real research question — see §6. |
 | **Who decides** | The mixed-port benchmark the roadmap requires. This report narrows the field to one candidate; it does not retire the benchmark. |
 
 ---
@@ -51,6 +52,40 @@ all.** The moment the boundary treatment becomes correct for THz, tree–cotree
 leaves not only interior Φ but the terminal quantities floating. The gauge must
 become a genuine PDE condition *before* the boundary condition changes, not
 after.
+
+### 1.1 Why tree–cotree's Φ has no continuum limit — Rapetti et al. settle it
+
+F. Rapetti, A. Alonso Rodríguez and E. De Los Santos, *On the Tree Gauge in
+Magnetostatics*, **J 5(1), 52–63, 2022**, DOI 10.3390/j5010004.
+
+The project's proposal attributes to this paper the claim that the tree gauge is
+not a discretization of any orthogonality condition. **The claim is correct, and
+the paper states it outright.** Their §4, immediately after defining the tree
+gauge `a_t = 0`:
+
+> It is worth noting that **these tree gauges are not a discretization of the
+> Coulomb gauge** stated in (5) or (6). **They are not enforcing in any sense the
+> orthogonality to the gradient** in conditions (5) and (6).
+
+And their §5 opens by saying the tree degrees of freedom
+
+> **is set arbitrarily**, eventually equal to zero, without affecting the
+> corresponding field `B_h = curl A_h`.
+
+That is case 07's result stated in the literature — for `A`, in magnetostatics,
+from the algebraic side rather than by measurement.
+
+**This is the deepest available answer to "why is tree–cotree's Φ not a physical
+quantity."** The discrete Coulomb gauge *is* an orthogonality condition — their
+eq. (11) says `A_h` is orthogonal to `grad(W⁰)`, and their §5 constructs it as a
+projection onto `(ker S)^⊥ = Im(S)`. The tree gauge is not the discretization of
+anything in the continuum; it is a choice of which algebraic degrees of freedom
+to delete. A quantity fixed by such a choice **cannot converge to a definite
+function under mesh refinement, because there is no continuum condition for it to
+converge to.**
+
+That is the structural reason behind every measurement in this report, and it is
+why §9's first test — pointwise mesh convergence of Φ — is the one that matters.
 
 ---
 
@@ -102,9 +137,17 @@ reason developed in §4.
 The conditions he then derives are the classical ones:
 
 ```
-    n̂ × A₁ = n̂ × A₂                              (23)
+    n̂ × A₁ = n̂ × A₂                              (23)   tangential A continuous
     n̂ × (1/μ₁)∇×A₁ = n̂ × (1/μ₂)∇×A₂   ≡  n̂ × H₁ = n̂ × H₂     (24),(25)
+    n̂ · (ε₁A₁) = n̂ · (ε₂A₂)                      (26)   normal εA continuous
+    n̂ · (ε₁∇Φ₁) = n̂ · (ε₂∇Φ₂)                    (27)
 ```
+
+together giving `n̂·(ε₁E₁) = n̂·(ε₂E₂)`, the usual normal-`D` condition.
+
+**Equation (26) is the one that decides our element choice**, and §6 is about why:
+it is `εA`, not `A`, whose normal component is continuous, so **`n̂·A` jumps
+wherever ε jumps.**
 
 **So a port face that crosses conductor and dielectric needs no special
 treatment.** The gauge carries the interface physics. `ROADMAP.md` Phase 03
@@ -167,10 +210,53 @@ Their stated reason is the one this project measured independently:
 Subtracting the object's own average surface potential makes the interior gauge
 reference-independent, and both regions then yield clean Helmholtz equations.
 
-**This is the closest published analogue to case 07's result** — the potential
+**This is a close published analogue to case 07's result** — the potential
 *reference* contaminating the vector potential, where ours is the *tree* doing
 it. The disease is the same: a bookkeeping choice leaking into a solved
 quantity. It is worth citing in the case 07 README.
+
+### 3.1 Ansari et al. is the closest analogue of all
+
+M. Ansari, C. G. Farquharson and S. P. MacLachlan, *A gauged finite-element
+potential formulation for accurate inductive and galvanic modelling of 3-D
+electromagnetic problems*, **Geophys. J. Int. 210(1), 105–129, 2017**,
+DOI 10.1093/gji/ggx149. Paywalled; abstract and technical content read from the
+publisher's article page, PDF not yet obtained.
+
+They demonstrate **"non-unique, incorrect potentials"** from the usual
+incompletely-gauged system — and the demonstration is the striking part. They
+show it by
+
+> showing **inconsistent results obtained from iterative and direct linear
+> equation solvers**
+
+— the same physical fields, but **different potentials depending on which linear
+solver was used**. After introducing the Coulomb gauge explicitly as an extra
+equation and augmenting the Helmholtz equation with the gradient of a Lagrange
+multiplier, "both the iterative and direct solvers produce the same responses for
+the potentials, demonstrating the uniqueness of the numerical solution."
+
+Two further points make this the most directly transferable result in the
+collection:
+
+- **They use edge elements for `A` and nodal elements for Φ — our exact
+  discretization.**
+- They identify the root cause as the **normal component of `A` being
+  discontinuous across material interfaces**, which edge elements permit and
+  which an incompletely-gauged system therefore leaves unconstrained.
+
+**Three independent triggers, one disease.** Collecting what the literature and
+this project have now each observed:
+
+| observed by | the potentials change with… | fields unchanged? |
+|---|---|---|
+| Ansari et al. (2017) | the **linear solver** (iterative vs direct) | yes |
+| Li, Sun, Dai & Chew (2015) | the **initial guess** of an iterative solve | yes |
+| Sharma & Triverio (2022) | the **potential reference** inside a conductor | yes |
+| **`07_GaugeInvariance`** | the **spanning tree** | yes, to 1e‑12 |
+
+Each trigger is different and each is incidental; the common cause is that
+nothing in the formulation pins the gauge.
 
 Note also that they *exploit* gauge freedom rather than merely tolerating it:
 they leverage the gauge invariance of the potentials to devise simpler boundary
@@ -251,25 +337,152 @@ two steps, not one.
 > Their reported condition number stays on the order of **10³** across the tests,
 > including as `k₀a → 0`.
 
+### 5.1 Their method does not cover our problem
+
+**The paper contains no conductivity.** Permeability is `μ₀` throughout, the only
+material variation is `ε(r)`, and every validation case is dielectric: a sphere
+(`ε = 2.25`), a multilayered sphere, and dielectric elliptical cylinders on a
+dielectric slab. A text search of the full paper returns **zero** occurrences of
+conductivity, conductor, lossy or σ.
+
+A THz phased-array feed is the opposite case — lossy metal with a skin depth,
+sharp conductor edges, and conductor/dielectric interfaces where their
+permittivity-gradient coupling term becomes a surface delta. **The 0‑form route
+is not something we could adopt off the shelf**, and §6 explains why it is not
+merely a matter of porting it.
+
 ---
 
-## 6. The open question is no longer which gauge
+## 6. The gauge and the element space are not independent choices
 
-It is **1‑form vs 0‑form `A` at the boundary-integral surface.**
+This is the central finding of the second edition, and it reframes the question.
 
-The fourteen operators arise *specifically* from treating `A` as a 1‑form at the
-boundary. Abdrabou & Gomez's answer was to stop doing that. Our plan is to couple
-**Whitney 1‑form `A`** directly to a potential BEM — i.e. to take on exactly the
-problem they chose to avoid.
+### 6.1 The two representations
 
-That is simultaneously the project's novelty claim and its principal technical
-risk, and the proposal should say so rather than treating the fourteen-operator
-trap as something the gauge disposes of.
+| | Whitney 1‑form | Whitney 0‑form |
+|---|---|---|
+| FEM name | **lowest-order Nédélec edge element** | P1 nodal (Lagrange) |
+| basis | `w_ij = λ_i∇λ_j − λ_j∇λ_i` | hat function `λ_i` |
+| degree of freedom | `∫_edge A·dl`, one per edge | the value at a node |
+| continuity enforced | **tangential only** | **full** |
+| what we use for `A` | ✅ this one | — |
 
-Chew's §6 offers a middle path worth evaluating: his equivalence principle needs
-six scalar surface quantities, not fourteen operators, and his surface currents
-are divergence-conforming — which is closer to Whitney-compatible than a
-Cartesian 0‑form decomposition.
+In DEC the correspondence is exact: a discrete 1‑form's DOF is the integral along
+a primal edge — the Nédélec edge DOF — and a 0‑form's DOF is the nodal value.
+
+### 6.2 Abdrabou & Gomez did not use Nédélec elements — they avoided them
+
+In their own words: *instead of modelling `A` on the boundary as a 1‑form, they
+treat its Cartesian components `A_x, A_y, A_z` as independent 0‑forms*, which
+they acknowledge departs from the standard DEC formulation. Their algorithm's
+output is literally `discrete 0-forms a_x, a_y, a_z, φ_s`.
+
+In finite-element terms that is **node-based vector elements** — three copies of
+P1 Lagrange — the construction electromagnetic FEM normally forbids, for three
+reasons: spurious modes in curl–curl eigenproblems, inability to represent the
+singular field at a reentrant corner, and **being wrong at material interfaces**,
+where full continuity is imposed on a quantity whose normal component physically
+jumps.
+
+### 6.3 Why they get away with it — the gauge decides
+
+The third objection is the decisive one, and **which gauge you choose determines
+whether it applies.**
+
+```
+Chew generalized gauge      ∇·(εA) = −χ ∂Φ/∂t
+    ⟹  ∇·(εA) finite at an interface
+    ⟹  n̂·(ε₁A₁) = n̂·(ε₂A₂)          Chew eq. (26)
+    ⟹  n̂·A JUMPS wherever ε jumps
+    ⟹  A must live in H(curl): Whitney 1-form / Nédélec
+
+Abdrabou gauge              ∇·A = i k₀² ε(r) Φ        (divergence of A, not of εA)
+    ⟹  ∇·A finite at an interface
+    ⟹  n̂·A is CONTINUOUS
+    ⟹  A may live in H¹: nodal 0-forms are legitimate
+
+Coulomb gauge               ∇·A = 0
+    ⟹  A solenoidal, n̂·A CONTINUOUS
+    ⟹  nodal-natural; Ansari cites Biro & Preis for exactly this
+```
+
+**So the gauge and the basis cannot be chosen independently.** That is the real
+content of "1‑form vs 0‑form", and it is not stated anywhere in the project's
+existing documents.
+
+| gauge | `n̂·A` at a material interface | element space it suits |
+|---|---|---|
+| Coulomb `∇·A = 0` | continuous | nodal |
+| Abdrabou Lorenz `∇·A = ik₀²εΦ` | continuous | nodal |
+| **Chew generalized `∇·(εA) = −χ∂Φ/∂t`** | **jumps ∝ 1/ε** | **edge / Whitney‑1** |
+
+`A` is gauge-dependent, so its *continuity class* is gauge-dependent too. There
+is no interface behaviour of `A` that is true independently of the gauge — only
+a behaviour consistent with each.
+
+### 6.3.1 This explains why Ansari needed a Lagrange multiplier — and why we would not
+
+Ansari's diagnosis (§3.1) now reads as a **mismatch between gauge and element
+space**, not as a defect of either:
+
+- He wanted the **Coulomb** gauge, under which `n̂·A` must be **continuous**.
+- He discretized `A` with **edge elements**, which permit `n̂·A` to **jump** — in
+  his words, the normal component of an edge-element vector potential "is not
+  necessarily continuous across the boundary interfaces", and linear edge basis
+  functions "do not necessarily form a solenoidal vector potential."
+- So nothing in the discretization enforced what the gauge required, and the
+  potentials came out non-unique. The Lagrange multiplier is the machinery that
+  repairs the mismatch.
+
+**Chew's generalized gauge has no such mismatch.** It *wants* `n̂·A` to jump at an
+ε discontinuity, which is precisely what edge elements naturally permit. The
+gauge and our existing element space agree by construction rather than by
+enforcement.
+
+That is an argument for Chew over every Coulomb-family candidate that is
+independent of the BEM argument in §4 — and it applies even if the hybrid never
+gets built.
+
+Their resulting system makes the consequence visible: each component gets a plain
+scalar Helmholtz operator `∇²Ã_ν + k₀²ε Ã_ν`, and the **only** coupling between
+components and Φ is through `∂_ν ε`, the gradient of permittivity. In a
+homogeneous region the three components decouple into independent scalar
+problems — which is exactly the regime nodal elements are built for.
+
+### 6.4 What this means for us
+
+**Our existing `A` space is already the one Chew's gauge requires.** The first
+edition under-weighted this. Adopting Chew's generalized gauge means:
+
+| | |
+|---|---|
+| `A` — Whitney 1‑form edge elements | **unchanged** |
+| Φ — P2 nodal | → P1, to sit in Whitney‑0 and restore the de Rham structure |
+| the gauge term in the `A` equation | new: needs the Hodge/Whitney-mapping machinery |
+| tree–cotree | removed |
+
+Switching instead to the 0‑form route would mean **replacing the `A`
+discretization entirely**, adopting a formulation with **no demonstrated
+conductor support** (§5.1), and accepting nodal elements at the sharp metal edges
+of a THz feed — where objection (2) above still stands, gauge or no gauge.
+
+### 6.5 The open question, stated precisely
+
+Not *which gauge* — that is settled — but **whether `A` stays a Whitney 1‑form at
+the boundary-integral surface.**
+
+The fourteen operators arise *specifically* from the 1‑form trace at the
+boundary. Abdrabou & Gomez's answer was to stop using it. Coupling Whitney 1‑form
+`A` to a potential BEM means taking on exactly the problem they chose to avoid:
+**that is the project's novelty claim and its principal technical risk, and the
+proposal should say so** rather than treating the fourteen-operator trap as
+something the gauge disposes of.
+
+Chew's own §6 suggests a middle path worth evaluating before committing: his
+equivalence principle needs **six scalar surface quantities**, not fourteen
+operators — two tangential components of `H₁`, two of `A₁`, Φ and `n̂·A₁` — and
+his surface currents are **divergence-conforming**, which is far closer to
+Whitney-compatible than a Cartesian 0‑form decomposition.
 
 ---
 
@@ -302,9 +515,12 @@ is a ring, so this is live for us, not hypothetical.
 **What is still not verified.** Equations here were read from text extracted out
 of PDF content streams; the prose is reliable, the typeset mathematics is not.
 Every equation above should be checked against the typeset paper before it is
-implemented. `Ansari, Farquharson & MacLachlan (2017)` and `Rapetti, Alonso
-Rodríguez & De los Santos (2022)` are still absent from `APhi_Papers/`; the first
-is the roadmap's required benchmark comparison.
+implemented.
+
+**All cited papers have now been obtained and read.** Ansari and Rapetti were
+supplied directly and are in `APhi_Papers/`; everything else was downloaded from
+open-access sources. Nothing in this report now rests on a summary of a paper
+rather than the paper.
 
 ---
 
@@ -312,9 +528,9 @@ is the roadmap's required benchmark comparison.
 
 | | verdict |
 |---|---|
-| **Chew generalized gauge** | **Recommended.** Only candidate where FEM, interface conditions and BEM are one formulation. Costs: Hodge/Whitney-mapping machinery, sparse approximate inverse, and the Φ-space question below. |
+| **Chew generalized gauge** | **Recommended.** Only candidate where FEM, interface conditions and BEM are one formulation — and **our `A` space is already the one it requires** (§6.4). Costs: Hodge/Whitney-mapping machinery, a sparse approximate inverse, and moving Φ from P2 to P1. |
 | Zhao & Fu dummy-variable Coulomb | **Withdrawn.** Symmetric, direct-solvable and a good architectural fit — but Coulomb-gauged, so it cannot couple to a potential BEM. Implementing it means implementing a gauge twice. |
-| Ansari explicit Lagrange-multiplier Coulomb | Same Coulomb objection. Retain as the roadmap's benchmark comparison; the paper is still missing. |
+| Ansari explicit Lagrange-multiplier Coulomb | Same Coulomb objection, plus a specific one: it exists to repair a **gauge/element mismatch we would not have** (§6.3.1). Retain as the roadmap's benchmark comparison — it is the documented failure mode a new gauge must not reproduce. |
 | Improve tree–cotree (root choice, MOR) | Cheap, treats the symptom only. Lee & Jin themselves report the condition number still grows at low frequency. |
 | Do nothing | Viable *only* while the outer boundary stays `n × A = 0`. §1 explains why that ends. |
 
@@ -322,6 +538,11 @@ is the roadmap's required benchmark comparison.
 places Φ in the Whitney‑0 space, i.e. **P1 nodal**. **Ours is P2.** The
 compatibility argument rests on the Whitney/de Rham structure, so adopting the
 method means either moving Φ to P1 or redoing the analysis for P2.
+
+That is the *whole* discretization change. `A` stays exactly as it is — which,
+given that `n̂·A` must be free to jump under this gauge (§6.3), is not a
+coincidence but a consequence of having picked edge elements correctly in the
+first place.
 
 ---
 
@@ -339,6 +560,10 @@ method means either moving Φ to P1 or redoing the analysis for P2.
    equation, magnetoquasistatic from the `A` equation, both accurate at once.
 5. **Factorization cost and memory** at case 05/06 scale.
 6. **A genus > 0 case** — case 05's ring — for the null magnetostatic solution.
+7. **Solver-independence**, following Ansari (§3.1): solve the same gauged system
+   with a direct and an iterative solver and require the *potentials* to agree,
+   not just the fields. It is a cheap check and it is the one that exposed the
+   problem for him.
 
 ---
 
@@ -372,6 +597,9 @@ Papers obtained and read for this edition, all now in `APhi_Papers/`:
 | **Sharma & Triverio (2021)**, [arXiv:2108.02764](https://arxiv.org/abs/2108.02764) | Companion: potential-based BEM for lossy materials. |
 | **Abdrabou & Gomez (2026)**, [arXiv:2507.02099](https://arxiv.org/abs/2507.02099) | DEC + SIE under Lorenz gauge; no discrete gauging because `A` is three 0‑forms; 14→2 operator reduction; free-space coupling-surface constraint. |
 | **Li, Fu & Shanker (2017)**, [arXiv:1705.00265](https://arxiv.org/abs/1705.00265) | Potential integral equations, Lorenz gauge, decoupling gives low-frequency stability; second-kind, well-conditioned operators. |
+
+| **Ansari, Farquharson & MacLachlan (2017)**, GJI **210**(1), 105–129 | Explicit Lagrange-multiplier Coulomb gauge. Demonstrates non-unique potentials **by showing direct and iterative solvers disagree on Φ and A while agreeing on the fields**. Uses edge elements for `A` and nodal for Φ — our discretization. Identifies the cause as `n̂·A` being discontinuous across interfaces while the Coulomb gauge requires it continuous (§6.3.1). |
+| **Rapetti, Alonso Rodríguez & De Los Santos (2022)**, *J* **5**(1), 52–63 | High-order tree–cotree in general domains. States outright that **tree gauges are not a discretization of the Coulomb gauge and enforce no orthogonality**, and that the tree degrees of freedom are **set arbitrarily** without affecting `B`. The structural reason tree-gauged Φ has no continuum limit. |
 
 Previously read, retained from the first edition:
 
