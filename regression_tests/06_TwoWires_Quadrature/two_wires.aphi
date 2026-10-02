@@ -23,9 +23,12 @@
 # GEOMETRY: a = 2 mm wires, centres 10 mm apart, 20 mm long, in a 30 x 30 x
 # 20 mm box of air. delta = 1.32 mm at 2.5 kHz, so a/delta = 1.5.
 #
-# THE MESH IS DELIBERATELY COARSE -- about 2 elements per skin depth, where case
-# 04 uses 8 -- because this is a demonstration you are meant to edit and re-run.
-# Do not read a skin-depth profile off it.
+# THE MESH RESOLVES THE SKIN DEPTH: lc_wire = 0.25 mm gives a median element of
+# 0.317 mm against delta = 1.322 mm, about 4.2 elements per skin depth (case 04
+# runs at 3.2). It began deliberately coarse, as a demonstration meant to be
+# edited and re-run, and was refined once the skin-depth comparison became worth
+# quoting -- see TwoWiresValidation.md section 2.2 for what that bought:
+# 1.60 % -> 0.37 % at the core, for 8 s -> 20 s.
 # ---------------------------------------------------------------------------
 
 [mesh]
@@ -87,7 +90,7 @@ conditioning = row_scaled
 backend      = mumps
 
 # ===========================================================================
-# THE TOUR. Twelve pictures. Run postprocess.py after the solve to draw them.
+# THE TOUR. Sixteen pictures. Run postprocess.py after the solve to draw them.
 # ===========================================================================
 
 # --- 1. where the current goes ---------------------------------------------

@@ -185,3 +185,25 @@ requires. The NaN is a display instruction, added by the renderer.
 semi-minor axis `b`, not the ratio `b/a`. It needed `a` twice. The wrong
 quantity is in the field's own units and looks entirely plausible on a colour
 bar, so nothing but a case with a known analytic answer would have caught it.
+
+## The report
+
+**[TwoWiresValidation.md](TwoWiresValidation.md)** is the full write-up: the
+geometry, the mesh and the three-level refinement study behind the shipped one,
+all sixteen post-processing figures with what each demonstrates, the skin-depth
+validation against Kelvin, and the polarization ellipse.
+`TwoWiresValidation.html` and `.pdf` beside it are self-contained copies with
+every figure inlined, built by `build_doc.sh`.
+
+The figures come from three places and all three must be current before building
+the documents:
+
+```bat
+"...\pvbatch.exe" ..\..\tools\postprocess.py output   :: output/PP*.png, the 16
+"...\pvpython.exe" collect_postprocess_figs.py          :: copies them into fig/
+"...\pvbatch.exe" make_report_figs.py output            :: geometry, mesh, skin, convergence
+sh build_doc.sh
+```
+
+`make_convergence_data.py` rebuilds the three meshes behind the "which mesh"
+section; it takes a few minutes and is only needed when the mesh changes.

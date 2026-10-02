@@ -1,0 +1,741 @@
+<title>Two Wires in Quadrature</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#15181d; --ink-2:#4a5260; --ink-3:#6f7888;
+    --bg:#fbfaf8; --card:#ffffff; --rule:#e3e0da;
+    --accent:#8a3324; --accent-soft:#f6ece9;
+    --ok:#2c5f2d; --warn:#8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+      --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+      --accent:#e08b74; --accent-soft:#2a1f1c;
+      --ok:#8fc98f; --warn:#e0b467;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+    --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+    --accent:#e08b74; --accent-soft:#2a1f1c;
+    --ok:#8fc98f; --warn:#e0b467;
+    color-scheme: dark;
+  }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.6; margin:0;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding-inline:16px; padding-block:40px 72px;}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:clamp(1.9rem,5vw,2.6rem);
+     line-height:1.15; margin:0 0 .35em; text-wrap:balance; letter-spacing:-.01em;}
+  .sub{color:var(--ink-2); font-size:1.05rem; margin:0 0 .4em; max-width:62ch;}
+  .meta{color:var(--ink-3); font-size:.82rem; font-family:"IBM Plex Mono",monospace;}
+  h2{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:1.5rem;
+     margin:3rem 0 .2em; padding-top:1.6rem; border-top:1px solid var(--rule); text-wrap:balance;}
+  h3{font-size:1.02rem; font-weight:600; margin:2rem 0 .3em; color:var(--ink);}
+  p{margin:.7em 0; max-width:68ch;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.88em;
+       background:var(--accent-soft); color:var(--accent); padding:.08em .34em; border-radius:3px;}
+  pre{background:var(--card); border:1px solid var(--rule); border-radius:6px;
+      padding:.8rem 1rem; overflow-x:auto; font-family:"IBM Plex Mono",monospace;
+      font-size:.82rem; line-height:1.5; margin:1rem 0;}
+  pre code{background:none; color:var(--ink); padding:0;}
+  .eq{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--ink-3);
+      border-radius:6px; padding:.7rem 1.1rem; margin:1rem 0; overflow-x:auto;
+      font-family:"IBM Plex Mono",monospace; font-size:.88rem; line-height:1.7;
+      white-space:pre;}
+  .figs{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); margin:1.2rem 0 .4rem;}
+  .figs.one{grid-template-columns:1fr;}
+  figure{margin:0; background:var(--card); border:1px solid var(--rule); border-radius:8px; overflow:hidden;}
+  figure img{display:block; width:100%; height:auto; background:#fff;}
+  figcaption{font-size:.8rem; color:var(--ink-2); padding:.6rem .8rem; border-top:1px solid var(--rule);}
+  figcaption b{color:var(--ink); font-weight:600;}
+  .tw{overflow-x:auto; margin:1.1rem 0;}
+  table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.45rem .7rem; border-bottom:1px solid var(--rule); white-space:nowrap;}
+  th{font-weight:600; color:var(--ink-2); font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;}
+  td:first-child{white-space:normal;}
+  tbody tr:last-child td{border-bottom:none;}
+  .note{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--accent);
+        border-radius:6px; padding:.9rem 1.1rem; margin:1.3rem 0;}
+  .note p{margin:.35em 0;}
+  .note strong{color:var(--accent);}
+  .ok{color:var(--ok); font-weight:600;}
+  .warn{color:var(--warn); font-weight:600;}
+  ul,ol{max-width:68ch; padding-left:1.15rem;}
+  li{margin:.35em 0;}
+
+  /* Print / PDF. Protect ONLY what is ruined by being split: a figure, a table,
+     an equation block. Prose is allowed to flow -- protecting it is what leaves
+     half-empty pages, because any block too tall for the remaining space jumps
+     whole and abandons the rest. */
+  @media print{
+    :root{ color-scheme: light; }
+    body{ background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+          orphans:3; widows:3; }
+    .wrap{ max-width:none; padding-block:0 .5rem; }
+    h1{ font-size:2rem; }
+    h2{ margin-top:1.2rem; padding-top:.7rem; font-size:1.3rem;
+        break-after:avoid; page-break-after:avoid; }
+    h3{ margin-top:.9rem; break-after:avoid; page-break-after:avoid; }
+    figure, .tw, table, .eq{ break-inside:avoid; page-break-inside:avoid; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    p, li, .note, ul, ol, pre{ break-inside:auto; page-break-inside:auto; }
+    figure img{ max-height:11cm; object-fit:contain; }
+    .figs{ gap:12px; margin:.8rem 0 .3rem; }
+    figcaption{ padding:.4rem .6rem; }
+    a{ color:inherit; text-decoration:none; }
+  }
+</style>
+
+<div class="wrap">
+
+<h1>Two wires in quadrature</h1>
+<p class="sub">Hybrid A&#8209;&Phi; finite-element solver. Two parallel copper wires driven with equal
+currents <b>a quarter cycle apart</b> &mdash; the only case in the suite whose field is
+<b>elliptically polarized</b>, and the one that demonstrates the <code>[postprocess]</code>
+options.</p>
+<p class="meta">regression_tests/06_TwoWires_Quadrature &nbsp;·&nbsp; 1&nbsp;A per wire at 0&deg; and
+90&deg; &nbsp;·&nbsp; 2.5&nbsp;kHz &nbsp;·&nbsp; 192,368 tets &nbsp;·&nbsp; 448,438 unknowns
+&nbsp;·&nbsp; backward error 5.3e&#8209;22 &nbsp;·&nbsp; 19.8&nbsp;s</p>
+
+<h2>0. What this case establishes</h2>
+
+<p>Three things, in order of how much work they do.</p>
+
+<p><b>It demonstrates every <code>[postprocess]</code> option.</b> Sixteen requests covering all three
+geometries, every display, <code>phase_deg</code>, <code>colormap</code> and <code>data</code>. That
+is the reason the case exists, and &sect;4 is the tour.</p>
+
+<p><b>It is the only case in the suite with an elliptically polarized field.</b> A single conductor
+has <code>B</code> purely azimuthal, so the polarization ellipse collapses to a line and
+<code>axial_ratio</code>, <code>peak</code> against <code>complex_magnitude</code>, and
+<code>phase</code> all go trivial &mdash; case 05's median axial ratio is <code>9e-06</code>. Two
+sources 90&deg; apart make <code>B</code> genuinely rotate, and the two-wire superposition says
+exactly where. &sect;6.</p>
+
+<p><b>It is the first case to exercise a port <code>phase_deg</code> at all.</b> Everything else in
+the suite uses <code>0</code> or omits the key, so nothing would have caught it quietly doing
+nothing. Measured: <b>90.014&deg;</b> between the wires.</p>
+
+<div class="note">
+<p><strong>It also found a renderer bug on its first run</strong>, which is what a case with a known
+analytic answer is for. <code>axial_ratio</code> read <code>2.7e-05</code> where theory says exactly
+1.0 &mdash; <code>tools/postprocess.py</code> was dividing <code>|P&times;Q|</code> by <code>a</code>
+once, which gives the semi-minor axis <code>b</code> rather than the ratio <code>b/a</code>. The
+wrong quantity is in the field's own units and looks entirely plausible on a colour bar; only a case
+with an exact expected value separates the two.</p>
+</div>
+
+<h2>1. The geometry</h2>
+
+<div class="figs one">
+<figure><img src="fig/geometry.png" alt="The two wires inside the air box">
+<figcaption><b>Two copper wires in a box of air.</b> <code>a = 2 mm</code>, centres
+<code>d = 10 mm</code> apart, <code>20 mm</code> long, in a <code>30 &times; 30 &times; 20 mm</code>
+box. The wires run the full height of the box, so their end faces lie <em>in</em> the box's end faces
+&mdash; which is what lets each wire be driven by a boundary port rather than needing an internal cut
+(case 05's problem).</figcaption></figure>
+</div>
+
+<div class="figs one">
+<figure><img src="fig/geometry_cut.png" alt="The same geometry cut at y = 0">
+<figcaption><b>Cut at <code>y = 0</code></b>, the plane through both axes, so the wires are seen
+directly rather than through 14&nbsp;mm of air.</figcaption></figure>
+</div>
+
+<div class="tw"><table>
+<tbody>
+<tr><td>Wire radius <code>a</code></td><td>2 mm</td></tr>
+<tr><td>Separation <code>d</code></td><td>10 mm, so <code>d/a = 5</code></td></tr>
+<tr><td>Length <code>Lz</code></td><td>20 mm, <code>Lz/a = 10</code></td></tr>
+<tr><td>Domain</td><td>30 &times; 30 &times; 20 mm of air, <code>n &times; A = 0</code> on the outer boundary</td></tr>
+<tr><td>Conductor</td><td>copper, <code>&sigma; = 5.8e7</code> S/m</td></tr>
+<tr><td>Air</td><td><code>&sigma; = 0</code></td></tr>
+<tr><td>Frequency</td><td>2500 Hz</td></tr>
+<tr><td>Skin depth <code>&delta;</code></td><td>1.3217 mm, so <b><code>a/&delta; = 1.511</code></b></td></tr>
+</tbody></table></div>
+
+<p><b>Why 2.5 kHz.</b> Low enough that the case solves in twenty seconds, high enough that
+<code>a/&delta; &gt; 1</code> and the current visibly crowds toward the surface. It also puts a
+53&deg; phase gradient <em>inside</em> each conductor, which is what gives
+<code>display = phase</code> something to show in &sect;4.3 instead of a flat fill.</p>
+
+<p><b>Three bodies, not two.</b> <code>wire1</code>, <code>wire2</code> and <code>air</code> carry
+<code>body_tag</code> 1, 2 and 3. Worth stating because every earlier case has exactly two bodies and
+the air is always tag 2 &mdash; scripts that hard-code that assumption read a wire here and produce a
+plausible, wrong answer. <code>tools/skin_profile.py</code> finds the conductors by
+<code>sigma &gt; 0</code> instead of by tag for this reason.</p>
+
+<h2>2. The mesh, and which one</h2>
+
+<div class="figs">
+<figure><img src="fig/mesh_domain.png" alt="The mesh on the mid-height plane">
+<figcaption><b>The <code>xy</code> cut at mid-height.</b> Fine inside the conductors, coarsening
+outward through the air to <code>lc_far = 3 mm</code> at the walls.</figcaption></figure>
+<figure><img src="fig/mesh_wire.png" alt="The mesh inside one wire">
+<figcaption><b>Wire 1 alone</b>, at the same <code>z</code>. Median element <b>0.317 mm</b> against
+<code>&delta; = 1.3217 mm</code> &mdash; about <b>4.2 elements per skin depth</b>.</figcaption></figure>
+</div>
+
+<div class="note">
+<p>The size <em>field</em> asks for 0.25 mm and the median comes out 0.317 mm. These are not the same
+number and the report quotes the measured one. gmsh treats <code>lc_wire</code> as a target that its
+own quality constraints relax, so a resolution claimed from the <code>.geo</code> is optimistic by
+about 25 % here.</p>
+</div>
+
+<h3>2.1 The refinement has to go <em>inside</em> the conductor</h3>
+
+<p>The skin depth is a length scale in the metal, so that is where the elements must be small. A
+distance-to-the-surface field cannot express that: distance is positive on <b>both</b> sides of a
+surface, so asking for 0.25 mm at the wire boundary also refines a 2 mm shell of <b>air</b> around
+each wire. That produced <b>about 660,000 elements, more than half of them air</b> &mdash; air in
+which nothing varies on a skin-depth scale at all.</p>
+
+<p>Two gmsh <code>Cylinder</code> fields instead, which size the interior of a cylinder and leave
+everything outside it alone, with the air graded on its own terms:</p>
+
+<pre><code>Field[3] = Cylinder;
+Field[3].Radius  = 1.02 * a;
+Field[3].VIn     = lc_wire;      // 0.25 mm
+Field[3].VOut    = lc_far;</code></pre>
+
+<p><b>192,368 tets instead of 660,000, for the same resolution where it matters.</b></p>
+
+<h3>2.2 Which mesh &mdash; measured, not asserted</h3>
+
+<div class="figs one">
+<figure><img src="fig/convergence.png" alt="Error against Kelvin versus elements per skin depth">
+<figcaption><b>What refinement buys.</b> Core error against Kelvin against elements per skin depth,
+log&ndash;log, each point annotated with its element count in wire 1.</figcaption></figure>
+</div>
+
+<p>Three refinements, each meshed, solved and compared against Kelvin at the core by
+<code>make_convergence_data.py</code>:</p>
+
+<div class="tw"><table>
+<thead><tr><th><code>lc_wire</code></th><th>median <code>h</code></th><th>per <code>&delta;</code></th><th>wire tets</th><th>core <code>|J|</code> err</th><th>core lag err</th><th>solve</th></tr></thead>
+<tbody>
+<tr><td>0.60 mm</td><td>0.724 mm</td><td>1.8</td><td>1,604</td><td>+1.600 %</td><td>+0.090&deg;</td><td>~8 s</td></tr>
+<tr><td>0.40 mm</td><td>0.502 mm</td><td>2.6</td><td>4,977</td><td>+0.654 %</td><td>+0.129&deg;</td><td>~12 s</td></tr>
+<tr><td><b>0.25 mm</b></td><td><b>0.317 mm</b></td><td><b>4.2</b></td><td><b>19,915</b></td><td><b>+0.365 %</b></td><td><b>&minus;0.059&deg;</b></td><td><b>~20 s</b></td></tr>
+</tbody></table></div>
+
+<p><b>The shipped mesh is the finest</b>, and the magnitude column is what justifies it:
+1.60 % &rarr; 0.65 % &rarr; 0.37 %, for 8 s &rarr; 20 s. The coarsest is already fine for a
+demonstration you edit and re-run; the finest is what makes the skin-effect comparison in &sect;5
+worth quoting at all.</p>
+
+<div class="note">
+<p><strong>The phase column is not converging, and that is honest rather than worrying.</strong> It
+wanders +0.090&deg; &rarr; +0.129&deg; &rarr; &minus;0.059&deg;. A tenth of a degree is this
+comparison's own noise floor &mdash; the radial binning, the azimuthal spread within each bin and the
+finite cell sample each contribute more than the discretisation does. A clean monotone trend at that
+magnitude would be more suspicious than this wandering is.</p>
+<p><strong>Three points do not establish a convergence order, and this report does not claim
+one.</strong> An earlier version of this case claimed first-order convergence in <code>h</code> from
+<em>two</em> meshes. Two points fit any power law you care to assume &mdash; they cannot test one. The
+third point showed the apparent order collapsing to 0.37, which turned out not to be a property of
+the solver at all but a constant offset in the measurement: &sect;5.3.</p>
+</div>
+
+<h2>3. The drive</h2>
+
+<p>Each wire is driven independently, and each therefore needs its own potential reference: a current
+source on the bottom face, a 0 V terminal on the top.</p>
+
+<pre><code>[port P1]                          [port P3]
+type        = boundary_current     type        = boundary_current
+surface     = wire1_bottom         surface     = wire2_bottom
+current     = 1.0                  current     = 1.0
+phase_deg   = 0                    phase_deg   = 90      # &lt;-- the whole point
+
+[port P2]                          [port P4]
+type        = boundary_voltage     type        = boundary_voltage
+surface     = wire1_top            surface     = wire2_top
+voltage     = 0.0                  voltage     = 0.0</code></pre>
+
+<p>Under the solver's <code>e^{+j&omega;t}</code> convention a port phase <code>&phi;</code> means
+the terminal current is <code>I cos(&omega;t + &phi;)</code>, so wire 2's current leads wire 1's by a
+quarter cycle.</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>measured</th><th>target</th></tr></thead>
+<tbody>
+<tr><td><code>|I|</code> in wire 1</td><td>1.000405 A</td><td>1 A</td></tr>
+<tr><td><code>|I|</code> in wire 2</td><td>0.998795 A</td><td>1 A</td></tr>
+<tr><td>phase difference</td><td><b>90.014&deg;</b></td><td>90&deg;</td></tr>
+</tbody></table></div>
+
+<p>The current is recovered by integrating <code>J_z</code> over a <b>slab</b> at mid-length and
+dividing by the slab's thickness &mdash; <code>&Sigma; J_z &Delta;V / &Delta;z</code> &mdash; rather
+than over a single plane of faces. Many layers of tets then contribute and no one plane's mesh can set
+the answer. Neither wire's port is on the plane being measured, so this is a check and not a
+restatement of the input.</p>
+
+<h2>4. The post-processing tour</h2>
+
+<p>Sixteen requests. Every picture in this section comes from the manifest the solver itself writes
+(<code>output/postprocess.json</code>) rendered by <code>tools/postprocess.py</code>. Nothing here is
+hand-plotted &mdash; that is the claim the case is making, so
+<code>collect_postprocess_figs.py</code> copies those exact files into <code>fig/</code> rather than
+redrawing them.</p>
+
+<pre><code>..\run_case.bat two_wires.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" ..\..\tools\postprocess.py output</code></pre>
+
+<h3>4.1 The current, as arrows</h3>
+
+<div class="figs">
+<figure><img src="fig/PP1_J_vector.png" alt="J in wire 1 at phase 0">
+<figcaption><b>PP1 &mdash; <code>geometry = body</code>, <code>field = J</code>,
+<code>display = vector</code>, <code>phase_deg = 0</code>.</b> A side view of the whole conductor;
+every arrow points along <code>+z</code> and is coloured by <code>|J|</code>, from <code>6.4e4</code>
+to <code>1.09e5 A/m&sup2;</code>. At this instant wire 1 is at its peak: every cell is positive and
+the net is <b>+0.9995 A</b>.</figcaption></figure>
+<figure><img src="fig/PP2_J_vector.png" alt="J in wire 2 at the same instant">
+<figcaption><b>PP2 &mdash; the same instant, wire 2</b>, whose terminal current is at its zero
+crossing. The net instantaneous current really is zero: <b>&minus;0.0003 A</b>. But <code>J</code> is
+not zero anywhere &mdash; see below.</figcaption></figure>
+</div>
+
+<p>In PP1, read <b>across</b> the silhouette, which is a projection through the wire: the left edge is
+the face turned away from wire 2 and the right edge is the face turned toward it. The gradient between
+them is the <b>proximity effect</b>, quantified in &sect;5.2. The skin effect is in this picture too
+but is harder to read here, because a projection superimposes the near and far surfaces on the middle
+of the silhouette &mdash; &sect;5.1 is where it is measured properly.</p>
+
+<div class="note">
+<p><strong>PP2 is the more interesting of the two.</strong> Wire 2's net current is zero at this
+instant, but <code>J</code> inside it reaches <code>&plusmn;4.6e4 A/m&sup2;</code> &mdash; 40 % of
+wire 2's own phasor peak of <code>1.15e5</code> &mdash; and <b>the outer shell and the core flow in
+opposite directions</b>: measured here, cells with <code>J_z &lt; 0</code> occupy
+<code>r/a = 0.64 &hellip; 0.98</code> and cells with <code>J_z &gt; 0</code> occupy
+<code>r/a = 0.01 &hellip; 0.76</code>. The two cancel in the integral and not pointwise.</p>
+<p>That is the skin effect stated in the time domain. <code>J</code> lags by 53&deg; more at the core
+than at the surface (&sect;5.1), so the radii cannot all cross zero together; at the instant the
+<em>terminal</em> current vanishes, what is left inside is a purely <b>circulating</b> eddy current.
+The arrows read as downward in the picture because the outer shell dominates a projection &mdash; it
+is both the larger magnitude and the longer path through the silhouette.</p>
+</div>
+
+<h3>4.2 The three magnitudes, one field</h3>
+
+<p>The heart of the tour: three pictures of the same <code>B</code> on the same plane, none of them
+wrong, each answering a different question.</p>
+
+<div class="figs">
+<figure><img src="fig/PP3_B_complex_magnitude.png" alt="B, complex magnitude">
+<figcaption><b>PP3 &mdash; <code>display = complex_magnitude</code></b> (the default).
+<code>N = &radic;(|P|&sup2; + |Q|&sup2;) = &radic;2 &times; RMS</code>, independent of phase.
+<b>Left&ndash;right symmetric about the perpendicular bisector</b>, because both wires carry the same
+amplitude and <code>N</code> does not care that they are 90&deg; apart. <code>|B|</code> peaks in the
+red ring at each conductor's <em>surface</em> and falls toward its axis, as it must. This is the one
+that never blinks, which is why it is the default.</figcaption></figure>
+<figure><img src="fig/PP6_B_peak.png" alt="B, peak">
+<figcaption><b>PP6 &mdash; <code>display = peak</code></b>, the largest <code>|B|</code> ever reaches
+over the cycle: the semi-major axis <code>a</code> of the polarization ellipse. Compare it with PP3
+&mdash; where the field is circularly polarized the two differ by <code>&radic;2</code>, and &sect;6
+measures exactly that.</figcaption></figure>
+</div>
+
+<div class="figs">
+<figure><img src="fig/PP4_B_magnitude_at_phase.png" alt="B at phase 0">
+<figcaption><b>PP4 &mdash; <code>display = magnitude_at_phase</code>, <code>phase_deg = 0</code>.</b>
+A single instant, <code>|P cos &theta; &minus; Q sin &theta;|</code> at <code>&theta; = 0</code>.
+Wire 1 is at its peak and wire 2 near zero, so the symmetry of PP3 is gone.</figcaption></figure>
+<figure><img src="fig/PP5_B_magnitude_at_phase.png" alt="B at phase 90">
+<figcaption><b>PP5 &mdash; the same, <code>phase_deg = 90</code>.</b> A quarter cycle later the bright
+region has moved to the other wire. PP4 and PP5 are what <code>phase_deg</code>
+<em>is</em>.</figcaption></figure>
+</div>
+
+<div class="note">
+<p><strong>The three panels are not on a common colour scale, and the colour bars say so.</strong>
+<code>complex_magnitude</code> never reaches zero, so its dynamic range stays narrow and the renderer
+keeps the scale linear. <code>magnitude_at_phase</code> passes <em>through</em> zero wherever the
+instantaneous field nulls, so its range blows up and the renderer switches to logarithmic. The
+<em>structure</em> across the three is real; the relative brightness between them is not comparable. A
+pinned <code>range</code> key would fix this and the input format does not have one yet.</p>
+</div>
+
+<h3>4.3 Phase</h3>
+
+<div class="figs one">
+<figure><img src="fig/PP8_J_phase.png" alt="The phase of Jz">
+<figcaption><b>PP8 &mdash; <code>display = phase</code>, <code>component = z</code>.</b> A vector
+field needs a component before a phase means anything, and the parser rejects
+<code>display = phase</code> on a vector without one. The two wires sit about 90&deg; apart, and
+<em>within</em> each the phase varies with radius &mdash; the skin effect again, this time in the
+argument rather than the magnitude.</figcaption></figure>
+</div>
+
+<div class="note">
+<p><strong>The air is blank on purpose.</strong> In an insulator <code>J</code> is identically zero,
+and a zero vector <b>has no phase</b> &mdash; it points nowhere. <code>atan2</code> returns an angle
+regardless, and <em>which</em> angle depends on the sign bit of the zero:
+<code>atan2(+0.0, &minus;0.0) = &pi;</code>, and 21,727 of this mesh's 37,706 air nodes hold
+<em>negative</em> zero. The first version of this figure painted half the frame a confident, uniform
+<b>+180&deg;</b>.</p>
+<p>The renderer now writes NaN wherever the magnitude is negligible relative to the field's own
+scale, and sets the NaN colour to <b>white</b> &mdash; deliberately a colour the rainbow scale cannot
+produce, so a reader cannot mistake it for a reading. It arrives on the page as the flat neutral
+<b>grey</b> you see, RGB <code>(200, 197, 189)</code> against the figure's white margin, because
+ParaView shades the slice like any other lit surface. Either way it is outside the scale.</p>
+<p><b>The solver's output contains no NaN or Inf anywhere</b> &mdash; that was checked directly. This
+is the renderer declining to invent a phase for a quantity that does not have one.</p>
+</div>
+
+<h3>4.4 A line plot, and the other geometries</h3>
+
+<div class="figs one">
+<figure><img src="fig/PP9_E_complex_magnitude.png" alt="E along a probe line through both wires">
+<figcaption><b>PP9 &mdash; <code>geometry = points</code>.</b> Ten coordinates along <code>x</code> at
+mid-length, from <code>x = &minus;9 mm</code> to <code>+9 mm</code>. This geometry produces a
+<b>graph</b>, not a render, with the horizontal axis the arc length along the
+path.</figcaption></figure>
+</div>
+
+<p>Inside each conductor <code>E &asymp; 1.3e&#8209;3 V/m</code>, which is just
+<code>J/&sigma;</code>: 1 A spread over <code>&pi;a&sup2; = 12.6 mm&sup2;</code> is
+<code>7.96e4 A/m&sup2;</code>, and <code>7.96e4 / 5.8e7 = 1.37e&#8209;3</code>. The <b>peak is in the
+air gap between the wires</b>, about <code>1.1e&#8209;2 V/m</code> &mdash; eight times the value
+inside the metal. That is the induced part, <code>E = &minus;j&omega;A &minus; &nabla;&Phi;</code>:
+in the gap both wires' vector potentials contribute, and <code>A</code> falls away toward the box
+walls where <code>n &times; A = 0</code> pins it, which is why the two end points are lower
+again.</p>
+
+<div class="note">
+<p><strong>Four of these ten points sit exactly on a conductor surface</strong> &mdash;
+<code>x = &plusmn;3</code> and <code>&plusmn;7 mm</code> are the wire boundaries. The probe
+interpolates <b>nodal</b> data, and the solver's own output header flags those nodes
+<code>iface = 1</code> and says E is <b>meaningless</b> there, because its normal component genuinely
+jumps across a material interface. The figure is the renderer faithfully reporting what it was asked
+for; the four interface values should not be read as field values. Move the probe points off the
+surfaces, or read only the six clear of them.</p>
+</div>
+
+<div class="figs one">
+<figure><img src="fig/PP10_B_vector.png" alt="B vectors on the zx cut, seen end-on">
+<figcaption><b>PP10 &mdash; <code>plane = zx</code></b>, with no <code>offset</code>, so the cut is
+<code>y = 0</code>, the plane through both wire axes. <b>The glyphs render as dots, and that is
+correct.</b> This figure needs decoding, so the text below accounts for everything in the
+frame.</figcaption></figure>
+</div>
+
+<p><b>Three things are drawn, and only one of them is the data.</b> The pale rectangle is the slice
+itself, shown as a surface at <b>12 % opacity</b> purely as a backdrop &mdash; the washed-out vertical
+stripes are <code>|B|</code> on the cut, bleached nearly white. The dots are <b>arrow glyphs</b>:
+<code>Glyph(GlyphType = "Arrow")</code> on every ~25th mesh point (<code>Stride = n // 1500</code>, so
+about 1,500 of the 38,579 points on this slice), each oriented along <code>B</code> and scaled
+<em>and</em> coloured by <code>|B|</code>. The colour bar is the third thing, and it reads
+correctly.</p>
+
+<p><b>They look like dots because they point at you.</b> On <code>y = 0</code>, <code>B</code> is
+almost perfectly normal to the plane:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>mean <code>|&middot;|</code> over the plane</th></tr></thead>
+<tbody>
+<tr><td><code>|Bx|</code></td><td>4.15e&#8209;7 T</td></tr>
+<tr><td><b><code>|By|</code></b></td><td><b>3.57e&#8209;5 T</b></td></tr>
+<tr><td><code>|Bz|</code></td><td>1.27e&#8209;7 T</td></tr>
+</tbody></table></div>
+
+<p>Median <code>|By|/|B| = 0.9999</code>, and <b>94.3 % of the points have
+<code>|By|/|B| &gt; 0.99</code></b>. <code>B</code> around a z&#8209;directed current is azimuthal,
+and the plane through both axes is exactly the surface on which azimuthal means <em>straight out of
+the page</em>. Every arrow is therefore seen end-on &mdash; you are looking down the barrel at the
+cone head &mdash; and a bigger, redder dot simply means a larger <code>|B|</code>, because the Arrow
+glyph scales uniformly in all three dimensions.</p>
+
+<p><b>It is not a short-arrow artifact</b>, which was checked separately: the median <code>|B|</code>
+on the plane is 26 % of the maximum and the 75th percentile is 57 %, so a typical arrow has real
+length. The degeneracy is in orientation, not scale.</p>
+
+<p><b>What the dots say once decoded.</b> The camera sits at <code>+y</code> looking along
+<code>&minus;y</code> with <code>+z</code> up, so screen-right is
+<code>f &times; u = (0,&minus;1,0) &times; (0,0,1) = (&minus;1,0,0)</code>: <b><code>+x</code> runs
+leftward</b>, putting wire 1 (<code>x = &minus;5 mm</code>) on the <em>right</em> of the image and
+wire 2 (<code>x = +5</code>) on the left. Measured across the cut:</p>
+
+<div class="tw"><table>
+<thead><tr><th>x band (mm)</th><th>mean <code>|B|</code>/max</th><th></th></tr></thead>
+<tbody>
+<tr><td>&minus;9 &hellip; &minus;7</td><td><b>0.841</b></td><td>wire 1's outer surface</td></tr>
+<tr><td>&minus;7 &hellip; &minus;5</td><td>0.584</td><td>inside wire 1</td></tr>
+<tr><td>&minus;5 &hellip; &minus;3</td><td>0.401</td><td>inside wire 1</td></tr>
+<tr><td>&minus;3 &hellip; &minus;1</td><td><b>0.827</b></td><td>wire 1's inner surface</td></tr>
+<tr><td>+3 &hellip; +5</td><td>0.066</td><td>inside wire 2</td></tr>
+<tr><td>+5 &hellip; +7</td><td>0.254</td><td>inside wire 2</td></tr>
+</tbody></table></div>
+
+<p>The <b>two dense dark-red columns are wire 1's two surfaces cut edge-on</b> &mdash; the same
+<code>|B|</code> peak that appears as a red ring in PP3, sliced through rather than viewed down the
+axis &mdash; and <code>|B|</code> sags between them because it falls toward the wire's own axis. The
+dim left half is <b>wire 2 at its zero crossing</b>: mean <code>|B|</code>/max is 0.166 there against
+0.552 on wire 1's half, the same quadrature asymmetry as PP4.</p>
+
+<div class="note">
+<p><strong>The useful negative result of the tour.</strong> <code>display = vector</code> is readable
+only when the plane is chosen to <em>contain</em> the field. The data here is right and only the glyph
+direction is degenerate. For this geometry the <code>xy</code> plane of PP3&ndash;PP6 is the one that
+shows <code>B</code>; <code>zx</code> is where <code>J</code> would be worth drawing instead.</p>
+</div>
+
+<div class="figs one">
+<figure><img src="fig/PP11_phi_complex_magnitude.png" alt="Phi inside wire 1">
+<figcaption><b>PP11 &mdash; <code>field = phi</code></b>, a scalar, so no <code>component</code> is
+needed. Note the caption the renderer stamps on it: <b>&Phi; is gauge-dependent</b>. Its value depends
+on which spanning tree the tree&#8209;cotree gauge happened to pick, not only on the problem &mdash; a
+different tree shifts &Phi; by <code>&minus;j&omega;&psi;</code>. <code>E</code>, <code>B</code>,
+<code>H</code> and <code>J</code> are the quantities that may be quoted; &Phi; and <code>A</code> are
+bookkeeping.</figcaption></figure>
+</div>
+
+<h3>4.5 The presentation options</h3>
+
+<div class="figs">
+<figure><img src="fig/PP12_B_complex_magnitude.png" alt="B in the jet colormap">
+<figcaption><b>PP12 &mdash; PP3 again with <code>colormap = jet</code>.</b> Nine maps are available;
+<code>rainbow</code> (Rainbow Uniform) is the default, chosen because it reads as a <em>scale</em> at
+a glance without either end disappearing into the background.</figcaption></figure>
+<figure><img src="fig/PP13_B_complex_magnitude.png" alt="B rendered per tetrahedron">
+<figcaption><b>PP13 &mdash; PP3 again with <code>data = per_tet</code>.</b> One flat fill per element
+against PP3's smooth interpolation. Per&#8209;tet is not simply the uglier option: with first-order
+Whitney edge elements <b><code>B</code> is exactly constant per tetrahedron</b>, so the cell array
+<em>is</em> the computed answer and the nodal one is an average of it. Nodal is the default because it
+reads better; per&#8209;tet is the honest one near a material interface, where the nodal average
+blends two values the field genuinely jumps between.</figcaption></figure>
+</div>
+
+<h3>4.6 The same comparison, for the current</h3>
+
+<div class="figs one">
+<figure><img src="fig/PP14_J_complex_magnitude.png" alt="J, complex magnitude">
+<figcaption><b>PP14 &mdash; <code>J</code>, phase-independent.</b> Symmetric, both wires equally
+bright.</figcaption></figure>
+</div>
+
+<div class="figs">
+<figure><img src="fig/PP15_J_magnitude_at_phase.png" alt="J at phase 0">
+<figcaption><b>PP15 &mdash; <code>phase_deg = 0</code>.</b> Wire 1 carries its full current while
+wire 2 sits at its zero crossing.</figcaption></figure>
+<figure><img src="fig/PP16_J_magnitude_at_phase.png" alt="J at phase 90">
+<figcaption><b>PP16 &mdash; <code>phase_deg = 90</code>.</b> A quarter cycle later they
+swap.</figcaption></figure>
+</div>
+
+<p>The current is the quantity being <em>driven</em>, so PP15 and PP16 are the most direct view of
+what a port <code>phase_deg</code> does. PP4 and PP5 show the same thing one step removed, in the
+field those currents produce.</p>
+
+<h2>5. Skin-depth validation</h2>
+
+<h3>5.1 The radial profile against Kelvin</h3>
+
+<div class="figs one">
+<figure><img src="fig/skin_profile.png" alt="The radial current profile against Kelvin">
+<figcaption><b>The radial profile of <code>J_z</code>, magnitude above and phase below.</b> Faint blue
+dots are individual tetrahedra in the mid-length band of wire 1 (sub-sampled); orange circles are the
+mean within each radial bin; the black curve is Kelvin. The azimuthal spread of the blue cloud at any
+radius is the proximity effect of &sect;5.2.</figcaption></figure>
+</div>
+
+<p>Inside a straight round conductor the diffusion equation
+<code>&nabla;&sup2;J_z = j&omega;&mu;&sigma; J_z</code> reduces to Bessel's equation, whose bounded
+solution is</p>
+
+<div class="eq">  J_z(r)        J0(k r)              1 &minus; j                    2
+  &#8212;&#8212;&#8212;&#8212;  =  &#8212;&#8212;&#8212;&#8212;&#8212;&#8212;  ,   k =  &#8212;&#8212;&#8212;&#8212;&#8212;  ,   &delta;&sup2; =  &#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;
+  J_z(a)        J0(k a)                 &delta;                     &omega; &mu; &sigma;</div>
+
+<p>At 2.5 kHz in copper <code>&delta; = 1.3217 mm</code> and <code>a/&delta; = 1.511</code>. Measured
+against that, per <code>tools/skin_profile.py</code>:</p>
+
+<div class="tw"><table>
+<thead><tr><th><code>r/a</code></th><th>measured</th><th>Kelvin</th><th>err</th><th>lag</th><th>Kelvin</th><th>err</th></tr></thead>
+<tbody>
+<tr><td>0.00&ndash;0.20</td><td>0.8034</td><td>0.8006</td><td><b>+0.35 %</b></td><td>&minus;53.09&deg;</td><td>&minus;53.05&deg;</td><td><b>&minus;0.04&deg;</b></td></tr>
+<tr><td>0.20&ndash;0.40</td><td>0.8048</td><td>0.8028</td><td>+0.24 %</td><td>&minus;47.86&deg;</td><td>&minus;47.86&deg;</td><td>+0.00&deg;</td></tr>
+<tr><td>0.40&ndash;0.60</td><td>0.8182</td><td>0.8171</td><td>+0.14 %</td><td>&minus;37.54&deg;</td><td>&minus;37.56&deg;</td><td>+0.03&deg;</td></tr>
+<tr><td>0.60&ndash;0.80</td><td>0.8624</td><td>0.8621</td><td>+0.04 %</td><td>&minus;22.64&deg;</td><td>&minus;22.71&deg;</td><td>+0.07&deg;</td></tr>
+<tr><td>0.80&ndash;0.92</td><td>0.9343</td><td>0.9349</td><td>&minus;0.06 %</td><td>&minus;8.78&deg;</td><td>&minus;8.91&deg;</td><td>+0.13&deg;</td></tr>
+</tbody></table></div>
+
+<p><b>A 53&deg; lag from surface to core, reproduced to 0.04&deg;</b>, and the magnitude profile to
+better than 0.35 % everywhere. Both sides are anchored on the same <code>r &gt; 0.92a</code> band,
+whose mean radius is <code>0.9575a</code> &mdash; &sect;5.3 is about why that sentence matters more
+than it looks.</p>
+
+<p><code>tools/skin_profile.py</code> reduces any case's output the same way, which makes the
+comparison portable:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th><code>a/&delta;</code></th><th>elements per <code>&delta;</code></th><th>core <code>|J|</code> err</th><th>worst lag err</th></tr></thead>
+<tbody>
+<tr><td><b>04</b>, single cylinder</td><td>2.998</td><td>3.2</td><td>+1.20 %</td><td>0.39&deg;</td></tr>
+<tr><td><b>06</b>, this case</td><td>1.511</td><td>4.2</td><td>+0.35 %</td><td>0.13&deg;</td></tr>
+</tbody></table></div>
+
+<p>Case 06 is the <b>better&#8209;resolved</b> of the two per skin depth; case 04 is the <b>harder
+problem</b> &mdash; 138&deg; of rotation from surface to core against 53&deg;, and <code>|J|</code>
+down to 27 % of its surface value against 80 %.</p>
+
+<h3>5.2 Proximity effect, which Kelvin does not contain</h3>
+
+<div class="tw"><table>
+<thead><tr><th></th><th><code>|J|</code> facing the neighbour / away from it</th></tr></thead>
+<tbody>
+<tr><td>wire 1</td><td><b>1.137</b></td></tr>
+<tr><td>wire 2</td><td><b>0.766</b></td></tr>
+</tbody></table></div>
+
+<p>The neighbour's field redistributes current around the circumference by +14 % and &minus;23 %. It
+is what makes PP1's arrows asymmetric. The two wires are pushed <b>opposite</b> ways precisely because
+they are 90&deg; apart: at any instant one is near its peak while the other is at its zero crossing,
+so what each sees from the other is not the same thing.</p>
+
+<p>Kelvin's solution is axisymmetric and contains none of this, so the comparison in &sect;5.1 uses
+the <b>azimuthal mean</b> at each radius, which removes it to first order. The proximity effect is
+real physics the case captures and the analytic reference does not describe &mdash; it is not an
+error, and it is not something the &sect;5.1 table is testing.</p>
+
+<h3>5.3 Both sides must be reduced identically</h3>
+
+<div class="note">
+<p>This is the most useful thing the case taught, and it cost two wrong results.</p>
+<p>Kelvin's profile is normalised <b>at <code>r = a</code></b>. A measurement cannot be: a cell band
+"at the surface" is <code>r &gt; 0.92a</code>, whose <b>mean radius is 0.9575a</b>, because cell
+centres never reach the boundary. Dividing the measurement by <code>J(0.9575a)</code> while dividing
+the theory by <code>J(a)</code> compares two profiles pinned at different places, and inflates every
+measured ratio by about <b>+3.5 %</b>.</p>
+<p><strong>That offset contains no <code>h</code></strong>, so no amount of refinement can remove it
+&mdash; and it told a thoroughly convincing story: core errors of 7.2 % that "improved" to 3.9 %
+under refinement and then stalled, an apparent convergence order collapsing to 0.37, and a tidy
+physical explanation for the floor (a modelling error from the proximity effect, or from the finite
+length). All of it was one constant offset sitting on a real error ten times smaller. The retracted
+7 % figure was quoted in <code>two_wires.geo</code>'s own header until this report was written.</p>
+<p>Two controls placed it. A <b>single isolated wire</b> &mdash; same radius, length, box and element
+size, no neighbour &mdash; showed the <em>identical</em> error, so not the proximity effect. Narrowing
+the axial sample band from 0.30&ndash;0.70 <code>Lz</code> to 0.45&ndash;0.55 <code>Lz</code> changed
+the fourth decimal, so not the ends. <b>An error that survives removing the neighbour, ignores axial
+position, and ignores element size is in the instrument, not the solve.</b></p>
+<p>A second, subtler version of the same mistake followed. The measured reference is a <em>mean over
+cells</em>, so the Bessel reference must be the <b>mean of <code>J0</code> over those same
+radii</b> &mdash; not <code>J0</code> evaluated at their mean radius. <code>J0</code> is not linear,
+so the two differ by its curvature across the band. Case 04's own <code>make_plots.py</code> had
+always done this correctly; the shared tool had not.</p>
+<p>A third, found while writing &sect;7: the radius itself. Inferring <code>a</code> from a percentile
+of cell&#8209;centre radii under-reads it by about 2 %, because the outermost centre sits half an
+element inside the surface &mdash; and under-reading <code>a</code> inflates the reported
+<code>a/&delta;</code>. The cross-section <b>area</b> is unbiased:
+<code>a = &radic;(area/&pi;)</code>, which is what both scripts now use, and
+<code>tools/skin_profile.py</code> prints the ratio of the two as a roundness check.</p>
+</div>
+
+<h2>6. The polarization ellipse</h2>
+
+<p>The payoff, and the reason for the geometry.</p>
+
+<div class="figs one">
+<figure><img src="fig/PP7_B_axial_ratio.png" alt="The axial ratio of B on the mid-plane">
+<figcaption><b>PP7 &mdash; <code>display = axial_ratio</code></b>: the <em>shape</em> of the
+polarization ellipse, <code>b/a</code>, which is 0 for a linearly polarized field and 1 for a circular
+one. Two lobes above and below the line of centres, and a null along it.</figcaption></figure>
+</div>
+
+<p>Both features are what the two-wire superposition predicts. A phasor vector traces
+<code>B(u) = P cos u &minus; Q sin u</code>; with <code>I&#8321; = I</code> and
+<code>I&#8322; = jI</code> the real part <code>P</code> is the field of wire 1 alone and the imaginary
+part <code>Q</code> is the field of wire 2 alone. So:</p>
+
+<div class="eq">b/a = 0   on the line of centres &mdash; the two wires' fields are PARALLEL there,
+          and a sum of two parallel vectors out of phase is still linear
+
+b/a = 1   at (0, &plusmn;d/2) &mdash; the two contributions are perpendicular and equal,
+          which is a circle</div>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>measured</th><th>exact</th></tr></thead>
+<tbody>
+<tr><td>max <code>b/a</code> near <code>(0, &plusmn;d/2)</code></td><td><b>0.9647</b></td><td>1</td></tr>
+<tr><td><code>N/a</code> at the most circular cell</td><td><b>1.3895</b></td><td><code>&radic;2 = 1.41421</code></td></tr>
+<tr><td>median <code>b/a</code> &minus; analytic, per cell, near the axis</td><td><b>&minus;0.0098</b></td><td>0</td></tr>
+</tbody></table></div>
+
+<p><b><code>N/a = &radic;2</code> is the equality case</b> of the chain
+<code>b &le; |B(&theta;)| &le; a &le; N &le; &radic;2 a</code>, derived in
+<code>docs/ComplexVectorPhasorConcept.md</code>. Where the field is circularly polarized,
+<code>complex_magnitude</code> exceeds the true peak by <b>41 %</b> &mdash; so PP3 and PP6 differ by
+that much at those two points and not at all on the line of centres. That is the whole of the phasor
+document in two pictures.</p>
+
+<div class="note">
+<p><strong>Read <code>axial_ratio</code> next to a magnitude plot, never alone.</strong> Here the
+ellipticity sits where the field is strong: the median <code>b/a</code> is 0.140 among cells carrying
+at least 30 % of peak <code>|B|</code>. In case 05 it was the opposite &mdash; the most circular cell
+there carried <code>8.1e-04</code> of the peak, three decades down and physically invisible. A nearly
+circular but negligible field is indistinguishable from a nearly circular dominant one on this plot,
+because the plot shows only shape.</p>
+</div>
+
+<h2>7. What is asserted automatically</h2>
+
+<p><code>..\check.bat 06_TwoWires_Quadrature</code> runs <code>verify_two_wires.py</code>. Eight
+checks, all <span class="ok">passing</span>:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>measured</th><th>target</th></tr></thead>
+<tbody>
+<tr><td><code>|I|</code> in wire 1</td><td>1.000405</td><td>1 A &plusmn; 2 %</td></tr>
+<tr><td><code>|I|</code> in wire 2</td><td>0.998795</td><td>1 A &plusmn; 2 %</td></tr>
+<tr><td>phase difference</td><td>90.014&deg;</td><td>90&deg; &plusmn; 1&deg;</td></tr>
+<tr><td>max <code>b/a</code> near <code>(0, &plusmn;d/2)</code></td><td>0.9647</td><td>&ge; 0.90</td></tr>
+<tr><td><code>N/a</code> at the most circular cell</td><td>1.3895</td><td>&radic;2 &plusmn; 0.05</td></tr>
+<tr><td>median <code>b/a</code> &minus; analytic, per cell</td><td>&minus;0.0098</td><td>0 &plusmn; 0.03</td></tr>
+<tr><td>core <code>|J|</code> vs Kelvin</td><td>0.80301</td><td>0.80028 &plusmn; 1 %</td></tr>
+<tr><td>core phase lag vs Kelvin</td><td>&minus;53.126&deg;</td><td>&minus;53.230&deg; &plusmn; 0.5&deg;</td></tr>
+</tbody></table></div>
+
+<p>The <code>b/a</code> residual is compared <b>cell by cell</b>, with the analytic value evaluated at
+each cell's own centroid. An earlier version compared the cells' <em>median</em> against the
+analytic's <em>area</em> average over the same region: that assertion moved from 0.0658 to 0.0509 when
+the mesh was refined while no physics changed at all. <b>A test that moves with the mesh and not with
+the field is measuring the mesh.</b></p>
+
+<h3>Run summary</h3>
+
+<div class="tw"><table>
+<tbody>
+<tr><td>Tets</td><td>192,368</td></tr>
+<tr><td>Unknowns</td><td>448,438 &mdash; A: 190,175 free edges, 31,733 gauged to zero, 6,582 Dirichlet; &Phi;: the rest</td></tr>
+<tr><td>Stored nonzeros</td><td>9,659,864</td></tr>
+<tr><td><code>nnz(L)</code> after AMD</td><td>384,933,274</td></tr>
+<tr><td>Backward error</td><td>5.33e&#8209;22</td></tr>
+<tr><td>Timing</td><td>assemble 0.75 s, analyze 5.0 s, factorize 10.8 s, solve 0.23 s</td></tr>
+</tbody></table></div>
+
+<h2>Reproducing</h2>
+
+<pre><code>gmsh two_wires.geo -3 -o two_wires.msh
+..\run_case.bat two_wires.aphi
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" ..\..\tools\postprocess.py output
+"C:\Program Files\ParaView 6.1.1\bin\pvbatch.exe" make_report_figs.py output
+"C:\Program Files\ParaView 6.1.1\bin\pvpython.exe" collect_postprocess_figs.py
+sh build_doc.sh</code></pre>
+
+<p><code>make_convergence_data.py</code> rebuilds &sect;2.2's three meshes and
+<code>convergence.json</code>; it takes a few minutes and is only needed when the mesh changes.
+<code>tools/skin_profile.py &lt;output-dir&gt;</code> prints &sect;5.1 for this or any other case.</p>
+
+<p><b>Run <code>build_doc.sh</code> after regenerating figures</b>, or
+<code>TwoWiresValidation.html</code> and <code>.pdf</code> keep showing the previous run's pictures
+&mdash; they are inlined, not referenced.</p>
+
+</div>

@@ -28,12 +28,23 @@
 // skin effect, enough that the phase varies with radius inside each conductor
 // and `display = phase` has structure there rather than being flat.
 //
-// MESH SIZING. lc_wire = 0.25 mm against delta = 1.32 mm is about 5 elements per
-// skin depth, enough that the Bessel profile and its phase lag come out right
-// rather than flattened. An earlier version used 0.6 mm -- 2.2 per delta -- and
-// under-read |J| in the core by 7 % and the core-to-surface lag by 7 degrees,
-// consistently and in one direction, which is what too-coarse elements do to an
-// exponential.
+// MESH SIZING. lc_wire = 0.25 mm produces a MEDIAN element of 0.317 mm against
+// delta = 1.322 mm -- about 4.2 elements per skin depth. (The target size and the
+// median are not the same number: gmsh's result is coarser than the size field
+// asks for, so quote the measured one.) Three refinements were solved and
+// compared against Kelvin at the core, in make_convergence_data.py:
+//
+//     lc_wire   median h   per delta   wire tets   core |J| err
+//     0.60 mm   0.724 mm      1.8        1,604       +1.600 %
+//     0.40 mm   0.502 mm      2.6        4,977       +0.654 %
+//     0.25 mm   0.317 mm      4.2       19,915       +0.365 %
+//
+// so the finest is shipped: 1.60 % -> 0.37 % for 8 s -> 20 s. An earlier version
+// of this note claimed the coarse mesh under-read the core by 7 % and the lag by
+// 7 degrees. BOTH NUMBERS WERE WRONG and are retracted -- they came from a
+// comparison that anchored the measurement and the theory at different radii,
+// which put a constant +3.5 % offset on every mesh. See the note at the top of
+// tools/skin_profile.py, and TwoWiresValidation.md section 5.3.
 // ---------------------------------------------------------------------------
 
 SetFactory("OpenCASCADE");
