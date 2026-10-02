@@ -16,8 +16,8 @@ sources had been obtained; both change the answer.
 |---|---|
 | **Recommended gauge** | **Chew's generalized gauge** — `∇·(εA) = −χ ∂Φ/∂t`, `χ = αε²μ` |
 | **Why, in one line** | It is the only candidate under which the FEM half, the interface conditions, and the BEM half all come from one formulation. |
-| **Is anything broken today?** | No. `E`, `B`, `H`, `J`, terminal `V`, `I`, `R`, `L`, `Z` are correct and gauge-invariant — `07_GaugeInvariance` measures 1e‑12. |
-| **What is wrong** | Φ in the interior is not physical; tree–cotree postpones rather than removes low-frequency breakdown; and it offers nothing at a conductor/dielectric port. |
+| **Is anything broken today?** | **Not for any geometry in the suite — and every one of them puts its terminals on the outer boundary.** `E`, `B`, `H`, `J`, terminal `V`, `I`, `R`, `L`, `Z` are correct and gauge-invariant there, measured to 1e‑12 by `07_GaugeInvariance`. That result does **not** extend to a port inside the domain: see §1.2. |
+| **What is wrong** | Φ in the interior is not physical; tree–cotree postpones rather than removes low-frequency breakdown; and **at a port face inside the domain — especially one crossing conductor and dielectric — it has no principled rule at all, at any frequency**. |
 | **What it costs us** | Less than the first edition assumed: **our Whitney‑1 `A` space is already the one Chew's gauge requires.** Φ moves P2 → P1 and the gauge term is added; the `A` discretization is untouched. |
 | **Still open** | Whether `A` stays a Whitney 1‑form **at the boundary-integral surface**. This is now the real research question — see §6. |
 | **Who decides** | The mixed-port benchmark the roadmap requires. This report narrows the field to one candidate; it does not retire the benchmark. |
@@ -86,6 +86,44 @@ converge to.**
 
 That is the structural reason behind every measurement in this report, and it is
 why §9's first test — pointwise mesh convergence of Φ — is the one that matters.
+
+### 1.2 The limit of what case 07 proves — interior and mixed ports
+
+Case 07's result is **conditional on where the ports are**, and the condition is
+easy to lose sight of because every case in the suite satisfies it.
+
+The terminal quantities are gauge-independent because `n × A = 0` on the outer
+boundary forces ψ constant there and a port pins it to zero. **Both terminals of
+every case in this suite lie in the outer boundary** — the conductors span the
+full height of their air boxes, by construction. Measured: `|ψ|` is 3.6e‑16 on
+the boundary against 4.6e‑04 in the interior, twelve orders apart.
+
+**A port face inside the domain has none of that protection.** ψ is unpinned
+there, so Φ on such a face is gauge-dependent — which matters not only for
+reading a voltage out but for *posing* a current-driven port, whose terminal
+potential is a free unknown.
+
+A face crossing **conductor and dielectric** is worse than merely interior. The
+tree gauge grounds tree paths to conductors; on a face that is partly conductor
+and partly dielectric there is no principled rule for which edges to take, and —
+by Rapetti et al. (§1.1) — **no continuum condition to appeal to**, because the
+tree gauge is not a discretization of one. There is nothing to be right or wrong
+against.
+
+> **This is not a high-frequency problem.** Ansari et al. (§3.1) demonstrate
+> non-unique potentials in the **quasi-static** regime: a conductive prism in a
+> conductive background, driven by a grounded wire — a galvanic low-frequency
+> geophysics problem with material contrasts inside the domain. Their fields were
+> fine and their potentials were not. **The failure mode is about material
+> contrast and port placement, not about frequency.**
+
+**What this project has and has not measured.** We have measured, thoroughly,
+that tree–cotree is sound for boundary-mounted ports. **We have never built a
+case with an interior or mixed-material port, so we have not measured the failure
+either** — it is predicted by the mechanism above and documented in the
+literature, not yet observed here. §9 proposes closing that gap, and it should be
+closed *before* the gauge change, so that there is a failing baseline to compare
+against.
 
 ---
 
@@ -532,7 +570,7 @@ rather than the paper.
 | Zhao & Fu dummy-variable Coulomb | **Withdrawn.** Symmetric, direct-solvable and a good architectural fit — but Coulomb-gauged, so it cannot couple to a potential BEM. Implementing it means implementing a gauge twice. |
 | Ansari explicit Lagrange-multiplier Coulomb | Same Coulomb objection, plus a specific one: it exists to repair a **gauge/element mismatch we would not have** (§6.3.1). Retain as the roadmap's benchmark comparison — it is the documented failure mode a new gauge must not reproduce. |
 | Improve tree–cotree (root choice, MOR) | Cheap, treats the symptom only. Lee & Jin themselves report the condition number still grows at low frequency. |
-| Do nothing | Viable *only* while the outer boundary stays `n × A = 0`. §1 explains why that ends. |
+| Do nothing | Viable *only* while every port sits on an `n × A = 0` outer boundary. That excludes interior and mixed conductor/dielectric ports **at any frequency** (§1.2), and ends entirely when the boundary treatment changes (§1). |
 
 **A design decision the roadmap does not currently mention:** Chew's construction
 places Φ in the Whitney‑0 space, i.e. **P1 nodal**. **Ours is P2.** The
@@ -564,6 +602,21 @@ first place.
    with a direct and an iterative solver and require the *potentials* to agree,
    not just the fields. It is a cheap check and it is the one that exposed the
    problem for him.
+
+**And one measurement to take first, before any gauge work begins.** Build a
+minimal case with a port face **inside** the domain crossing conductor and
+dielectric, and run case 07's tree-permutation harness on it. Two outcomes, both
+worth having:
+
+- **Φ and the terminal quantities move with the tree** — the predicted failure is
+  now *measured* in this project rather than inherited from the literature, and
+  there is a quantitative baseline the new gauge must fix.
+- **They do not move** — then the premise behind the whole gauge programme needs
+  re-examining before anything is rewritten.
+
+This is cheap: the harness exists, the solver exists, and the case is smaller
+than case 06. It should run at low frequency, where §1.2 argues the failure
+already appears.
 
 ---
 
