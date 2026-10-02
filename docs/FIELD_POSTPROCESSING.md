@@ -259,15 +259,56 @@ Consequences, which govern how these outputs may be read:
 | quantity | gauge-dependent? |
 |---|---|
 | `Φ`, `A` | **yes** — the tree picks the representative |
-| `B`, `H`, `E` | no |
+| `B`, `H`, `E`, `J` | no |
+| terminal voltages, `I`, `R`, `L`, `Z` | no — see below |
 
-Because the shift is `-jωψ` with `ψ` real to leading order, it is **almost
-purely imaginary**: `Re Φ` is nearly clean while `Im Φ` carries an arbitrary P1
-function. Measured on the 50 Hz cylinder (`POSTPROCESSING_PLAN.md` §9): `Re Φ`
-matches the exact `z/l` to 4.02e-07, while `Im Φ` violates the problem's own
-mirror antisymmetry by twice its own peak.
+### How much of Φ is gauge: `ωL/R`
 
-**So `phi_imag` and `a_*` are not results on their own. `E`, `B` and `H` are.**
+The shift `-jωψ` is not a fixed fraction of `Φ`. Integrating `∇Φ = -E - jωA`
+along the conductor splits `Φ` into a part built from `E`, which is invariant,
+and a part built from `A`, which is exactly what the gauge moves:
+
+```
+    Φ(L) - Φ(0)  =  -∫E·dl  -  jω∫A·dl   ≈   I·R  +  jωL·I
+                      invariant    gauge-sensitive
+```
+
+so the gauge-sensitive fraction is about `ωL/|Z| = sin(arg Z)`, which is `ωL/R`
+in the low-frequency limit and saturates at 1 above it. §14's *When `Phi = z/l`
+is the right target* measures this across frequency;
+`06_TwoWires_Quadrature`'s report §7 measures it across spanning trees and
+checks the saturating form to 3 %.
+
+**Ψ IS ONLY NEARLY REAL IN THE RESISTIVE LIMIT, and the "almost purely
+imaginary" shorthand holds only there.** At low `ω` the current is nearly in
+phase with the drive, so `A` and hence `ψ` are nearly real, `-jωψ` is nearly
+imaginary, and `Re Φ` stays clean: on `02_Ansys_Cylinder_50Hz`
+(`ωL/R = 0.073`) `Re Φ` matches the exact `z/l` to 4.02e-07 while `Im Φ`
+carries an arbitrary P1 function and violates the problem's own mirror
+antisymmetry by twice its own peak. That is **not** the general case. On
+`01_OneCylinder` at 50 Hz (`ωL/R = 2.89`) changing the spanning tree moves
+`Re Φ` by 0.14 V and `Im Φ` by 0.05 V against a 1 V drive — **the real part
+more**. Both cases are "the 50 Hz cylinder"; they are different conductors in
+different regimes, and only the ratio distinguishes them.
+
+### The terminals are exact in every gauge
+
+`n × A = 0` on the outer boundary forces `ψ` to be constant there, and a port
+that pins `Φ` forces `ψ = 0`. Where the conductor spans the full domain height
+both terminals lie in that surface, which is connected, so `ψ = 0` on all of it.
+Measured by recovering `ψ = jΔΦ/ω` from two tree solutions: `|Δψ|` is 3.9e-21
+on the outer boundary against 3.3e-09 in the interior. **The gauge distorts the
+shape of `Φ` and pins its endpoints.**
+
+This holds for a **current** source as well as a voltage source, which is not
+obvious — a current-driven port pins `Φ` only at the reference terminal, leaving
+the driven one free. Driven at 1 A on three spanning trees, `01_OneCylinder`
+returns `|V|`, `R` and `L` identical to every printed digit, with `V` moving by
+1.2e-18 V. The protection is geometric: it needs the terminal on the outer
+boundary. An electrode floating in the interior would have none.
+
+**So `phi_imag` and `a_*` are not results on their own. `E`, `B`, `H`, `J` and
+anything measured at a terminal are.**
 
 ---
 

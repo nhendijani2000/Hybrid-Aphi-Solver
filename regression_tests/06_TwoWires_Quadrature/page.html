@@ -495,7 +495,8 @@ needed. Note the caption the renderer stamps on it: <b>&Phi; is gauge-dependent<
 on which spanning tree the tree&#8209;cotree gauge happened to pick, not only on the problem &mdash; a
 different tree shifts &Phi; by <code>&minus;j&omega;&psi;</code>. <code>E</code>, <code>B</code>,
 <code>H</code> and <code>J</code> are the quantities that may be quoted; &Phi; and <code>A</code> are
-bookkeeping.</figcaption></figure>
+bookkeeping. <b>&sect;7 is the evidence for that</b>, including why this case's <code>&omega;L/R = 4.48</code>
+puts PP11 firmly in the regime where &Phi; is mostly gauge.</figcaption></figure>
 </div>
 
 <h3>4.5 The presentation options</h3>
@@ -685,7 +686,220 @@ circular but negligible field is indistinguishable from a nearly circular domina
 because the plot shows only shape.</p>
 </div>
 
-<h2>7. What is asserted automatically</h2>
+<h2>7. &Phi;, the gauge, and what "voltage" means here</h2>
+
+<p>PP11 carries a warning stamped by the renderer &mdash; <b>&Phi; is gauge-dependent</b>. This
+section is what stands behind it, because the claim is sharper than it sounds and the obvious reading
+of it is wrong. Everything here was measured on <code>01_OneCylinder</code>, whose small mesh makes a
+three-way comparison cheap, and then anchored back to this case.</p>
+
+<h3>7.1 The freedom, and what survives it</h3>
+
+<p>A and &Phi; are not unique. For any scalar field <code>&psi;</code>,</p>
+
+<div class="eq">A  &rarr;  A + &nabla;&psi;            &Phi;  &rarr;  &Phi; &minus; j&omega;&psi;</div>
+
+<p>leaves every field unchanged. <code>B</code> survives because the curl of a gradient is identically
+zero:</p>
+
+<div class="eq">B = &nabla;&times;A   &rarr;   &nabla;&times;(A + &nabla;&psi;)  =  &nabla;&times;A + &nabla;&times;&nabla;&psi;  =  &nabla;&times;A  =  B</div>
+
+<p>and <code>E</code> survives because the two shifts cancel against each other:</p>
+
+<div class="eq">E = &minus;j&omega;A &minus; &nabla;&Phi;   &rarr;   &minus;j&omega;(A + &nabla;&psi;) &minus; &nabla;(&Phi; &minus; j&omega;&psi;)
+                 =  &minus;j&omega;A &minus; j&omega;&nabla;&psi; &minus; &nabla;&Phi; + j&omega;&nabla;&psi;
+                 =  &minus;j&omega;A &minus; &nabla;&Phi;   =   E</div>
+
+<p><code>H = B/&mu;</code> and <code>J = &sigma;E</code> inherit it. <b>Neither potential is invariant
+on its own</b>; only the combination that forms <code>E</code> is, which is why A and &Phi; must move
+together.</p>
+
+<div class="note">
+<p><strong>This is exact in the discrete system, not only in the continuum</strong>, and that is
+precisely what licenses tree&#8209;cotree gauging. The gradient of a nodal function is <em>exactly</em>
+representable in the Whitney edge space &mdash; on edge <code>(i,j)</code> its degree of freedom is
+just <code>&psi;_j &minus; &psi;_i</code> &mdash; so the discrete gauge freedom is exactly the set of
+discrete gradients and the discrete <code>&nabla;&times;&nabla;&psi;</code> is exactly zero. Nothing in
+the cancellation is a discretisation approximation.</p>
+</div>
+
+<h3>7.2 Measured, on three spanning trees</h3>
+
+<p>The tree&#8209;cotree gauge picks one representative by forcing <code>A = 0</code> on a spanning
+tree's edges. A <b>different tree picks a different representative</b>, so solving the same problem on
+two trees is a direct test.</p>
+
+<p>Different trees were obtained by permuting the order the nodes are listed in the <code>.msh</code>.
+The reader assigns each node its internal index in file order, edges are numbered by sorted vertex
+pair, and the tree is rooted at the lowest-numbered Dirichlet node &mdash; so reordering the file
+changes the tree while the mesh stays geometrically identical. That it worked is confirmed by the
+solver: identical 23,547 tets and 55,652 unknowns, but <b>1,144,897 / 1,145,056 / 1,145,083 stored
+nonzeros</b> &mdash; different edges gauged away.</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th>max value</th><th>max change</th><th>relative</th></tr></thead>
+<tbody>
+<tr><td><b>&Phi;</b> <em>potential</em></td><td>1.0000e+00</td><td>1.5186e&#8209;01</td><td><b>1.52e&#8209;01</b></td></tr>
+<tr><td><b>A</b> <em>potential</em></td><td>1.8376e+00</td><td>3.9800e&#8209;01</td><td><b>2.17e&#8209;01</b></td></tr>
+<tr><td><code>B</code> field</td><td>2.8329e+00</td><td>4.5522e&#8209;12</td><td>1.61e&#8209;12</td></tr>
+<tr><td><code>E</code> field</td><td>3.7594e+01</td><td>6.1495e&#8209;12</td><td>1.64e&#8209;13</td></tr>
+<tr><td><code>H</code> field</td><td>2.2544e+06</td><td>3.6226e&#8209;06</td><td>1.61e&#8209;12</td></tr>
+<tr><td><code>J</code> field</td><td>4.9177e+08</td><td>3.0737e&#8209;04</td><td>6.25e&#8209;13</td></tr>
+</tbody></table></div>
+
+<p><b>Both potentials move by 15&ndash;22 %. Every field is unchanged at 1e&#8209;12 to
+1e&#8209;13</b> &mdash; eleven orders of magnitude between the two groups. The residual is not leftover
+gauge sensitivity: the three runs factorize genuinely different matrices, so the arithmetic happens in
+a different order, and 1e&#8209;13 is what double precision accumulates through a 1.1 M-nonzero
+factorization.</p>
+
+<h3>7.3 <code>&omega;L/R</code> decides how much of &Phi; is gauge</h3>
+
+<p><code>&omega;L/R</code> does not make &Phi; gauge-dependent &mdash; &Phi; is gauge-dependent at
+every frequency. What it sets is <b>the size of the gauge term relative to the part you wanted to
+read</b>. Integrate the field definition along the conductor:</p>
+
+<div class="eq">&nabla;&Phi; = &minus;E &minus; j&omega;A
+
+&Phi;(L) &minus; &Phi;(0)  =  &minus;&int;E&middot;dl  &minus;  j&omega;&int;A&middot;dl
+                            &#8970;&#8212;&#8212;&#9474;&#8212;&#8212;&#8971;      &#8970;&#8212;&#8212;&#8212;&#9474;&#8212;&#8212;&#8212;&#8971;
+                              &asymp; I&middot;R          &asymp; j&omega;L&middot;I
+                       gauge-INVARIANT   gauge-SENSITIVE</div>
+
+<p>The first term is built from <code>E</code>, invariant to 1e&#8209;13 by the table above. The second
+is built from <code>A</code>, which is exactly what the gauge shifts &mdash; under
+<code>A &rarr; A + &nabla;&psi;</code> it changes by
+<code>j&omega;[&psi;(end) &minus; &psi;(start)]</code>. Their ratio is <code>&omega;L/R</code>.</p>
+
+<p>It <b>saturates</b>, because a contaminated fraction cannot exceed 1. The correct form is</p>
+
+<div class="eq">gauge-sensitive fraction  &asymp;  &omega;L/|Z|  =  &omega;L/&radic;(R&sup2; + (&omega;L)&sup2;)  =  sin(arg Z)</div>
+
+<p>which was checked rather than assumed. Case 01 has <code>R = 2.26e&#8209;6 &Omega;</code>,
+<code>L = 20.9 nH</code>:</p>
+
+<div class="tw"><table>
+<thead><tr><th></th><th><code>&omega;L/R</code></th><th><code>sin(arg Z)</code></th></tr></thead>
+<tbody>
+<tr><td>50 Hz</td><td>2.89</td><td>0.945</td></tr>
+<tr><td>1 Hz</td><td>0.0578</td><td>0.0577</td></tr>
+</tbody></table></div>
+
+<p>predicted ratio <b>16.4</b>, against measured <b>15.9</b> (&Phi; vs <code>z/L</code>) and
+<b>16.0</b> (tree-to-tree shift) &mdash; agreement to 3 %. Note this is emphatically <em>not</em> 50:
+the plain <code>&omega;L/R</code> ratio would predict 50 and the measurement says 16, so the saturating
+form is the right one. The leftover factor of ~1.8 in the absolute value is the <code>O(1)</code>
+geometric constant in <code>&psi; ~ |A|&middot;&ell;</code>, with <code>&ell;</code> the tree path
+length &mdash; which is tree-dependent, and that is the point.</p>
+
+<p><b>Where each case sits:</b></p>
+
+<div class="tw"><table>
+<thead><tr><th>case</th><th><code>&omega;L/R</code></th><th>&Phi; vs <code>z/L</code></th><th>&Phi; checked?</th></tr></thead>
+<tbody>
+<tr><td>02, 03</td><td>&#8810; 1</td><td>8.26e&#8209;04 / 4.3e&#8209;06</td><td><b>asserted</b></td></tr>
+<tr><td>01 @ 50 Hz</td><td>2.89</td><td>0.488</td><td>deliberately omitted</td></tr>
+<tr><td><b>06, this case</b></td><td><b>4.48</b></td><td>&mdash;</td><td>not applicable</td></tr>
+<tr><td>04</td><td>12.8</td><td>0.51</td><td>deliberately omitted</td></tr>
+</tbody></table></div>
+
+<p>This case's figure is from <code>R = 3.086e&#8209;5 &Omega;</code> taken from ohmic dissipation
+(<code>R = 2P/|I|&sup2;</code>, giving <code>R/R_dc = 1.1245</code> at <code>a/&delta; = 1.511</code>)
+and <code>L = 8.80 nH</code>. <b><code>R</code> must come from dissipation here and not from
+<code>V/I</code></b>: with <code>I&#8322; = jI&#8321;</code> the mutual term
+<code>j&omega;M&middot;I&#8322; = &minus;&omega;M&middot;I&#8321;</code> is <em>real</em>, so it adds to
+one wire's driving-point resistance and subtracts from the other's &mdash; measured, 6.65e&#8209;5 and
+4.63e&#8209;6, which straddle <code>R_dc = 2.74e&#8209;5</code> and even put wire 1 <em>below</em> it.
+Dissipation gives 3.0857e&#8209;5 and 3.0904e&#8209;5 for the two wires, agreeing to 0.15 % as they
+must. The mutual term lands entirely outside <code>L</code>, which is why both wires report the same
+8.80 nH.</p>
+
+<p><b>So PP11 is firmly in the gauge-dominated regime</b>, and reading its colour bar as a voltage
+would be a mistake.</p>
+
+<div class="note">
+<p><strong>Why a magnitude probe can still look right.</strong> At low <code>&omega;</code> the current
+is nearly in phase with the drive, so <code>A</code> is nearly real, so <code>&psi;</code> is nearly
+real &mdash; and <code>&minus;j&omega;&psi;</code> is then nearly <em>purely imaginary</em>. It lands in
+<code>Im(&Phi;)</code> and leaves <code>Re(&Phi;)</code> almost clean. Measured inside the wire:</p>
+<div class="tw"><table>
+<thead><tr><th>freq</th><th>max <code>|&delta;Re(&Phi;)|</code></th><th>max <code>|&delta;Im(&Phi;)|</code></th></tr></thead>
+<tbody>
+<tr><td>1 Hz</td><td>5.64e&#8209;04</td><td>9.50e&#8209;03</td></tr>
+<tr><td>50 Hz</td><td>1.44e&#8209;01</td><td>4.96e&#8209;02</td></tr>
+</tbody></table></div>
+<p>At 1 Hz the contamination is 17&times; larger in the imaginary part; by 50 Hz it has flooded into
+the real part and dominates there. That is why <code>Re(&Phi;)</code> tracks <code>z/L</code> to
+1.9e&#8209;03 at 1 Hz and to only 4.88e&#8209;01 at 50 Hz &mdash; a factor of 254 on a 50&times; change
+in <code>&omega;</code>, steeper than the complex quantity's 16&times; because the real part only picks
+up a higher-order remainder.</p>
+</div>
+
+<h3>7.4 The terminals are exact anyway &mdash; with a voltage <em>or</em> a current source</h3>
+
+<p>This is the part that matters in practice, and it refuted the natural guess.</p>
+
+<p>The gauge function is not free everywhere. <code>n &times; A = 0</code> on the outer boundary forces
+<code>&psi;</code> to be <b>constant</b> on it; a port that pins &Phi; forces <code>&psi; = 0</code>
+there. In this case and in case 01 the wires run the full height of the box, so <b>both terminals lie
+in the box's end faces</b>, and the box surface is connected &mdash; so <code>&psi; = 0</code> on the
+whole outer boundary, terminals included.</p>
+
+<p>Recovering <code>&psi;</code> from the measured shift
+(<code>&delta;&psi; = j&delta;&Phi;/&omega;</code>) confirms it:</p>
+
+<div class="tw"><table>
+<thead><tr><th>region</th><th>nodes</th><th>max <code>|&delta;&psi;|</code> (Wb)</th></tr></thead>
+<tbody>
+<tr><td>the whole outer boundary</td><td>4,770</td><td><b>3.93e&#8209;21</b></td></tr>
+<tr><td>&nbsp;&nbsp;of which, the driven terminal</td><td>477</td><td>3.83e&#8209;21</td></tr>
+<tr><td>&nbsp;&nbsp;of which, the 0 V reference</td><td>477</td><td>0.00e+00</td></tr>
+<tr><td>the interior</td><td>29,478</td><td><b>3.35e&#8209;09</b></td></tr>
+</tbody></table></div>
+
+<p>Twelve orders of magnitude. <b>The gauge lives in the interior and vanishes on the boundary</b>, so
+it distorts the <em>shape</em> of &Phi; while pinning its endpoints.</p>
+
+<p><b>With a current source this still holds</b>, which is not obvious: a current-driven port pins
+&Phi; at the reference terminal only, leaving the driven terminal's potential a free unknown. Driving
+case 01's geometry with 1 A at <code>&omega;L/R = 2.89</code> &mdash; the gauge-dominated regime
+&mdash; on the same three trees:</p>
+
+<div class="tw"><table>
+<thead><tr><th>tree</th><th><code>|V|</code> (V)</th><th>R (&Omega;)</th><th>L (H)</th></tr></thead>
+<tbody>
+<tr><td>base</td><td>6.926620e&#8209;06</td><td>2.264520e&#8209;06</td><td>2.083654e&#8209;08</td></tr>
+<tr><td>permA</td><td>6.926620e&#8209;06</td><td>2.264520e&#8209;06</td><td>2.083654e&#8209;08</td></tr>
+<tr><td>permB</td><td>6.926620e&#8209;06</td><td>2.264520e&#8209;06</td><td>2.083654e&#8209;08</td></tr>
+</tbody></table></div>
+
+<p><b>Identical.</b> The change in <code>V</code> across trees is 1.2e&#8209;18 V &mdash; 0.00 % &mdash;
+and the driven face comes out an exact equipotential (spread 4e&#8209;22). The reason is 7.4's first
+paragraph: that terminal sits on the outer boundary, where <code>&psi;</code> is pinned to zero
+regardless of which port type drives it. <code>R</code> and <code>L</code> also match the
+voltage-driven solve's 2.26e&#8209;6 &Omega; and 20.87 nH.</p>
+
+<div class="note">
+<p><strong>The caveat is the geometry, not the port type.</strong> This argument needs the terminal to
+lie on the outer boundary where <code>n &times; A = 0</code>. An electrode floating in the
+<em>interior</em> of the domain would have no such protection, and its potential would be
+gauge-dependent. Every case in this suite puts its terminals on the boundary.</p>
+</div>
+
+<h3>7.5 What to read, and what not to</h3>
+
+<div class="tw"><table>
+<tbody>
+<tr><td><b>Always safe</b></td><td><code>E</code>, <code>B</code>, <code>H</code>, <code>J</code>; terminal voltages; <code>&int;E&middot;dl</code> on a stated path; <code>I</code>, <code>R</code>, <code>L</code>, <code>Z</code></td></tr>
+<tr><td><b>Safe only when <code>&omega;L/R &#8810; 1</code></b></td><td><code>Re(&Phi;)</code> as a <code>z/L</code> gradient inside a conductor</td></tr>
+<tr><td><b>Never</b></td><td>&Phi; or A at an interior node, read as a physical potential</td></tr>
+</tbody></table></div>
+
+<p>And one point that is physics rather than numerics: in a time-varying field the voltage between two
+points is genuinely <b>path-dependent</b> &mdash; that is Faraday's law. Any tool that reports a single
+"the potential here" has quietly chosen a path, or a gauge, on your behalf.</p>
+
+<h2>8. What is asserted automatically</h2>
 
 <p><code>..\check.bat 06_TwoWires_Quadrature</code> runs <code>verify_two_wires.py</code>. Eight
 checks, all <span class="ok">passing</span>:</p>

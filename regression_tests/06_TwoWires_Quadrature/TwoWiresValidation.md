@@ -389,7 +389,9 @@ instead.
 the renderer stamps on it: **Φ is gauge-dependent**. Its value depends on which
 spanning tree the tree-cotree gauge happened to pick, not only on the problem — a
 different tree shifts Φ by `−jωψ`. `E`, `B`, `H` and `J` are the quantities that
-may be quoted; Φ and `A` are bookkeeping.
+may be quoted; Φ and `A` are bookkeeping. **§7 is the evidence for that**, including
+why this case's `ωL/R = 4.48` puts PP11 firmly in the regime where Φ is mostly
+gauge.
 
 ### 4.5 The presentation options
 
@@ -573,7 +575,213 @@ whole of the phasor document in two pictures.
 
 ---
 
-## 7. What is asserted automatically
+## 7. Φ, the gauge, and what "voltage" means here
+
+PP11 carries a warning stamped by the renderer — **Φ is gauge-dependent**. This
+section is what stands behind it, because the claim is sharper than it sounds and
+the obvious reading of it is wrong. Everything here was measured on
+`01_OneCylinder`, whose small mesh makes a three-way comparison cheap, and then
+anchored back to this case.
+
+### 7.1 The freedom, and what survives it
+
+A and Φ are not unique. For any scalar field `ψ`,
+
+```
+A  →  A + ∇ψ            Φ  →  Φ − jωψ
+```
+
+leaves every field unchanged. `B` survives because the curl of a gradient is
+identically zero:
+
+```
+B = ∇×A   →   ∇×(A + ∇ψ)  =  ∇×A + ∇×∇ψ  =  ∇×A  =  B
+```
+
+and `E` survives because the two shifts cancel against each other:
+
+```
+E = −jωA − ∇Φ   →   −jω(A + ∇ψ) − ∇(Φ − jωψ)
+                 =  −jωA − jω∇ψ − ∇Φ + jω∇ψ
+                 =  −jωA − ∇Φ   =   E
+```
+
+`H = B/μ` and `J = σE` inherit it. **Neither potential is invariant on its own**;
+only the combination that forms `E` is, which is why A and Φ must move together.
+
+> **This is exact in the discrete system, not only in the continuum**, and that is
+> precisely what licenses tree-cotree gauging. The gradient of a nodal function is
+> *exactly* representable in the Whitney edge space — on edge `(i,j)` its degree of
+> freedom is just `ψ_j − ψ_i` — so the discrete gauge freedom is exactly the set of
+> discrete gradients and the discrete `∇×∇ψ` is exactly zero. Nothing in the
+> cancellation is a discretisation approximation.
+
+### 7.2 Measured, on three spanning trees
+
+The tree-cotree gauge picks one representative by forcing `A = 0` on a spanning
+tree's edges. A **different tree picks a different representative**, so solving the
+same problem on two trees is a direct test.
+
+Different trees were obtained by permuting the order the nodes are listed in the
+`.msh`. The reader assigns each node its internal index in file order, edges are
+numbered by sorted vertex pair, and the tree is rooted at the lowest-numbered
+Dirichlet node — so reordering the file changes the tree while the mesh stays
+geometrically identical. That it worked is confirmed by the solver: identical
+23,547 tets and 55,652 unknowns, but **1,144,897 / 1,145,056 / 1,145,083 stored
+nonzeros** — different edges gauged away.
+
+| | max value | max change | relative |
+|---|---|---|---|
+| **Φ** *potential* | 1.0000e+00 | 1.5186e‑01 | **1.52e‑01** |
+| **A** *potential* | 1.8376e+00 | 3.9800e‑01 | **2.17e‑01** |
+| `B` field | 2.8329e+00 | 4.5522e‑12 | 1.61e‑12 |
+| `E` field | 3.7594e+01 | 6.1495e‑12 | 1.64e‑13 |
+| `H` field | 2.2544e+06 | 3.6226e‑06 | 1.61e‑12 |
+| `J` field | 4.9177e+08 | 3.0737e‑04 | 6.25e‑13 |
+
+**Both potentials move by 15–22 %. Every field is unchanged at 1e‑12 to 1e‑13** —
+eleven orders of magnitude between the two groups. The residual is not leftover
+gauge sensitivity: the three runs factorize genuinely different matrices, so the
+arithmetic happens in a different order, and 1e‑13 is what double precision
+accumulates through a 1.1 M-nonzero factorization.
+
+### 7.3 `ωL/R` decides how much of Φ is gauge
+
+`ωL/R` does not make Φ gauge-dependent — Φ is gauge-dependent at every frequency.
+What it sets is **the size of the gauge term relative to the part you wanted to
+read**. Integrate the field definition along the conductor:
+
+```
+∇Φ = −E − jωA
+
+Φ(L) − Φ(0)  =  −∫E·dl  −  jω∫A·dl
+                 ╰──┬──╯     ╰───┬───╯
+                   ≈ I·R       ≈ jωL·I
+            gauge-INVARIANT   gauge-SENSITIVE
+```
+
+The first term is built from `E`, invariant to 1e‑13 by the table above. The second
+is built from `A`, which is exactly what the gauge shifts — under `A → A + ∇ψ` it
+changes by `jω[ψ(end) − ψ(start)]`. Their ratio is `ωL/R`.
+
+It **saturates**, because a contaminated fraction cannot exceed 1. The correct form
+is
+
+```
+   gauge-sensitive fraction  ≈  ωL/|Z|  =  ωL/√(R² + (ωL)²)  =  sin(arg Z)
+```
+
+which was checked rather than assumed. Case 01 has `R = 2.26e‑6 Ω`, `L = 20.9 nH`:
+
+| | `ωL/R` | `sin(arg Z)` |
+|---|---|---|
+| 50 Hz | 2.89 | 0.945 |
+| 1 Hz | 0.0578 | 0.0577 |
+
+predicted ratio **16.4**, against measured **15.9** (Φ vs `z/L`) and **16.0**
+(tree-to-tree shift) — agreement to 3 %. Note this is emphatically *not* 50: the
+plain `ωL/R` ratio would predict 50 and the measurement says 16, so the saturating
+form is the right one. The leftover factor of ~1.8 in the absolute value is the
+`O(1)` geometric constant in `ψ ~ |A|·ℓ`, with `ℓ` the tree path length — which is
+tree-dependent, and that is the point.
+
+**Where each case sits:**
+
+| case | `ωL/R` | Φ vs `z/L` | Φ checked? |
+|---|---|---|---|
+| 02, 03 | ≪ 1 | 8.26e‑04 / 4.3e‑06 | **asserted** |
+| 01 @ 50 Hz | 2.89 | 0.488 | deliberately omitted |
+| **06, this case** | **4.48** | — | not applicable |
+| 04 | 12.8 | 0.51 | deliberately omitted |
+
+This case's figure is from `R = 3.086e‑5 Ω` taken from ohmic dissipation
+(`R = 2P/|I|²`, giving `R/R_dc = 1.1245` at `a/δ = 1.511`) and `L = 8.80 nH`.
+**`R` must come from dissipation here and not from `V/I`**: with `I₂ = jI₁` the
+mutual term `jωM·I₂ = −ωM·I₁` is *real*, so it adds to one wire's driving-point
+resistance and subtracts from the other's — measured, 6.65e‑5 and 4.63e‑6, which
+straddle `R_dc = 2.74e‑5` and even put wire 1 *below* it. Dissipation gives
+3.0857e‑5 and 3.0904e‑5 for the two wires, agreeing to 0.15 % as they must. The
+mutual term lands entirely outside `L`, which is why both wires report the same
+8.80 nH.
+
+**So PP11 is firmly in the gauge-dominated regime**, and reading its colour bar as
+a voltage would be a mistake.
+
+> **Why a magnitude probe can still look right.** At low `ω` the current is nearly
+> in phase with the drive, so `A` is nearly real, so `ψ` is nearly real — and
+> `−jωψ` is then nearly *purely imaginary*. It lands in `Im(Φ)` and leaves `Re(Φ)`
+> almost clean. Measured inside the wire:
+>
+> | freq | max \|δRe(Φ)\| | max \|δIm(Φ)\| |
+> |---|---|---|
+> | 1 Hz | 5.64e‑04 | 9.50e‑03 |
+> | 50 Hz | 1.44e‑01 | 4.96e‑02 |
+>
+> At 1 Hz the contamination is 17× larger in the imaginary part; by 50 Hz it has
+> flooded into the real part and dominates there. That is why `Re(Φ)` tracks `z/L`
+> to 1.9e‑03 at 1 Hz and to only 4.88e‑01 at 50 Hz — a factor of 254 on a 50×
+> change in `ω`, steeper than the complex quantity's 16× because the real part only
+> picks up a higher-order remainder.
+
+### 7.4 The terminals are exact anyway — with a voltage *or* a current source
+
+This is the part that matters in practice, and it refuted the natural guess.
+
+The gauge function is not free everywhere. `n × A = 0` on the outer boundary forces
+`ψ` to be **constant** on it; a port that pins Φ forces `ψ = 0` there. In this case
+and in case 01 the wires run the full height of the box, so **both terminals lie in
+the box's end faces**, and the box surface is connected — so `ψ = 0` on the whole
+outer boundary, terminals included.
+
+Recovering `ψ` from the measured shift (`δψ = jδΦ/ω`) confirms it:
+
+| region | nodes | max \|δψ\| (Wb) |
+|---|---|---|
+| the whole outer boundary | 4,770 | **3.93e‑21** |
+|   of which, the driven terminal | 477 | 3.83e‑21 |
+|   of which, the 0 V reference | 477 | 0.00e+00 |
+| the interior | 29,478 | **3.35e‑09** |
+
+Twelve orders of magnitude. **The gauge lives in the interior and vanishes on the
+boundary**, so it distorts the *shape* of Φ while pinning its endpoints.
+
+**With a current source this still holds**, which is not obvious: a current-driven
+port pins Φ at the reference terminal only, leaving the driven terminal's potential
+a free unknown. Driving case 01's geometry with 1 A at `ωL/R = 2.89` — the
+gauge-dominated regime — on the same three trees:
+
+| tree | \|V\| (V) | R (Ω) | L (H) |
+|---|---|---|---|
+| base | 6.926620e‑06 | 2.264520e‑06 | 2.083654e‑08 |
+| permA | 6.926620e‑06 | 2.264520e‑06 | 2.083654e‑08 |
+| permB | 6.926620e‑06 | 2.264520e‑06 | 2.083654e‑08 |
+
+**Identical.** The change in `V` across trees is 1.2e‑18 V — 0.00 % — and the driven
+face comes out an exact equipotential (spread 4e‑22). The reason is 7.4's first
+paragraph: that terminal sits on the outer boundary, where `ψ` is pinned to zero
+regardless of which port type drives it. `R` and `L` also match the voltage-driven
+solve's 2.26e‑6 Ω and 20.87 nH.
+
+> **The caveat is the geometry, not the port type.** This argument needs the
+> terminal to lie on the outer boundary where `n × A = 0`. An electrode floating in
+> the *interior* of the domain would have no such protection, and its potential
+> would be gauge-dependent. Every case in this suite puts its terminals on the
+> boundary.
+
+### 7.5 What to read, and what not to
+
+| | |
+|---|---|
+| **Always safe** | `E`, `B`, `H`, `J`; terminal voltages; `∫E·dl` on a stated path; `I`, `R`, `L`, `Z` |
+| **Safe only when `ωL/R ≪ 1`** | `Re(Φ)` as a `z/L` gradient inside a conductor |
+| **Never** | Φ or A at an interior node, read as a physical potential |
+
+And one point that is physics rather than numerics: in a time-varying field the
+voltage between two points is genuinely **path-dependent** — that is Faraday's law.
+Any tool that reports a single "the potential here" has quietly chosen a path, or a
+gauge, on your behalf.
+
+## 8. What is asserted automatically
 
 `..\check.bat 06_TwoWires_Quadrature` runs `verify_two_wires.py`. Eight checks,
 all passing:
