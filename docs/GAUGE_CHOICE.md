@@ -1749,6 +1749,126 @@ record and is left for you rather than taken unilaterally.
 
 ---
 
+## 14. Measured: Chew against Jochum on one mesh
+
+`tools/gauge_spike/compare.py`, full write-up in
+`tools/gauge_spike/RESULTS_COMPARE.md`. A copper cube embedded in a dielectric
+box, 374 nodes / 1973 edges, so every condition number is an exact dense SVD and
+the conductor/dielectric interface is closed. Both formulations are assembled
+from **the same element matrices**, which `spike.py` could not do.
+
+### 14.1 Three results
+
+**§13.4's `ψ` recipe is a necessity, and the margin is nine orders.** Restricting
+`ψ` to the interface and the conductor, against `ψ` on every interior node:
+
+| freq | `ψ` per §5.5 | `ψ` everywhere |
+|---|---|---|
+| 1 Hz | **1.85e+17** | 4.78e+26 |
+| 10 GHz | 1.50e+18 | 1.84e+27 |
+
+The mechanism predicted from the blocks is visible in the `σ = 1` control:
+`ψ`-everywhere degrades monotonically as frequency falls (1.19e18 at 10 GHz →
+1.31e23 at 1 Hz) because an insulator-interior `ψ` row has all three of its
+blocks proportional to `k₀`, so the row vanishes at DC. The restricted version
+does not move.
+
+**Complex-symmetric with losses, to round-off**: residual 5.7e‑17 … 1.9e‑16
+across ten decades, *after* the equilibrating congruence. This is the combination
+`GENERALIZED_LORENZ_GAUGE.md` §11 concluded was unavailable, and it comes from
+where the test functions are placed (§13.2), not from a scaling.
+
+**And the decisive one — Jochum does not track the material contrast:**
+
+| | `κ` contrast at 1 Hz | cond at 1 Hz |
+|---|---|---|
+| Jochum, `σ = 1` (his §6.1 cavity) | 1.80e+10 | 2.67e+17 |
+| Jochum, `σ = 5.8e7` (copper) | **2.32e+17** | **1.85e+17** |
+| **Chew, same mesh, `ε_eff`** | 2.32e+17 | **3.32e+22** |
+
+Seven orders more conductivity and Jochum's conditioning is unchanged, while
+Chew's tracks the contrast across the whole sweep. **The spike's finding 2 is
+resolved structurally** — not by scaling `ε_eff` better but by never forming it.
+The gauge lives only in the conductor with weight `σ + jk₀ε`; the insulator
+carries physical Gauss with weight `ε_r`; `σ/ωε` never appears as a ratio inside
+one operator.
+
+### 14.2 Two errors in the run, and a standing rule
+
+Both were mine, and both were the same error, now seen a third time.
+
+Run 1 reported the condition number **rising** with frequency, 8.8e6 → 3.2e23 —
+backwards. I had transcribed Jochum's structure into SI variables and dropped his
+non-dimensionalization, which *is* part of the stabilization: `A = Ã/c₀` with
+`σ₀ = η₀σ` and `k₀ = ω/c₀` reproduces his (18a), and `k₀` spans 2e‑8…2e2 where
+`ω` spans 6…6e10.
+
+Run 2's **control came out worse than the copper case**, which is the tell, since
+the control has seven orders less contrast. Raw diagonal blocks differed by
+eleven orders (`S ~ 1/h ≈ 670` against `jk₀G_κ ≈ 1e‑8`). Fixed by a congruence
+`D M D`, which is Balian's prescription from §11.1 — and the symmetry residual is
+reported *after* it so that the congruence claim is checked, not assumed.
+
+`spike.py` run 1 was the same error with `χ ≈ 1e‑28`.
+
+> **Standing rule.** A block system of mixed differential orders and mixed
+> material weights is never meaningfully conditioned as assembled. Equilibrate by
+> congruence before quoting a condition number, and always run the source
+> paper's own materials as a control. Two of five spike runs have produced
+> confident wrong conclusions for want of these.
+
+### 14.3 Corroboration from practice, and what it means
+
+Reported independently from Ansys Maxwell: its A‑Φ matrices were very
+ill-conditioned, and **more so with the Coulomb gauge**. Three sources now agree
+that naive gauging *degrades* conditioning:
+
+| | |
+|---|---|
+| this run | Chew gauged 3.32e22 against ungauged 2.55e4 at 1 Hz — **eighteen orders** |
+| Ansari, Table 1 | 9.0 GB / 1102 s gauged against 234–379 s ungauged; conventional preconditioning *"can fail to converge to the correct solution"* (§12.6) |
+| Maxwell in practice | as above |
+
+The lesson is not "do not gauge" — it is that **placement and scaling decide
+everything**: split the gauge by region, weight it by the local material, balance
+it as a congruence. Jochum does all three; Zhao, Ansari and the naive Chew
+assembly do none.
+
+### 14.4 What this does not settle
+
+- **The absolute level, ~1e17, is unexplained**, and is not claimed as a win.
+  Flat, symmetric and contrast-insensitive are solid; the absolute number is not.
+  Candidates in `RESULTS_COMPARE.md`.
+- **No port and no excitation.** This measures operators. §12.3's gap — a port on
+  a mixed-material face — is exactly as open as before.
+- `ν_r = 1` throughout, so permeability contrast is untested. Demerdash & Wang
+  still wanted.
+- Chew is measured here on the cotree-reduced space, so these numbers are
+  comparable to Jochum's above but not to `GENERALIZED_LORENZ_GAUGE.md` §11's.
+
+### 14.5 What it changes
+
+§0's decision stands on its stated grounds — Chew is still the only candidate
+whose FEM half, interface conditions and **boundary-integral** half come from one
+formulation, and that is a statement about the endgame that no conditioning
+measurement touches.
+
+But the measurement does change the *interim* picture, and §8 should now say so:
+
+| | |
+|---|---|
+| **Jochum is the better-conditioned and better-posed formulation today**, by five orders and with symmetry Chew's §7 form does not have. | It is FEM-only. |
+| **Three of Jochum's devices are gauge-independent and should be adopted regardless of which gauge wins** | (i) region-split gauge weighting, so `σ/ωε` never forms; (ii) `ψ` restricted to the interface, which §14.1 measures at nine orders; (iii) equilibration by congruence. |
+| **Chew's omitted surface term must be re-derived, not dropped** | §13.7: in Jochum the analogous term, forced to cancel, *is* the gauge's interface condition (32). The spike treated it as a nuisance. That was the wrong frame. |
+
+The honest summary is that **Chew remains the strategic target and Jochum is the
+better engineering answer for everything short of the boundary-integral
+coupling** — and that the two are closer than §13 assumed, because `E_V ≈ A` and
+`E_W, E_U ≈ ∇Φ` (§11.10.1) means these are all the same splitting seen from
+different sides.
+
+---
+
 ## Bibliography
 
 Papers obtained and read for this edition, all now in `APhi_Papers/`:
