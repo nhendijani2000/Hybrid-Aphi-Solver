@@ -406,6 +406,8 @@ def main():
     print("    this spike cannot see the effect and must be fixed first.")
 
     milestone2(nodes, tets, mats, omega, r_exact)
+    milestone3(nodes, tets, mats, omega, r_exact)
+    milestone4(nodes, tets, mats, omega, r_exact)
 
 
 
@@ -435,6 +437,225 @@ def milestone2(nodes, tets, mats, omega, r_exact):
     print("    Jochum R = %.4f uOhm  (%.2f %% from exact)"
           % (base.real * 1e6, 100.0 * abs(base.real - r_exact) / r_exact))
     return rows
+
+
+
+
+# ----------------------------------------------------------------- Chew ----
+def solve_chew(nodes, tets, mats, omega, seed, alpha=1.0):
+    """Chew's DECOUPLED Phi equation, with the same interior terminal.
+
+        div(eps grad Phi) + chi w^2 Phi = -rho,     chi = alpha mu eps^2
+                                                   (GENERALIZED_LORENZ_GAUGE (2),(4))
+
+    WHY THIS IS STRUCTURALLY DIFFERENT FROM JOCHUM. Equation (2) contains NO A.
+    Phi is determined by its own Helmholtz problem, so a terminal is an ordinary
+    boundary condition ON THAT EQUATION rather than a perturbation of a gauge
+    row -- which is what milestone 2 found Jochum has no answer for. And since
+    no tree enters (2) at all, Phi cannot depend on the tree: the invariance is
+    exact by construction, not by good conditioning.
+
+    `seed` is accepted and IGNORED, deliberately. If (2) is solved as written,
+    passing a different tree must change nothing, and showing that is the point.
+
+    SIGMA. Chew's paper has no finite conductivity -- his conductors are PEC
+    boundary conditions and his eps varies by 4.5 (RESULTS_COMPARE.md). Ours is
+    copper, so eps -> eps_eff = eps - j sigma/omega, which is section 1's
+    addition and which spike.py already measured wrecking his conditioning. The
+    question HERE is not conditioning but whether the resulting Phi is right.
+
+    Weak form, testing with lam and integrating the divergence by parts:
+
+        -int eps_eff grad(Phi).grad(lam)  +  w^2 int chi Phi lam  =  -int rho lam
+
+    and the boundary term int eps_eff dPhi/dn lam dS is where the terminal
+    current enters: with eps_eff ~ -j sigma/w, eps_eff dPhi/dn ~ (j/w) J.n, so
+    injecting I puts (j/w) I on the terminal's row.
+    """
+    Nn = len(nodes)
+    K = np.zeros((Nn, Nn), dtype=complex)      # the (2) operator
+    for t, mat in zip(tets, mats):
+        g, V = tet_geometry(nodes, t)
+        if mat == CONDUCTOR:
+            eps = EPS0 - 1j * SIGMA / omega
+        else:
+            eps = EPS0 * EPS_R
+        chi = alpha * MU0 * eps ** 2
+        mass = lambda i, j: V / 10.0 if i == j else V / 20.0
+        for i in range(4):
+            for j in range(4):
+                K[t[i], t[j]] += (-eps * V * np.dot(g[i], g[j])
+                                  + omega ** 2 * chi * mass(i, j))
+
+    edges, _ = build_edges(tets)
+    bedges = boundary_edges(nodes, tets, edges)
+    bnodes = set(v for k in bedges for v in edges[k])
+    _, tnodes = interior_terminal(nodes, tets, mats)
+
+    tset = set(tnodes)
+    free_n = [i for i in range(Nn) if i not in bnodes and i not in tset]
+    nf = len(free_n)
+    P = np.zeros((Nn, nf + 1))
+    for j, n in enumerate(free_n):
+        P[n, j] = 1.0
+    for n in tnodes:
+        P[n, nf] = 1.0
+
+    M = P.T @ K @ P
+    b = np.zeros(nf + 1, dtype=complex)
+    b[nf] = 1j * I_DRIVE / omega
+
+    asym = np.abs(M - M.T).max() / np.abs(M).max()
+    x = np.linalg.solve(M, b)
+    return x[nf], nf + 1, asym
+
+
+def milestone3(nodes, tets, mats, omega, r_exact):
+    print("\n" + "=" * 72)
+    print("MILESTONE 3 -- Chew's decoupled Phi equation, same terminal")
+    print("=" * 72)
+    print("    %-10s %-34s %-11s %s"
+          % ("tree", "terminal Phi (V)", "vs base", "asym"))
+    print("    " + "-" * 70)
+    base = None
+    for label, seed in (("base", None), ("permA", 12345), ("permB", 777)):
+        phi, nP, asym = solve_chew(nodes, tets, mats, omega, seed)
+        rel = 0.0 if base is None else abs(phi - base) / abs(base)
+        if base is None:
+            base = phi
+        print("    %-10s %+.9e %+.9ej  %-11.3e %.1e"
+              % (label, phi.real, phi.imag, rel, asym))
+    print("\n    %d Phi unknowns, no A and no tree in this equation at all,"
+          % nP)
+    print("    so the tree-invariance above is exact by construction.")
+    print("\n    MAGNITUDE CHECK -- the only thing that decides whether it means")
+    print("    anything.  exact R = %.4f uOhm" % (r_exact * 1e6))
+    print("    Chew |Phi|/I = %.6e Ohm,  Re = %.4e,  Im = %.4e"
+          % (abs(base), base.real, base.imag))
+    print("    ratio to exact R: %.4e" % (abs(base) / r_exact))
+
+    # alpha is Chew's free parameter; he recommends 1. Does the answer depend
+    # on it? It must not, if Phi is a physical potential.
+    print("\n    dependence on Chew's free parameter alpha (he recommends 1):")
+    print("    %-12s %-20s %s" % ("alpha", "|Phi| (V)", "vs alpha=1"))
+    ref = None
+    for al in (1.0, 1e-3, 1e3):
+        phi, _, _ = solve_chew(nodes, tets, mats, omega, None, alpha=al)
+        if ref is None:
+            ref = abs(phi)
+        print("    %-12.0e %-20.9e %.3e"
+              % (al, abs(phi), abs(abs(phi) - ref) / ref))
+
+
+
+
+# ------------------------------------------- Phi as a post-process of E ----
+def solve_phi_from_E(nodes, tets, mats, omega, seed):
+    """Stysch 3.1 / 6.3: solve the FIELD first, then Phi from its own BVP.
+
+        int eps grad(Phi).grad(lam)  =  - int eps E . grad(lam)
+
+    i.e. Phi's source is div(eps E), their (6.25) with the g term folded into E.
+
+    WHY THIS SHOULD BE TREE-INDEPENDENT, AND IS THE POINT OF THE TEST.
+    E is gauge invariant -- 08_MixedPort_Interior's control measures it at
+    1e-11 for a boundary port, and theory says so for any port. If Phi is
+    determined by its OWN boundary value problem whose only input is E, then
+    Phi inherits E's invariance no matter how the tree was chosen. Phi stops
+    being a tree artefact and becomes a derived field.
+
+    This is the third route to a unique Phi in GAUGE_CHOICE.md: Chew via chi,
+    Ostrowski & Hiptmair via the EQS gauge, Stysch via the Lorenz PDE. It is
+    also what milestone 3's alpha -> 0 limit degenerated into, except that
+    milestone 3 had no source and therefore no reactance.
+
+    Step 1 is still the ordinary tree-cotree solve, so the tree is still
+    permuted; what is tested is whether the ANSWER survives it.
+    """
+    # --- step 1: the tree-cotree solve, same as milestone 1 -----------------
+    edges, K, C, G = assemble_aphi(nodes, tets, mats, omega)
+    Ne, Nn = len(edges), len(nodes)
+    bedges = boundary_edges(nodes, tets, edges)
+    bnodes = set(v for k in bedges for v in edges[k])
+    _, tnodes = interior_terminal(nodes, tets, mats)
+    tree = set(spanning_tree(nodes, edges, bedges, seed))
+    ke = np.array([k for k in range(Ne)
+                   if k not in tree and k not in set(bedges)])
+
+    tset = set(tnodes)
+    free_n = [i for i in range(Nn) if i not in bnodes and i not in tset]
+    nf = len(free_n)
+    P = np.zeros((Nn, nf + 1))
+    for j, n in enumerate(free_n):
+        P[n, j] = 1.0
+    for n in tnodes:
+        P[n, nf] = 1.0
+
+    jw = 1j * omega
+    Kuu = K[np.ix_(ke, ke)]
+    Cu = C[np.ix_(ke, np.arange(Nn))] @ P
+    M1 = np.block([[Kuu, Cu], [Cu.T, (P.T @ G @ P) / jw]])
+    b1 = np.zeros(M1.shape[0], dtype=complex)
+    b1[len(ke) + nf] = I_DRIVE / jw
+    x1 = np.linalg.solve(M1, b1)
+
+    a_full = np.zeros(Ne, dtype=complex)
+    a_full[ke] = x1[:len(ke)]
+    phi1 = P @ x1[len(ke):]
+
+    # --- step 2: E per tet, which is gauge invariant ------------------------
+    eidx = {e: k for k, e in enumerate(edges)}
+    Kp = np.zeros((Nn, Nn), dtype=complex)
+    rhs = np.zeros(Nn, dtype=complex)
+    for t, mat in zip(tets, mats):
+        g, V = tet_geometry(nodes, t)
+        eps = (EPS0 - 1j * SIGMA / omega) if mat == CONDUCTOR else EPS0 * EPS_R
+        # A and grad(Phi) at the tet centroid, so E = -jw A - grad(Phi).
+        Avec = np.zeros(3, dtype=complex)
+        for m, (am, bm) in enumerate(LOC_EDGES):
+            na, nb = t[am], t[bm]
+            k = eidx[(min(na, nb), max(na, nb))]
+            s = 1.0 if na < nb else -1.0
+            # Whitney-1 at the centroid: lam = 1/4 each.
+            Avec += s * a_full[k] * 0.25 * (g[bm] - g[am])
+        gradphi = sum(phi1[t[i]] * g[i] for i in range(4))
+        E = -jw * Avec - gradphi
+        for i in range(4):
+            for j in range(4):
+                Kp[t[i], t[j]] += eps * V * np.dot(g[i], g[j])
+            rhs[t[i]] += -eps * V * np.dot(E, g[i])
+
+    Mp = P.T @ Kp @ P
+    bp = P.T @ rhs
+    xp = np.linalg.solve(Mp, bp)
+    return xp[nf], x1[len(ke) + nf]
+
+
+def milestone4(nodes, tets, mats, omega, r_exact):
+    print("\n" + "=" * 72)
+    print("MILESTONE 4 -- Phi as its OWN BVP driven by E (Stysch 3.1)")
+    print("=" * 72)
+    print("    %-10s %-30s %-11s %-30s %s"
+          % ("tree", "Phi from its own BVP", "vs base", "Phi from the A-Phi solve",
+             "vs base"))
+    print("    " + "-" * 104)
+    b2 = b1 = None
+    for label, seed in (("base", None), ("permA", 12345), ("permB", 777)):
+        p2, p1 = solve_phi_from_E(nodes, tets, mats, omega, seed)
+        r2 = 0.0 if b2 is None else abs(p2 - b2) / abs(b2)
+        r1 = 0.0 if b1 is None else abs(p1 - b1) / abs(b1)
+        if b2 is None:
+            b2, b1 = p2, p1
+        print("    %-10s %+.6e%+.6ej  %-11.3e %+.6e%+.6ej  %.3e"
+              % (label, p2.real, p2.imag, r2, p1.real, p1.imag, r1))
+    print("\n    left  = Phi solved from div(eps grad Phi) = div(eps E)")
+    print("    right = Phi read straight out of the gauged A-Phi system")
+    print("            (milestone 1, which moves 3.8 %)")
+    print("\n    R = %.6f uOhm against exact %.6f  (%.3f %%)"
+          % (b2.real * 1e6, r_exact * 1e6,
+             100.0 * abs(b2.real - r_exact) / r_exact))
+    print("    X = %.6e Ohm   ->   L = %.4f nH"
+          % (b2.imag, b2.imag / omega * 1e9))
 
 
 if __name__ == "__main__":
