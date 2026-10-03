@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------
+# 03_Cylinder_1A_50Hz -- the SAME conductor as case 02, driven by a CURRENT.
+#
+#     ../run_case.bat cylinder_1a_50hz.aphi        (from this folder)
+#
+# WHY THIS CASE EXISTS
+#
+# Case 02 drives the rod with 1 V and reads the current out. This one drives
+# 1 A and reads the voltage out -- the dual problem, and the first
+# current-driven case this project has solved. The port machinery for it has
+# existed since the DOF map was written (dof_map.cpp gives a current port an
+# unknown V instead of a fixed one; assembly.cpp scatters the drive into the
+# port's current-balance row) but nothing had ever exercised it.
+#
+# It answers two questions that a voltage-driven case cannot:
+#
+#  1. PORT CURRENT SELF-CONSISTENCY (SOLVER_PLAN.md Sec. 8, item 7). Inject
+#     1 A at the top cap; exactly 1 A must be collected at the bottom. Charge
+#     does not accumulate in a conductor, so any other answer means current is
+#     being created or destroyed somewhere in the formulation.
+#
+#  2. DOES THE DUAL AGREE? R and L are properties of the geometry and the
+#     material, not of how it is driven. The problem is linear, so driving 1 A
+#     must give the same Z as driving 1 V:
+#
+#         case 02   V = 1 V  ->  I = 10206 A     Z = 9.796995e-05 + j7.09e-06
+#         case 03   I = 1 A  ->  V = 9.797e-05 V   the SAME Z
+#
+#     The expected terminal voltage is tiny -- 98 microvolts -- because the rod
+#     is 98 micro-ohms. That is not a red flag, it is the same impedance read
+#     from the other side, and it is a genuine test of the scaling: a
+#     formulation that quietly loses a factor somewhere will not reproduce
+#     case 02's Z from the dual drive.
+#
+# THE MESH IS CASE 02's, referenced rather than copied. "Exactly the same mesh"
+# is the point of the comparison, and a copy is a thing that can drift; it also
+# keeps 4 MB out of the repository twice. cylinder.msh is Netgen-optimised --
+# see ../02_Ansys_Cylinder_50Hz/cylinder.geo for how it is built and why.
+#
+# GEOMETRY: a = 1.5 mm, L = 40 mm, box 40 mm, a 40-gon, 18994 nodes.
+# A_poly = 7.0635 mm2, R_dc = L/(sigma*A_poly) = 9.7969e-05 ohm.
+# a/delta = 0.1605 at 50 Hz, so there is no skin effect to resolve.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = ../02_Ansys_Cylinder_50Hz/cylinder.msh
+length_unit = mm
+
+[output]
+directory   = output_control03_base
+
+[analysis]
+type        = frequency
+frequencies = 50                           # Hz
+formulation = full_wave
+
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire
+sigma       = 5.8e7                        # copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+# The drive. A current port does NOT fix Phi on its surface: the terminal
+# potential is an unknown the solve returns, and the port's row is the
+# terminal's current balance with the 1 A on the right-hand side.
+[port P1]
+type        = boundary_current
+surface     = wire_top
+current     = 1.0                          # A
+
+# Still needed, and not only as the other terminal: with both ports current
+# driven, Phi would be determined only up to a constant and the parser refuses
+# the file. This is the reference that pins it.
+[port P2]
+type        = boundary_voltage
+surface     = wire_bottom
+voltage     = 0.0                          # V, the reference
+
+[solver]
+conditioning = row_scaled

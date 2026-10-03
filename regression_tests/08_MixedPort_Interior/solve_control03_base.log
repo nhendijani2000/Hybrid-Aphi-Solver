@@ -1,0 +1,42 @@
+output dir    output_control03_base
+edges         121538 total = 101202 free + 18320 tree + 2016 Dirichlet
+gauge         18321 groups (674 boundary nodes as one) wants 18320 interior tree edges, has 18320   complete
+A-Phi solver 0.0.1-dev -- solve_mesh
+
+input         control03_base.aphi
+mesh          ../02_Ansys_Cylinder_50Hz/cylinder.msh   101873 tets
+backend       internal   (this project's LDL^T)
+conditioning  row_scaled   (symmetric, upper triangle stored)
+unknowns      240990   5105581 stored nonzeros
+
+ordering      amd   nnz(L) = 183545250   3500.85 MB   [3631.32 ms]
+
+     frequency   resid plain   resid equil  backward err   d max/min      min |D|      max |D|     max |L|  factor ms
+         50 Hz            --   1.57471e-09    4.1753e-21 4.83333e+12    0.0023828            1     3.73521     367797
+                wrote output_control03_base/potential.out   140532 nodes, 16099 KB, 27.2694 ms
+                fields A,B,H,E at 140532 nodes in 140.553 ms   45200 on a material interface
+                wrote output_control03_base/potential.vtk   25855 KB, 44.8954 ms   (Phi)
+                wrote output_control03_base/A_field.out / .vtk   28806 + 38319 KB, 141.365 ms
+                wrote output_control03_base/B_field.out / .vtk   28823 + 51971 KB, 134.075 ms
+                wrote output_control03_base/H_field.out / .vtk   26782 + 49316 KB, 134.003 ms
+                wrote output_control03_base/E_field.out / .vtk   28821 + 51820 KB, 107.849 ms
+                wrote output_control03_base/J_field.out / .vtk   21897 + 37167 KB, 86.9094 ms
+
+timing                     seconds   percent
+  matrix assembly             0.35     0.09 %
+  factorization             367.80    98.29 %
+  triangular solve            0.44     0.12 %
+  field computation           0.14     0.04 %
+  writing fields              0.68     0.18 %
+  mesh, dofs, other           4.78     1.28 %
+  TOTAL                     374.19   100.00 %
+
+  the solve ran ONCE, equilibrated. Pass --compare-plain to also solve
+  it unequilibrated and compare residuals -- that is a second
+  factorization and roughly doubles the runtime.
+
+                wrote output_control03_base/run_summary.txt
+
+Nothing is EXTRACTED from these solutions yet: no currents, voltages, R or
+L come out of this. The residual says the linear system was solved; whether
+the physics is right is the DC milestone, step 9 of docs/SOLVER_PLAN.md.

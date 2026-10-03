@@ -423,6 +423,7 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
             // turned a sign flip into a fake gauge effect.
             const int f0 = bp.surface.faces.front();
             const bool interior_terminal = !mesh.is_boundary_face(f0);
+            bp.interior_terminal = interior_terminal;
 
             if (interior_terminal) {
                 // One normal has to serve the whole surface, so it must be

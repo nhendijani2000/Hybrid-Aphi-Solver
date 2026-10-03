@@ -116,11 +116,55 @@ field singular there and the gap capacitance mesh-dependent. A singular field ha
 no determinate discrete value, and the tree selects among the possibilities. That
 is consistent with the sharp localization but is **not proven here**.
 
-**The remaining control is not yet run.** Case 07 establishes boundary-port
-invariance on *its* geometry; the same permutation sweep on case 03 — this wire,
-both caps on the boundary — would show it on *this* geometry and rule out
-anything peculiar to the stub-rod mesh. That is two more solves, about ten
-minutes.
+## The control, and it is decisive
+
+```bash
+pvpython measure_gauge.py control
+```
+
+The same wire, the same 1 A drive, the **same permutation seeds**, and the same
+measurement script — with both caps on the outer boundary. That is case 03, run
+three times through this harness. If the 77 % were an artefact of the script,
+the matching, or the stub-rod mesh, it would appear here too.
+
+| | R (µΩ) | L (nH) | ΔR | ΔL |
+|---|---|---|---|---|
+| base | 97.969950 | 22.595612 | — | — |
+| permA | 97.969950 | 22.595612 | 4.2e‑12 | 9.9e‑12 |
+| permB | 97.969950 | 22.595612 | 6.5e‑12 | 1.3e‑11 |
+
+Identical to ten significant figures, and `Z = 9.796995e‑05 + j7.0986e‑06`
+reproduces case 02's published impedance exactly — so the harness is also
+measuring the right physics, not merely measuring it consistently.
+
+| field | base→permA | base→permB |
+|---|---|---|
+| E | 9.7e‑12 | 1.0e‑11 |
+| B | 3.9e‑11 | 3.6e‑11 |
+| H | 3.9e‑11 | 3.6e‑11 |
+| J | 1.5e‑11 | 1.7e‑11 |
+
+And `J` by band: 7e‑12, 1.3e‑11, 1.5e‑11, 1.5e‑11 — **flat**, with none of the
+localization the mixed port shows.
+
+**The gauge really did change in the control.** `Φ` moves 0.79–0.95 % and `A`
+moves 66–100 %, comparable to the mixed-port run. So the three spanning trees are
+genuinely different in both cases; the only difference is whether the
+**observables** notice.
+
+### The two side by side
+
+| | boundary ports (control) | interior mixed port | ratio |
+|---|---|---|---|
+| terminal `L` | 9.9e‑12 | **3.1e‑02** | **3e9×** |
+| `J` | 1.5e‑11 | **7.7e‑01** | **5e10×** |
+| `Φ` moves (the gauge changing) | 7.9e‑03 | 1.8e‑02 | ~2× |
+| `A` moves | 1.0e+00 | 6.4e‑01 | ~1× |
+
+The gauge transformation is the same size in both. The response to it differs by
+ten orders of magnitude, and the only thing changed is **where the port sits**.
+
+That closes the alternative explanations. The 77 % is the solver's answer.
 
 **Nothing here is asserted as a regression yet** beyond the invariants:
 `expected.txt` pins the single-valuedness of the port Φ and the DC resistance,

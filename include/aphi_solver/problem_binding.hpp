@@ -79,6 +79,22 @@ struct BoundPort {
     /// arbitrary -- though mesh-stable -- sign.
     bool direction_from_hint = false;
 
+    /// A non-internal (single-Phi) terminal whose faces all lie INSIDE the
+    /// mesh, with a conductor on one side and an insulator on the other -- the
+    /// mixed-material port of `regression_tests/08_MixedPort_Interior`.
+    ///
+    /// It changes what `direction` MEANS, which is why it is recorded rather
+    /// than re-derived by whoever reports it. On the outer boundary there is
+    /// one adjacent tet, so `d` is the inward normal and positive current
+    /// enters the domain. Here there are two, "inward" picks out nothing, and
+    /// the convention becomes **positive current enters the conductor**: `d`
+    /// is the normal pointing from the insulator side into the conductor.
+    ///
+    /// Always false for an internal cut, which has a conductor on both sides
+    /// and takes its direction from `current_direction` or from
+    /// `canonical_orientation` instead.
+    bool interior_terminal = false;
+
     /// Internal ports only, parallel to `surface.faces`: which adjacent tet
     /// of each cut face lies on the plus side (the side `direction` points
     /// into). -1 throughout for a boundary port, which has only one side.

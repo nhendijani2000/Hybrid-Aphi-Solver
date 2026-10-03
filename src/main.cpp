@@ -171,7 +171,15 @@ void print_summary(const std::string& path, const ParseResult& r, const Mesh& me
 
         std::cout << "        d = (" << tidy(bp.direction.x) << ", " << tidy(bp.direction.y)
                   << ", " << tidy(bp.direction.z) << ")  ";
-        if (!bp.is_internal()) {
+        if (bp.interior_terminal) {
+            // NOT the inward normal: this face is inside the mesh, so there is
+            // a tet on each side and "inward" distinguishes nothing. The
+            // convention is positive current entering the CONDUCTOR, and
+            // saying "inward normal" here would misreport which way I flows.
+            std::cout << "[into the conductor -- positive current enters there;\n"
+                      << "             this terminal is INTERIOR, with an insulator on "
+                         "the other side]\n";
+        } else if (!bp.is_internal()) {
             std::cout << "[inward normal -- positive current enters here]\n";
         } else if (bp.direction_from_hint) {
             std::cout << "[from current_direction]\n";

@@ -47,11 +47,34 @@ import sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNS = ("output", "output_permA", "output_permB")
 OMEGA = 2.0 * math.pi * 50.0
 I_DRIVE = 1.0
-Z_PORT = 0.028          # m, the interior cap
-A_WIRE = 0.0015         # m, wire radius
+A_WIRE = 0.0015         # m, wire radius -- the same in both cases
+
+# Two measurements, the same harness. THE CONTROL IS THE POINT: without it, a
+# 77 % field change could be this script's error rather than the solver's
+# answer, and nothing in the mixed-port numbers alone distinguishes the two.
+# 07_GaugeInvariance establishes boundary-port invariance on ITS mesh; 'control'
+# establishes it on THIS one, with the same wire, the same drive and the same
+# permutation seeds -- so the only difference left is where the port sits.
+CASES = {
+    "mixed": dict(
+        runs=("output", "output_permA", "output_permB"),
+        z_port=0.028,
+        title="08_MixedPort_Interior -- a single-potential port on an "
+              "INTERIOR conductor/air face"),
+    "control": dict(
+        runs=("output_control03_base", "output_control03_permA",
+              "output_control03_permB"),
+        z_port=0.040,
+        title="CONTROL (case 03) -- the same wire with BOTH caps on the outer "
+              "boundary"),
+}
+MODE = sys.argv[1] if len(sys.argv) > 1 else "mixed"
+if MODE not in CASES:
+    raise SystemExit("usage: measure_gauge.py [mixed|control]")
+RUNS = CASES[MODE]["runs"]
+Z_PORT = CASES[MODE]["z_port"]
 
 
 def load(run, fname, ncomp):
@@ -115,12 +138,14 @@ def rel_change(va, vb):
 
 
 def main():
-    print("08_MixedPort_Interior -- gauge dependence of a mixed interior port\n")
+    print("%s\n" % CASES[MODE]["title"])
     print("solves")
     for r in RUNS:
         print("    %-14s backward error %.3e" % (r, backward_error(r)))
 
-    print("\nthe interior terminal: one Phi unknown on a conductor/air face")
+    print("\nthe terminal: one Phi unknown%s"
+          % (" on a conductor/air face, inside the domain" if MODE == "mixed"
+             else " on the outer boundary"))
     print("    %-14s %-34s %-12s %s"
           % ("run", "Phi (V)", "spread", "nodes"))
     phis = {}
@@ -138,7 +163,7 @@ def main():
     print("\nterminal impedance, Z = Phi / I with I = %g A" % I_DRIVE)
     print("    %-14s %-14s %-14s %-11s %s"
           % ("run", "R (uOhm)", "L (nH)", "dR vs base", "dL vs base"))
-    base = phis["output"] / I_DRIVE
+    base = phis[RUNS[0]] / I_DRIVE
     for r in RUNS:
         z = phis[r] / I_DRIVE
         dr = abs(z.real - base.real) / abs(base.real)
@@ -151,16 +176,16 @@ def main():
     for nm, fname in (("E", "E_field.out"), ("B", "B_field.out"),
                       ("H", "H_field.out"), ("J", "J_field.out")):
         row = []
-        for r in ("output_permA", "output_permB"):
-            _, va, vb = paired("output", r, fname, 3)
+        for r in RUNS[1:]:
+            _, va, vb = paired(RUNS[0], r, fname, 3)
             row.append(rel_change(va, vb))
         print("    %-10s %-14.3e %.3e" % (nm, row[0], row[1]))
 
     print("\npotentials: gauge DEPENDENT, so these are expected to move")
     for nm, fname, nc in (("Phi", "potential.out", 1), ("A", "A_field.out", 3)):
         row = []
-        for r in ("output_permA", "output_permB"):
-            _, va, vb = paired("output", r, fname, nc)
+        for r in RUNS[1:]:
+            _, va, vb = paired(RUNS[0], r, fname, nc)
             row.append(rel_change(va, vb))
         print("    %-10s %-14.3e %.3e" % (nm, row[0], row[1]))
 
@@ -173,7 +198,7 @@ def main():
     print("\nlocal J change by distance from the port face")
     print("    %-16s %-9s %-14s %s"
           % ("band", "nodes", "vs global max", "vs THIS band's max"))
-    xyz, va, vb = paired("output", "output_permA", "J_field.out", 3)
+    xyz, va, vb = paired(RUNS[0], RUNS[1], "J_field.out", 3)
     r_ax = np.sqrt(xyz[:, 0] ** 2 + xyz[:, 1] ** 2)
     dz = np.abs(xyz[:, 2] - Z_PORT)
     dist = np.where(r_ax <= A_WIRE, dz, np.sqrt(dz ** 2 + (r_ax - A_WIRE) ** 2))

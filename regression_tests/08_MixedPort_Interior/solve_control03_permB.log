@@ -1,0 +1,42 @@
+output dir    output_control03_permB
+edges         121538 total = 101202 free + 18320 tree + 2016 Dirichlet
+gauge         18321 groups (674 boundary nodes as one) wants 18320 interior tree edges, has 18320   complete
+A-Phi solver 0.0.1-dev -- solve_mesh
+
+input         control03_permB.aphi
+mesh          control03_permB.msh   101873 tets
+backend       internal   (this project's LDL^T)
+conditioning  row_scaled   (symmetric, upper triangle stored)
+unknowns      240990   5108097 stored nonzeros
+
+ordering      amd   nnz(L) = 194596774   3711.64 MB   [3987.95 ms]
+
+     frequency   resid plain   resid equil  backward err   d max/min      min |D|      max |D|     max |L|  factor ms
+         50 Hz            --   1.78571e-09   4.73479e-21 4.83333e+12   0.00195964            1     6.62094     435458
+                wrote output_control03_permB/potential.out   140532 nodes, 16098 KB, 20.6749 ms
+                fields A,B,H,E at 140532 nodes in 109.388 ms   45200 on a material interface
+                wrote output_control03_permB/potential.vtk   25854 KB, 37.1431 ms   (Phi)
+                wrote output_control03_permB/A_field.out / .vtk   28802 + 38313 KB, 93.979 ms
+                wrote output_control03_permB/B_field.out / .vtk   28822 + 51972 KB, 112.539 ms
+                wrote output_control03_permB/H_field.out / .vtk   26782 + 49317 KB, 109.46 ms
+                wrote output_control03_permB/E_field.out / .vtk   28821 + 51820 KB, 105.343 ms
+                wrote output_control03_permB/J_field.out / .vtk   21897 + 37167 KB, 87.2794 ms
+
+timing                     seconds   percent
+  matrix assembly             0.35     0.08 %
+  factorization             435.46    98.48 %
+  triangular solve            0.50     0.11 %
+  field computation           0.11     0.02 %
+  writing fields              0.57     0.13 %
+  mesh, dofs, other           5.19     1.17 %
+  TOTAL                     442.17   100.00 %
+
+  the solve ran ONCE, equilibrated. Pass --compare-plain to also solve
+  it unequilibrated and compare residuals -- that is a second
+  factorization and roughly doubles the runtime.
+
+                wrote output_control03_permB/run_summary.txt
+
+Nothing is EXTRACTED from these solutions yet: no currents, voltages, R or
+L come out of this. The residual says the linear system was solved; whether
+the physics is right is the DC milestone, step 9 of docs/SOLVER_PLAN.md.

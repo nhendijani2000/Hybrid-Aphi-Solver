@@ -10,3 +10,8 @@ output_perm*/
 #     permute('stub_rod.msh', 'stub_rod_permA.msh', 12345)
 #     permute('stub_rod.msh', 'stub_rod_permB.msh', 777)
 stub_rod_perm*.msh
+
+# The case 03 control: three more solves, ~307 MB of output each, and two more
+# permuted copies of case 02's mesh. All derived -- see README.md "The control".
+output_control03_*/
+control03_perm*.msh
