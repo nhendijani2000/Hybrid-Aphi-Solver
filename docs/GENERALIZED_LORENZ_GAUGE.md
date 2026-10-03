@@ -551,6 +551,16 @@ constant `χ`. Measured per element, `K_NE` is no longer a scalar multiple of
 options are a per-element scaling that is still a congruence, an unsymmetric
 system, or Chew's SAI route.
 
+> **Qualified by `GAUGE_CHOICE.md` §11.4, added after this section.**
+> Balian et al. (2023) give the congruence explicitly — scale the
+> equation *and* the unknown by the same `(σ + jωε)^(−1/2)`, so symmetry
+> survives. It does **not** fully rescue us: `ε/χ` sits inside the
+> element integral, so a diagonal congruence reproduces
+> `K_NE = −c·K_ENᵀ` for every node interior to one material and **fails
+> at material-interface nodes** — exactly where a mixed port lives. The
+> literature's answer is to assign interface DOFs to the conductor block
+> and scale blockwise, rather than to seek exactness.
+
 ### What §7 got right, and what it got wrong
 
 **Right:** with constant `χ` the block system is exactly complex-symmetric —
@@ -576,6 +586,6 @@ method.
 
 | | |
 |---|---|
-| **How to handle `σ`** | `ε_eff` is measured to wreck conditioning below ~1 GHz. To evaluate: keep `σ` explicit rather than folded into `ε`; a different `χ` inside conductors; or accept it, given THz is the target. **This is now the main obstacle, and nothing should be implemented before it is settled.** |
+| **How to handle `σ`** | `ε_eff` is measured to wreck conditioning below ~1 GHz. **This is a known, published phenomenon with published remedies** — see `GAUGE_CHOICE.md` §11, added after this section was written. Balian et al. (2023) name the same `σ/ωε` mechanism and fix it by scaling equations *and* unknowns analytically before assembly; Herles et al. (2025) use **a different gauge condition inside conductors than outside**, which is the "different `χ` inside conductors" line below, built and measured. Not a blocker. |
 | **Symmetry with per-element `χ`** | As above. Symmetric or well-conditioned, not both, as currently derived. |
 | **The surface term of (24)** | Still omitted in the spike. Must vanish under our boundary conditions or be carried; carrying it may break symmetry independently of `χ`. |

@@ -377,6 +377,115 @@ Coulomb gauge               ∇·A = 0
 </tbody></table></div>
 <p>Also: <code>AphiFreqDomainTreeCotree_SeungJFlee2003.pdf</code> is mis-filed — it is Lee, Lee &amp; Lee, <em>Hierarchical Vector Finite Elements for Analyzing Waveguiding Structures</em>, IEEE T‑MTT <strong>51</strong>(8) 2003, a 2‑D waveguide eigenanalysis paper that says nothing about Φ&#x27;s non-uniqueness.</p>
 <hr>
+<h2>11. The Darmstadt / ABB / Siemens line — the literature does settle the spike&#x27;s finding 2</h2>
+<p>Added after <code>GENERALIZED_LORENZ_GAUGE.md</code> §11 reported that <code>ε_eff = ε − jσ/ω</code> wrecks conditioning below ~1 GHz and concluded <strong>&quot;this is now the main obstacle and nothing should be implemented before it is settled.&quot;</strong> That conclusion was reached without checking the roadmap&#x27;s own reference list, and it is wrong in its premise: the phenomenon is named, published, and has remedies. It is a <em>known</em> obstacle, not a new one.</p>
+<p>Four papers, one continuous research line (TU Darmstadt + ABB + Siemens Digital Industries), none of which appeared in §8&#x27;s ranking.</p>
+<h3>11.1 Balian et al. (2023) — our finding 2, by name, with a remedy</h3>
+<blockquote><p><em>&quot;When simulating resistive-capacitive circuits or electro-quasistatic problems <strong>where conductors and insulators coexist</strong>, one observes that large time steps or <strong>low frequencies lead to numerical instabilities, which are related to the condition number of the system matrix</strong>. Here, we propose several stable formulations <strong>by scaling the equation systems</strong>.&quot;</em></p></blockquote>
+<p>That is the spike&#x27;s finding 2 restated as a paper&#x27;s abstract, and the mechanism they name is the same one: the <code>σ/ωε</code> ratio between conducting and insulating regions.</p>
+<p><strong>The remedy is a scaling applied analytically, before assembly.</strong> Multiply equation block <code>k</code> by <code>a_k</code> and substitute the unknown <code>ψ_k = b_k⁻¹ φ_k</code>:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td>(i) symmetric</td><td><code>a₂ = b₂ = ω^(−1/2)</code>, <code>a₁ = b₁ = 1</code></td></tr>
+<tr><td>(ii) non-symmetric</td><td><code>a₂ = ω⁻¹</code>, rest 1</td></tr>
+<tr><td>(iii) <strong>symmetric with material</strong></td><td><code>a₁ = b₁ = (σ₁ + jωε₁)^(−1/2)</code>, <code>a₂ = b₂ = (ε₂ jω)^(−1/2)</code></td></tr>
+<tr><td>(iv) non-symmetric with material</td><td><code>a₁ = (σ₁ + jωε₁)⁻¹</code>, <code>a₂ = (ε₂ jω)⁻¹</code>, <code>b = 1</code></td></tr>
+</tbody></table></div>
+<p>Three things in that table matter to us:</p>
+<ol><li>**<code>a_k = b_k</code> is a congruence** — it scales the equation <em>and</em> the unknown, so symmetry survives. The implementation spec&#x27;s §11 framed our choice as &quot;symmetric or well-conditioned, not both&quot;. Variants (i) and (iii) are both. §11.4 below is the qualification on how far that carries to our matrices.</li><li>**Variant (iii) scales by <code>(σ + jωε)^(−1/2)</code>** — exactly our <code>β</code>. The material combination the spike found fatal is the one they scale <em>by</em>.</li><li><strong>It must be done before assembly</strong>, symbolically: <em>&quot;the products of powers of ω must be determined before matrix assembly to avoid numerical errors or division by zero.&quot;</em> A post-assembly Jacobi preconditioner is variant (iv) applied too late (their §III, citing [17, §4.1]).</li></ol>
+<p>Measured: the unscaled RC system breaks down below 1e10 Hz; (i) and (iii) stay flat to 0 Hz, with (iii) better than (i) by <code>1/(2RC)</code> ≈ 5e11. Two caveats the authors state themselves — <strong>(i) destabilizes above 1e10 Hz</strong>, where the problem becomes essentially capacitive, and under (i)/(iii) **<code>φ</code> cannot be recovered at exactly ω = 0** because the unknown is the scaled one, <em>&quot;a natural consequence of the fact that it is not well-defined from the start.&quot;</em> Variants (ii)/(iv) keep the original unknowns and lose symmetry.</p>
+<p>This covers the <strong>Φ equation only.</strong></p>
+<h3>11.2 Herles et al. (2025) — the A equation, and it keeps tree–cotree</h3>
+<p><a href="https://arxiv.org/abs/2502.13588">arXiv:2502.13588</a>, IEEE Trans. Magn. The companion that stabilizes the other half; they say so outright — <em>&quot;Effective modifications are proposed in [14] to improve the condition number. The focus of our paper is the stabilization of (11)&quot;</em>, (11) being the curl–curl system.</p>
+<p>Their scheme is Ostrowski &amp; Hiptmair&#x27;s two-step (§11.3): solve an electro-quasistatic problem for <code>φ</code>, then use it as the source for <code>A</code>, with <strong>the EQS problem itself serving as the gauge condition</strong>. Taking <code>div</code> of the <code>A</code> equation and dividing by <code>iω</code> gives the implicit constraint</p>
+<pre><code>    div(κ A) = 0,          κ = σ + iωε                                  (17)</code></pre>
+<p>a <strong>generalized Coulomb gauge with complex conductivity</strong>. It degenerates in the insulator as <code>ω → 0</code>, so they split it by region:</p>
+<pre><code>    α div((σ + iωε) A) = 0      in Ω_C   (conductor)
+    β div(ε A)         = 0      in Ω_A   (insulator)                    (18)</code></pre>
+<p><strong>Each piece is frequency-independent in its own region.</strong> This is the structural option the spike never considered: <em>a different gauge condition inside conductors than outside</em>. Chew carries one <code>χ</code> everywhere, and the spec&#x27;s §11 listed &quot;a different <code>χ</code> inside conductors&quot; as a speculative line item — here it is, built and measured. Their weights are <code>α = 1 + ω</code> and <code>β = (1 + ω) max σ + σ_art max ε</code> with <code>σ_art = 1e−6</code>: <strong>the scaling carries the peak material magnitude</strong>, the same idea as Balian&#x27;s variant (iii).</p>
+<p>The discretization is the part worth copying. Build the weighted divergence matrix <code>(S_?)ᵢⱼ = ∫_? div(w_j) v_i dV</code>, take the tree–cotree split of the edge DOFs, then <strong>replace the redundant tree rows of the curl–curl system with the gauge-constraint rows</strong>:</p>
+<pre><code>    ⎡ W^(RR)   W^(RT) ⎤ ⎡ a^(R) ⎤   ⎡ j^(R)(u) ⎤
+    ⎣ S^(R)    S^(T)  ⎦ ⎣ a^(T) ⎦ = ⎣    0     ⎦                        (26)</code></pre>
+<p>They prove <code>W^(RR)</code> has full rank even at <code>ω = 0</code>, and the second row of the cotree system is automatically satisfied, so nothing is lost by the swap. The symmetric alternative is the Lagrange-multiplier saddle point (21), which they reject on size.</p>
+<p><strong>Tree–cotree is not discarded — it is what tells them which rows are redundant.</strong> That is a very different and much cheaper change than replacing the gauge: we already have a spanning tree.</p>
+<p>Measured, on a mesh of <strong>three conducting bars in a dielectric box</strong> with <code>φ = 0</code> and <code>φ = 1</code> on opposite faces:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>cond at f = 0</th>
+</tr></thead>
+<tbody>
+<tr><td>original</td><td><strong>singular</strong></td></tr>
+<tr><td>stabilized</td><td>4.87e5</td></tr>
+</tbody></table></div>
+<p>and on a copper planar coil (<code>σ = 6e7</code>), 1.9e9 against singular. The discrete gauge residual <code>‖S·a‖₂</code> stays below 1e−11 across the whole sweep and is 1.52e−12 at DC, against ~1e−2 unstabilized. Fig. 8 is the one to look at: the unstabilized <code>‖B‖</code> and <code>‖E‖</code> are <strong>plotted logarithmically because they reach 1e70 and 1e75</strong> — garbage of exactly the kind a mixed-material port produces.</p>
+<p>Two further details bear on our problem directly:</p>
+<ul><li><strong>Their DOF partition assigns interface nodes to the conductor.</strong> Index sets</li></ul>
+<p>(12)–(13): <code>I_v^(A)</code> is the nodes whose support does <em>not</em> intersect the conductor, and <code>I_v^(C)</code> is <em>everything else</em>, so a node on the conductor/dielectric interface is a conductor node. They do not try to make a per-element material factor behave — they partition, then scale blockwise.</p>
+<ul><li><strong>Their §V-D is close to our case 05.</strong> A thin dielectric slit inside a</li></ul>
+<p>conducting loop (<code>ε_r = 7.2e15</code>, acting as a lumped capacitor), with the current closing through the gap via <code>iωD_m</code>. A dielectric gap interior to a conductor, carrying current — structurally our internal cut — handled by the generalized gauge.</p>
+<h3>11.3 Ostrowski &amp; Hiptmair (2020/2021) — the origin</h3>
+<p>ETH SAM Research Report 2020-43, published as SIAM J. Sci. Comput. <strong>43</strong>(4) B1008–B1028 (2021). Introduces EQS-as-gauge-condition and the two-step procedure, with frequency-stable weak forms for both steps:</p>
+<blockquote><p><em>&quot;the electro-quasistatic fields can be corrected for magnetic/inductive phenomena at any frequency in a second step. The combined field from both steps is a solution of the full Maxwell&#x27;s equations… Electro-quasistatics serves as a gauge condition in this semi-decoupled procedure.&quot;</em></p></blockquote>
+<p>Structurally this is Chew&#x27;s move — an independent <code>Φ</code> equation, then an <code>A</code> equation taking <code>Φ</code> as a source — reached from the low-frequency side with a different gauge condition and no <code>χ</code>.</p>
+<h3>11.4 What transfers to Chew&#x27;s formulation, and what does not</h3>
+<p>Being careful here, because these papers stabilize the <strong>generalized Coulomb</strong> gauge, not Chew&#x27;s generalized Lorenz, and §8&#x27;s ranking must not be rewritten on a false equivalence.</p>
+<p><strong>Transfers directly:</strong></p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td>the diagnosis</td><td><code>σ/ωε</code> contrast as the mechanism is confirmed and published — not a bug in our spike. Herles §III-B states it in a line: <em>&quot;The ratio σ/ωε ≫ 1 in Ω_C increases this issue even further.&quot;</em></td></tr>
+<tr><td>the technique</td><td>analytic pre-assembly scaling by material-dependent powers of <code>ω</code> is formulation-independent, and applies to the §7 block system as written.</td></tr>
+<tr><td><code>a_k = b_k</code></td><td>a two-sided congruence keeps symmetry. The spike&#x27;s dichotomy was too quick.</td></tr>
+<tr><td>per-region gauge</td><td>a different gauge condition in conductor and insulator is a real, measured option, not speculation.</td></tr>
+<tr><td>partition, don&#x27;t diagonalize</td><td>assign interface DOFs to the conductor set and scale blockwise.</td></tr>
+</tbody></table></div>
+<p><strong>Does not transfer, and this is the honest limit:</strong></p>
+<ul><li>Our symmetry problem is <strong>not</strong> a block scaling.</li></ul>
+<p><code>K_NE[m,n] = −∫(ε/χ)∇λ_m·ω_n</code> against <code>K_EN[m,n] = ∫ε ω_m·∇λ_n</code>: the factor <code>ε/χ</code> sits <em>inside the element integral</em>. If it is constant per region, then for a node strictly interior to one region every element in its support shares the factor, and that row of <code>K_NE</code> is exactly <code>−c</code> times the matching row of <code>K_ENᵀ</code>. <strong>For a node on a material interface it is not</strong>, under any diagonal scaling. So a congruence repairs symmetry everywhere except at interface nodes — which is precisely where a mixed port lives. Balian and Herles sidestep this by assigning those nodes to one block, not by exactness.</p>
+<ul><li><strong>Neither paper addresses a port on a mixed-material face.</strong> Herles&#x27;s dielectric</li></ul>
+<p>slit is an interior gap with no potential boundary condition on it. §11.2&#x27;s evidence is suggestive for case 05, not an answer for the coax via.</p>
+<ul><li>Their target is DC-to-MHz industrial devices. **Nothing here is validated at</li></ul>
+<p>THz**, which is the stated end goal.</p>
+<h3>11.5 What this changes</h3>
+<ol><li>**<code>GENERALIZED_LORENZ_GAUGE.md</code> §11 is corrected** — the <code>σ</code> question is a known problem with published remedies, not a blocker on implementation.</li><li><strong>A cheaper route exists and belongs in §8&#x27;s ranking</strong>: keep our spanning tree, add the weighted divergence matrix <code>S</code>, swap the tree rows per Herles (26). That is incremental on the solver we have, where Chew is a rewrite. It gives up symmetry as (26) is written, and it is a Coulomb-family gauge, so it inherits the <code>n̂·A</code> continuity problem of §6 — the reason we went looking in the first place. <strong>It is not a substitute for the mixed-port fix; it is a substitute for the low-frequency-conditioning half of the argument</strong>, and those two motivations should stop being bundled.</li><li><strong>Reference code exists</strong>: Herles, <em>Low Frequency Stable Full Maxwell</em>, <a href="https://doi.org/10.5281/zenodo.14810885">doi:10.5281/zenodo.14810885</a> — GeoPDEs / Octave. Worth reading before writing our own <code>S</code>.</li></ol>
+<h3>11.6 Still not obtained</h3>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>why it matters</th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Eller, Reitzinger, Schöps &amp; Zaglmayr (2017)</strong>, SIAM J. Sci. Comput. <strong>39</strong>(4) B703–B731, <a href="https://doi.org/10.1137/16M1077817">doi:10.1137/16M1077817</a></td><td><em>&quot;monolithic, symmetric, low-frequency stable, broadband… no auxiliary variables… stable even if the frequency equals zero.&quot;</em> Symmetric <strong>and</strong> stable <strong>and</strong> monolithic answers all three of the spike&#x27;s complaints at once. Paywalled; no preprint found.</td></tr>
+<tr><td><strong>Jochum, Farle &amp; Dyczij-Edlinger (2015)</strong>, IEEE Trans. Magn. <strong>51</strong>(3) 7402304, and the 2016 SCEE companion <em>A symmetric and low-frequency stable potential formulation</em></td><td>Previously flagged, still unread.</td></tr>
+<tr><td><strong>Demerdash &amp; Wang (1990)</strong></td><td>Coulomb-gauge breakdown at permeability contrast. Still unread.</td></tr>
+<tr><td><strong>Zhu &amp; Jiao (2010)</strong>, IEEE Trans. Adv. Packag. <strong>33</strong>(4) 1043–1050</td><td><em>&quot;theoretically rigorous full-wave FEM solution of Maxwell&#x27;s equations from dc to high frequencies&quot;</em> — the reference both Darmstadt papers cite for the breakdown itself.</td></tr>
+<tr><td><strong>Manges &amp; Cendes (1995)</strong>, IEEE Trans. Magn. <strong>31</strong>(3) 1342–1347</td><td><em>A generalized tree-cotree gauge for magnetic field computation</em> — origin of the term Herles et al. use.</td></tr>
+<tr><td><strong>Hiptmair, Kramer &amp; Ostrowski (2008)</strong>, IEEE Trans. Magn. <strong>44</strong>(6) 682–685</td><td><em>A robust Maxwell formulation for all frequencies.</em></td></tr>
+<tr><td><strong>Chew&#x27;s [28] White &amp; Koning (2002)</strong> and <strong>[29] Dai, Chew &amp; Jiang (2013)</strong></td><td>Sources for the <code>Ḡ⁻¹</code> elimination. Still unread.</td></tr>
+</tbody></table></div>
+<h3>11.7 New in <code>APhi_Papers/</code></h3>
+<div class="tw"><table>
+<thead><tr>
+<th>file</th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><code>Balian2023_LowFreqStab_ConductorsInsulators.pdf</code></td><td>Balian, Merkel, Ostrowski, De Gersem &amp; Schöps, <a href="https://arxiv.org/abs/2302.00313">arXiv:2302.00313</a>, IEEE Trans. Dielectr. Electr. Insul. <strong>30</strong>(6), 2023. §11.1. **Downloaded under <code>DyczijEdlinger2023_…</code> and renamed** — the roadmap attributes it to Dyczij-Edlinger, who is not an author.</td></tr>
+<tr><td><code>TwoStep_GeneralizedTreeCotree_LowFreqStability_2025.pdf</code></td><td>Herles, Mally, Ostrowski, Schöps &amp; Merkel, <a href="https://arxiv.org/abs/2502.13588">arXiv:2502.13588</a>. §11.2.</td></tr>
+<tr><td><code>ETH2020_FreqStableFullMaxwell_EQSGauge.pdf</code></td><td>Ostrowski &amp; Hiptmair, ETH SAM 2020-43. §11.3.</td></tr>
+<tr><td><code>TwoStep_TimeDomain_Stabilized_2025.pdf</code></td><td><a href="https://arxiv.org/abs/2507.18235">arXiv:2507.18235</a>, same group, time-domain extension. Not relevant to a frequency-domain solver; filed for completeness.</td></tr>
+<tr><td><code>Clemens2022_DarwinTypeQuasistatic.pdf</code></td><td><a href="https://arxiv.org/abs/2204.06286">arXiv:2204.06286</a>, Darwin-type quasistatic formulations. Cited by both; unread.</td></tr>
+<tr><td><code>ShinFan2013_EigenvalueEngineering_OE21.pdf</code></td><td>Source of Chew&#x27;s <code>α &gt; 0</code> eigenvalue claim. Extracted, unread.</td></tr>
+</tbody></table></div>
+<hr>
 <h2>Bibliography</h2>
 <p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
 <div class="tw"><table>
