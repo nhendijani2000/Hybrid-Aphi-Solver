@@ -659,6 +659,60 @@ Coulomb gauge               ∇·A = 0
 <tr><td><strong>Kruskal (1956)</strong></td><td>the spanning-tree algorithm they use.</td></tr>
 </tbody></table></div>
 <hr>
+<h2>12. Zhao &amp; Fu&#x27;s Coulomb gauge — what Maxwell shipped, and why it half-worked</h2>
+<p>Three Zhao &amp; Fu papers, all IEEE Trans. Magn. <strong>53</strong>(6), June 2017, have been in <code>APhi_Papers/</code> throughout. Only the frequency-domain one had been read, and it is summarised in the bibliography in a single line. <strong>None of the three had been read for the mixed-material port question</strong>, which is the one that matters — these are the papers Maxwell&#x27;s mixed-material Coulomb gauge is built on.</p>
+<div class="tw"><table>
+<thead><tr>
+<th>file</th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><code>AphiFreqDomainCoulombgauge_yanpu2017.pdf</code></td><td><em>A New Stable Full-Wave Maxwell Solver for All Frequencies.</em> <code>χ</code> over the <strong>whole</strong> domain.</td></tr>
+<tr><td><code>AphiTdomainColoumbgauge_yanpu2017.pdf</code></td><td>time domain. <code>χ</code> in the <strong>non-conducting region only</strong>.</td></tr>
+<tr><td><code>AphiMstaticColoumbgauge_yanpu2017.pdf</code></td><td>magnetostatic. <code>χ</code> over the whole domain.</td></tr>
+</tbody></table></div>
+<h3>12.1 The formulation</h3>
+<p>A nodal **dummy scalar <code>χ</code>** imposes the Coulomb gauge on an edge-element <code>A</code>. Frequency domain:</p>
+<pre><code>    ∇×(ν∇×A) + (jωσ − ω²ε)A + (σ + jωε)∇ϕ − ∇χ  =  Js
+    −∇·[ (jωσ − ω²ε)A + (σ + jωε)∇ϕ ]           =  0
+    ∇·A + χ                                      =  0</code></pre>
+<p>giving a 3×3 block system in <code>(A, ϕ, χ)</code> with <code>K_Aχ = K_Aϕ = ∫N_i·∇N_j</code> and <code>K_χA = K_ϕA = ∫∇N_i·N_j</code>, i.e. **<code>χ</code> couples exactly like <code>ϕ</code> but with coefficient 1** instead of <code>(σ + jωε)</code>. The printed system is unsymmetric — the (2,1) block is <code>jω</code> times the transpose of the (1,2) — and the <code>−j/ω</code> factor in their text is the row scaling that symmetrises it. Same device as Balian&#x27;s variant (ii)/(iv) (§11.1).</p>
+<p><strong>Why a dummy scalar at all</strong> — their own statement of the obstacle, and it is the cleanest in the collection:</p>
+<blockquote><p><em>&quot;Since the divergence of an edge element basis function is zero within each mesh element, the use of the gauged formulation proposed in [4] and edge element for the MVP will result in the curl–curl equation.&quot;</em> <em>&quot;A piecewise divergence-free function may have a globally large weak divergence because of the jumps of its normal component at the interior faces between elements. Therefore, <strong>the global divergence of the MVP represented by edge element is not necessarily 0</strong>.&quot;</em></p></blockquote>
+<p>So the penalty method is unusable on Whitney-1 (this is the same <code>∇·ω_mn ≡ 0</code> fact that forces Chew&#x27;s intermediate variable <code>d</code>, §5 of <code>GENERALIZED_LORENZ_GAUGE.md</code>), and <code>χ</code> controls the <em>global weak</em> divergence instead.</p>
+<p>In the time-domain paper the gauge is imposed **only in <code>Ω_n</code>**, and the uniqueness argument is worth stating because §12.3 turns on it: take <code>div</code> of the first equation, find that <code>χ</code> satisfies <strong>Laplace&#x27;s equation</strong> in <code>Ω_n</code>, then impose **homogeneous Dirichlet <code>χ = 0</code> on <code>∂Ω_n</code>** — whence <code>χ ≡ 0</code>, and the second equation reduces to the Coulomb gauge.</p>
+<h3>12.2 Why it is a real improvement at a material interface</h3>
+<p>Their motivation is precisely our §6:</p>
+<blockquote><p>*&quot;since the nodal elements impose both tangential and normal continuity of <code>A</code>, which has tangential continuity only across material interfaces, it can produce <strong>large errors at material interfaces or re-entrant corners</strong> of problem domains.&quot;<em> </em>&quot;edge elements … allow <strong>necessary discontinuity in the normal component</strong> of the MVP.&quot;*</p></blockquote>
+<p>That is the whole point of the construction: keep the normal jump that Whitney-1 permits, and still gauge <code>A</code>. Against a <em>nodal</em> Coulomb gauge it is a genuine advance, which is consistent with your recollection that Maxwell&#x27;s Coulomb option &quot;was doing some improvement.&quot;</p>
+<h3>12.3 Why it would not fully work at a mixed-material port</h3>
+<p>Three reasons. The third is a fact about the papers; the first two are inference and should be read as such.</p>
+<p><strong>1. The gauge constraint is ε-blind.</strong> <code>χ</code> enforces <code>∇·A = 0</code> in a global weak sense. But the correct interface condition at an <code>ε</code> discontinuity is on <code>εA</code>, not <code>A</code> — Chew&#x27;s (26), <code>n̂·(ε₁A₁) = n̂·(ε₂A₂)</code> (§2.2, §6). Edge elements <em>permit</em> the normal jump; the Coulomb constraint carries no <code>ε</code> and therefore says nothing about <strong>how large the jump should be</strong>. Chew&#x27;s generalized gauge builds the ε-weighted condition into the PDE itself; Coulomb cannot, at any order of element. This is the principled reason to expect partial success, and it is the same conclusion §6.3.1 reached from Ansari.</p>
+<p>**2. The <code>χ ≡ 0</code> argument needs a boundary that an interior mixed port does not provide.** <code>χ ≡ 0</code> follows from Laplace in <code>Ω_n</code> <em>plus</em> <code>χ = 0</code> on all of <code>∂Ω_n</code>. A port sheet interior to the dielectric — the coax annulus of <code>COAX_PORT_ANALYSIS.md</code> — is not part of <code>∂Ω_n</code>. So either <code>χ</code> is pinned on it, which imposes an extra, unphysical constraint on <code>∇·A</code> across the port, or it is not, and the uniqueness argument no longer closes, leaving <code>χ ≠ 0</code> to pollute the solution. Either branch predicts &quot;improved but not right&quot;. <strong>This is testable</strong> and is the sharpest experiment this section suggests: solve a mixed port with <code>χ</code> pinned on the port sheet and with it free, and compare.</p>
+<p><strong>3. It was never demonstrated on the case.</strong> The validation across the three papers is:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td>frequency domain</td><td>single copper conductor bar; parallel-plate capacitor; power inductor (against COMSOL 5.2a); two copper conductors</td></tr>
+<tr><td>time domain</td><td>TEAM Workshop Problem 7 (racetrack coil over an aluminium plate with a hole, 50 Hz); a second TEAM benchmark; eddy currents in a helical copper conductor — compared against <strong>ANSYS Maxwell 3-D</strong></td></tr>
+<tr><td>magnetostatic</td><td>linear and nonlinear magnetostatic examples</td></tr>
+</tbody></table></div>
+<p><strong>Not one mixed-material port.</strong> Eddy-current benchmarks, one plain capacitor, one inductor. And the port model is conductor-only by construction: their voltage excitation sets *&quot;<code>ϕ</code> takes value of 0 at one terminal and 1 at the other terminal of the <strong>solid conductor</strong>&quot;* — which matches your recollection that Maxwell restricted floating potentials to ports intersecting a conductor. The formulation was shipped against a case it had never been shown to handle.</p>
+<h3>12.4 Two things these papers settle for us</h3>
+<p><strong>They are a published statement that the tree matters.</strong> The time-domain paper, on tree–cotree:</p>
+<blockquote><p><em>&quot;the choice of the tree <strong>affects significantly the accuracy</strong> of the approximation. The use of an arbitrary tree results in poor convergence.&quot;</em></p></blockquote>
+<p>The Bibliography below has claimed that no paper in this collection says tree–cotree costs anything, with Munteanu&#x27;s aside about <code>A</code> as the nearest approach. <strong>That claim was too strong</strong> and is corrected there. This is still about <code>A</code> and accuracy rather than about <code>Φ</code> specifically, so <code>07_GaugeInvariance</code>&#x27;s measurement of <code>Φ</code> remains our own result — but it is no longer an isolated one, and Zhao &amp; Fu cite two further references for it.</p>
+<p><strong>They contradict Herles et al. on the fake-conductivity trick:</strong></p>
+<blockquote><p><em>&quot;The small fake conductivity regularization method … involves an artificial conductivity parameter in the non-conducting region, which <strong>may cause unexpected errors in practice</strong> when using this formulation.&quot;</em></p></blockquote>
+<p>Herles et al. (§11.2) use exactly that, <code>σ_art = 1e−6</code>, inside their scaling weight <code>β</code>. A direct disagreement in the literature, and one to keep in view if we adopt their scaling.</p>
+<h3>12.5 Where this leaves the gauge ranking</h3>
+<p>Zhao &amp; Fu is the <strong>best-documented Coulomb-family option</strong>: symmetric after one row scaling, direct-solvable, edge elements for <code>A</code> with nodal <code>ϕ</code> — our discretization — and validated to 1.38 M unknowns. If the goal were a conductor-port eddy-current solver it would be the cheapest credible route.</p>
+<p>It does not reach the mixed port, for the reasons above, and §12.3&#x27;s reason 1 is structural rather than a matter of implementation effort. That keeps the ranking of §8 as it stands: **Coulomb-family gauges improve the interface behaviour without resolving it, because the condition they impose does not carry <code>ε</code>.**</p>
+<p>Your own observation — that Maxwell&#x27;s Coulomb option improved matters without fixing them — is now matched to a mechanism, and §12.3&#x27;s reason 2 gives a cheap experiment that would distinguish mechanism 1 from mechanism 2.</p>
+<hr>
 <h2>Bibliography</h2>
 <p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
 <div class="tw"><table>
@@ -691,10 +745,10 @@ Coulomb gauge               ∇·A = 0
 <tr><td><strong>Munteanu</strong>, <em>Tree-cotree condensation properties</em></td><td>Variants A–E and their conditioning. §IV: non-uniqueness of <strong>A</strong> is &quot;in principle irrelevant&quot;; gauging exists for regularity. §V.E: tree-independence possible, costs sparsity. <strong>A-only, magnetostatic — contains no Φ and cannot speak to its uniqueness.</strong></td></tr>
 <tr><td><strong>Li, Sun, Dai &amp; Chew (2015)</strong>, IEEE Trans. Magn.</td><td>Generalized Coulomb gauge (static limit of the Lorenz one). Ungauged systems let iterative solvers converge to different answers; constant gradients live in the edge space.</td></tr>
 <tr><td><strong>Li, Sun, Dai &amp; Chew (2016)</strong>, IEEE TAP <strong>64</strong>(10)</td><td>FEM implementation of the generalized-Lorenz A‑Φ formulation. Two null-space-free Helmholtz equations; conditioning ~1e6 against 1e17. Needs Hodge operators and a sparse approximate inverse.</td></tr>
-<tr><td><strong>Zhao &amp; Fu (2017)</strong>, IEEE Trans. Magn. <strong>53</strong>(6)</td><td>Coulomb gauge via a dummy scalar proven zero; symmetric, direct-solvable, 1.38 M unknowns. Good fit, wrong gauge family.</td></tr>
+<tr><td><strong>Zhao &amp; Fu (2017)</strong>, IEEE Trans. Magn. <strong>53</strong>(6), three papers</td><td>Coulomb gauge via a dummy scalar proven zero; symmetric after one row scaling, direct-solvable, 1.38 M unknowns. <strong>The basis of Maxwell&#x27;s mixed-material Coulomb option — now read properly in §12</strong>, including why it improves interface behaviour without resolving it and the fact that none of the three papers validates a mixed-material port.</td></tr>
 <tr><td><strong>Lee &amp; Jin (2008)</strong>, MOTL <strong>50</strong>(6)</td><td>Tree–cotree conditioning; splitting is not unique; root choice matters; conditioning still degrades at low frequency.</td></tr>
 <tr><td><strong>Su Yan (2021)</strong>, PIER M <strong>106</strong></td><td>Auxiliary scalar potential to eliminate tree–cotree graph searches while keeping all-frequency stability.</td></tr>
 </tbody></table></div>
-<p><strong>No paper in this collection states that tree–cotree yields a non-unique Φ.</strong> The nearest are Munteanu&#x27;s tree-dependence remark (about <strong>A</strong>) and Sharma &amp; Triverio&#x27;s reference-dependence of <code>∇·A</code>. Our 15 % measurement in <code>07_GaugeInvariance</code> remains our own result and should keep being presented as such.</p>
+<p><strong>No paper in this collection states that tree–cotree yields a non-unique Φ</strong> — but, per §12.4, Zhao &amp; Fu (2017) do state that <em>&quot;the choice of the tree affects significantly the accuracy of the approximation&quot;</em> and that <em>&quot;the use of an arbitrary tree results in poor convergence&quot;</em>, citing two further references. That is about <strong>A</strong> and accuracy rather than about Φ&#x27;s uniqueness, so the distinction below still holds, but it is a much closer published statement than this paragraph previously allowed. The nearest are Munteanu&#x27;s tree-dependence remark (about <strong>A</strong>) and Sharma &amp; Triverio&#x27;s reference-dependence of <code>∇·A</code>. Our 15 % measurement in <code>07_GaugeInvariance</code> remains our own result and should keep being presented as such.</p>
 </div>
 </body></html>
