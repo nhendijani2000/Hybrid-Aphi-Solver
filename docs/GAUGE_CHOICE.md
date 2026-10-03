@@ -1080,6 +1080,255 @@ demonstrated by anything read so far.
 
 ---
 
+### 11.10 Chapter 6 of the thesis, read in full — and it contains the floating port
+
+§11.8 left chapter 6 unread because the thesis PDF defeated our extractor. It is
+a CID-font document: text is hex-coded glyph ids, not characters, and `ex2.py`
+only understands literal strings, so it recovered 14 k characters from a
+155-page thesis. `tools/pdftext_cid.py` decodes through each font's `/ToUnicode`
+CMap (306 of them here) and splits output by page: 267 k characters, and
+chapter 6 is pp. 63–86, which are PDF pages 75–98.
+
+Two sections of it are **directly implementable in our solver today, whichever
+gauge we end up with.**
+
+#### 11.10.1 What Eller's method actually is
+
+Not a new formulation — *a synthesis of two existing ones* (thesis p. 64):
+
+| from | what it contributes |
+|---|---|
+| **Hiptmair, Kramer & Ostrowski (2008)** | the splitting of the scalar space `H¹`. Their own "generating systems" approach enforces Gauss's law in the non-conducting domain only and the Coulomb gauge in the conductor — but yields matrices that are **singular and non-symmetric**. |
+| **Jochum, Farle & Dyczij-Edlinger (2015/16)** | the view that **tree–cotree *is* a Helmholtz-type decomposition of `H(curl)`**. Their formulation is symmetric and regular even in the lossy case, by treating conducting and non-conducting regions with separate equations plus interface conditions on `∂Ω_c` — at the cost of extra DoFs in conductors and *"significantly less sparse matrices, increasing the computation times considerably."* |
+
+Eller unites the two splittings. Note what this does to §11.6's wish-list: the
+two Jochum papers we still have not read are *inside* this, and **in the PEC case
+Eller's equations and Jochum's are equivalent** (p. 64).
+
+The decomposition is two-stage. First a Helmholtz split off the first level of
+the de Rham complex, then a split of the gradient part by whether it survives in
+the conductor:
+
+```
+    H(curl,Ω)′  =  V ⊕ Y                                          (6.11)
+        V :  ⟨curl v, curl v⟩ ≠ 0   (functions with real curl)
+        Y :  curl w = 0             (gradient fields)
+
+    Y  =  W ⊕ U                                                   (6.12)
+        W :  ⟨w, w⟩_Ωc ≠ 0          (gradients that live in the conductor)
+        U :  u = 0 in Ω_c           (gradients that vanish there)
+
+    H(curl,Ω)′  =  V ⊕ W ⊕ U                                      (6.13)
+```
+
+Then scale the three parts by different powers of the wave number `k = ω/c` and
+test each with its own subspace:
+
+```
+    E  =  jμ₀c ( k E_V  +  √k E_W  +  E_U )                        (6.14)
+```
+
+`j` is folded into the scaling deliberately, so that the discretized system
+becomes **real** in the PEC case.
+
+**The sentence that matters most to us** (p. 67):
+
+> *"The magnetic flux density can be recovered with the simple expression
+> `B = −μ₀ curl E_V`, illustrating that **`E_V` is essentially a MVP**, while
+> `E_W` and `E_U` can be understood as **gradient fields produced by ESPs**."*
+
+So Eller's three-way split of `E` *is an A‑Φ decomposition in disguise* — `E_V`
+plays `A`, and `E_W`/`E_U` are `∇Φ` separated by whether the potential survives
+inside the conductor. The apparent fork between "the E-field route" and "our A‑Φ
+route" is much narrower than §11.8 implied: the space structure is the same one,
+and the scaling (6.14) is a statement about the **relative weighting of A against
+∇Φ**, which is a thing we can apply directly.
+
+The resulting weak system (6.15a–c) is **symmetric**. It is LF-stable in the
+sense that the matrix has full rank at every frequency — but the right-hand
+sides of (6.15b,c) still diverge as `k → 0`, so a second stabilization solves
+the static fields `F_U` (electrostatic) and `F_W` (static current) first, in the
+static limit, and writes `E` as those plus non-static corrections (6.17). That
+gives (6.22), with the same operator and a bounded RHS. A useful special case:
+**if both terminals lie on the same conductor, `F_U = 0`** and the impedance can
+be evaluated exactly at DC.
+
+#### 11.10.2 Our `ε_eff` instability, named, in their equation (6.1)
+
+The spike's finding 2 appears here as a one-line diagnosis. Enforcing Gauss's law
+explicitly over all of `Ω` in a potential formulation gives
+
+```
+    div[ (ε + σ/jω)(grad φ + jωA) ]  =  (1/jω) div J_s             (6.1)
+```
+
+and the thesis says of it: *"This equation contains the unstable term
+`(jω)⁻¹ div σ grad φ` on its left-hand side."* Plus, for a source current that is
+not divergence-free, the RHS diverges too.
+
+`ε + σ/jω` is our `ε_eff`. **The unstable object is specifically
+`(jω)⁻¹ div(σ ∇φ)`** — not the material contrast in the abstract, but that one
+term. That is a sharper statement than `GENERALIZED_LORENZ_GAUGE.md` §11 reached
+by measurement, and it says where to look: the `σ`-weighted gradient block of the
+`Φ` equation, at the conductor boundary.
+
+#### 11.10.3 Measured
+
+Conductor segment, 10 mm × 1 mm², 680 elements, so the condition number and the
+*rank deficiency* are both computed exactly:
+
+| | unstable (6.8) | stabilized (6.22) |
+|---|---|---|
+| matrix dimension | 4518 | 4519 — **one extra DoF** |
+| condition number | rises sharply below 10 kHz, then plateaus on machine precision | approximately **constant at all frequencies** |
+| rank deficiency at 10 kHz | 0 | 0 |
+| rank deficiency at 1 kHz | **630** | 0 |
+
+On a capacitor–coil model the unstabilized impedance is *"strongly scattered"*
+below ~100 kHz; at 5 kHz the unstabilized `|E|` runs to 1e8–1e15 V/m with an
+implausible distribution (their Fig. 6.6).
+
+Two results worth more than the stabilization itself:
+
+- **Fig. 6.7: at high frequency the stabilized and conventional systems give
+  identical values**, so *"no switching of systems is necessary."* One
+  formulation covers DC to resonance. That is the property our roadmap wants and
+  that Balian's variant (i) explicitly does *not* have (§11.1: it destabilizes
+  above 1e10 Hz).
+- **Cost, their Table 6.1**, on a 520 k-DoF wire model:
+
+| system | N (stab/unstab) | non-zeros | time | ratio |
+|---|---|---|---|---|
+| full wave | 520 k / 520 k | 27.3 M / 22.7 M | 86.5 s / 67.9 s | **1.27×** |
+| MQS | 435 k / 520 k | 13.7 M / 13.9 M | 36.1 s / 43.0 s | **0.84×** |
+| MS (PEC) | 336 k / 520 k | 8.71 M / 9.54 M | 38.2 s / 44.7 s | **0.86×** |
+
+Stabilization costs 27 % in the full-wave system and **saves** 14–16 % in the
+quasistatic ones. The +20 % non-zeros in the full-wave row are attributed
+specifically to constructing `U_h` — §11.10.5 below, which is the part that
+densifies the matrix.
+
+#### 11.10.4 The tree-construction rules Eller omitted
+
+§6.6.1, citing Klis 2015, and flagged in the thesis as *"crucial details
+especially with regards to the tree creation that were omitted in [Ell+17;
+Ell17]"* — i.e. **the thesis is strictly better than the paper for implementing
+this**, which settles §11.6's question about buying Eller.
+
+The rules, for a boundary split into magnetic, electric and absorbing parts:
+
+| | |
+|---|---|
+| `Γ_mag` | needs no special treatment |
+| `Γ_el` | edge DoFs on it are set to zero |
+| `Γ_a` (absorbing) | its basis functions **must** belong to `V_h`, by (6.11b) |
+| consequence | **edges of `Γ_el` and `Γ_a` must be assigned to the tree** |
+| compatibility | for each *disconnected* part `Γ_i` of `Γ_el ∪ Γ_a`, **contract all of its mesh nodes to a single vertex `v_i` in the graph** before spanning it |
+
+In the PEC case each conductor's surface is one such disconnected boundary. Then
+the ordering rule, which is the kind of thing that only shows up when someone has
+actually built it:
+
+> *"numerical artifacts can arise if in the non-conducting domain `Ω₀` the tree
+> would not be equivalent to a PEC case tree that contains only one vertex `v_i`
+> per disconnected boundary. The problem is avoided by **first constructing a
+> tree in `Ω₀` respecting the boundaries of (6.50) and subsequently adding the
+> edges of trees constructed in the individual conductors**."*
+
+So: contract each boundary component to one vertex, span the **insulator first**,
+then span inside each conductor. Our tree is built by a traversal over the whole
+mesh with no such structure, and `07_GaugeInvariance` measures the consequence.
+**This is implementable now and is independent of the gauge decision.**
+
+#### 11.10.5 The floating-potential port, as a congruence
+
+§6.6.2. This is the answer to the port question that has been open since you
+described Maxwell's double-potential floating ports, and it arrives from an
+unexpected direction — it is not a port model at all, it is how they *construct
+the space* `U_h` of gradient fields that vanish in the conductors.
+
+A potential `ψ_u` whose gradient vanishes in `Ω_c` must be **constant on each
+disconnected conductor** `Ω_c,i`, and on each disconnected part of `Γ_el` and
+`Γ_a`. Call the number of such entities `n_γ`. Then:
+
+> *"The first constant can be chosen zero, and all `n_γ − 1` others **must become
+> DoFs in the linear system**."*
+
+One scalar unknown per floating entity, with the first grounded. That *is* a
+floating-potential port. The implementation (6.51):
+
+1. discretize with the ordinary nodal gradient basis, giving `Â`, `b̂`;
+2. zero the DoFs of the first entity, and zero all **higher-order** DoFs on the
+   remaining `n_γ − 1` entities, since first order already suffices to represent
+   a constant;
+3. aggregate the first-order DoFs of each remaining entity onto one DoF with a
+   0/1 matrix `P` (their example (6.52) is a row of ones over one conductor's
+   nodes), and form
+
+```
+    A = P Â Pᵀ ,        b = P b̂ ,        recover  x̂ = Pᵀ x        (6.51)
+```
+
+**`A = P Â Pᵀ` is a congruence, so symmetry is preserved exactly** — and `P` is
+*not diagonal*. That is the general form of the device §11.4 was looking for
+when it concluded a diagonal congruence fails at material-interface nodes: the
+right object is an **aggregation** matrix, not a scaling. It costs sparsity (the
++20 % non-zeros of §11.10.3) because each aggregated row is dense over that
+conductor's nodes.
+
+Three things follow:
+
+- **A floating port needs no new formulation and no new gauge.** It is one
+  aggregated nodal DoF per floating conductor, applied as a congruence. This can
+  be built on the solver we have.
+- It answers your question *"do we work on floating double potential ports first,
+  then the gauge, or both together?"* — **they are separable**, and the port is
+  the smaller, lower-risk piece.
+- It does **not** by itself fix the mixed-material port. Aggregating a face's
+  nodes to one DoF presumes that face is an equipotential, which is what a
+  conductor electrode is and a mixed conductor/dielectric face is not. For the
+  coax via the dielectric annulus must stay free (`COAX_PORT_ANALYSIS.md` line
+  66 already says so). So this gives us the floating *conductor* port, and leaves
+  the mixed port where it was.
+
+#### 11.10.6 And the Φ equation is the easy half
+
+§6.3 states plainly that the BVP for `Φ` *"does not possess a general LF
+breakdown"*: if the boundary is not purely magnetic the matrix has full rank at
+all frequencies, and if it is, only the spatially constant component of `Φ` is
+undetermined — fixed by pinning `Φ` to zero at one arbitrary point (their (6.29)).
+
+The one exception is the **Lorenz-gauged** `Φ` equation with a purely magnetic
+boundary, where the `−k²⟨Φ,ψ⟩` mass term fixes the constant at finite frequency
+but vanishes as `k → 0`, leaving a rank deficiency of exactly 1 — harmless for an
+iterative solver, fatal for a direct one. Their fix (§6.3.2) is the same move
+again, one dimension smaller:
+
+```
+    H¹(Ω)  =  H¹_f(Ω) ⊕ ℂ                                         (6.30)
+    Φ_c    =  jμ₀c ( φ_v  +  φ₀ / k )                             (6.31)
+```
+
+— split off the constant mode as **its own unknown, scaled by `1/k`**, and test
+with all of `H¹_f` plus the single constant function `1`. The result (6.32) is
+*"still symmetric but less sparse"*. Same pattern as §11.10.5 and as Balian's
+variant (i): isolate the mode that degenerates, give it its own row, and scale it
+by the power of `ω` that keeps it finite.
+
+#### 11.10.7 New references from this chapter
+
+| | |
+|---|---|
+| **Albanese & Rubinacci (1988)** | *"a seminal paper"* — the origin of tree–cotree, earlier than the Manges & Cendes 1995 generalization in §11.6. |
+| **Klis (2015)**, *Schnelle Finite-Elemente-Verfahren für verschiedene Klassen magneto-quasistatischer Probleme*, dissertation, Saarland Univ., [doi:10.22028/D291-23134](https://doi.org/10.22028/D291-23134) | **The source of §11.10.4's tree rules.** Open access, German, now in `APhi_Papers/` as `Klis2015_PhDThesis_FastFEM_MagnetoQuasistatic_DE.pdf`. Uses the **A‑V‑A formulation** — i.e. an A‑Φ method, not an E-field one, so its tree treatment should transfer to us more directly than Stysch's does. |
+| **Dyczij-Edlinger & Bíró (1996)**, *A joint vector and scalar potential formulation for driven high frequency problems using hybrid edge and nodal finite elements*, IEEE T‑MTT **44**(1) | cited `[DB96]` for **gauged *and* ungauged non-lossy potential formulations**. "Joint vector and scalar potential" with "hybrid edge and nodal finite elements" is *exactly our discretization*, which makes this the most directly comparable prior formulation found so far. Not obtained. |
+| **Hiptmair, Kramer & Ostrowski (2008)** | already in §11.6; now known to be one of Eller's two parents, and to give singular non-symmetric matrices. |
+| **Jochum et al. (2015)** and **Joc+16** | already in §11.6; now known to be the other parent, PEC-equivalent to Eller, and expensive through matrix fill. |
+| **Eller (2017)**, *A Low-Frequency Stable Maxwell Formulation in Frequency Domain and Industrial Applications*, dissertation, TU Darmstadt, [tubiblio/92810](http://tubiblio.ulb.tu-darmstadt.de/92810/) | the long form of the SIAM paper. **Record only — no full text on TUprints**, and per the thesis it omits the tree-creation details too, so it is not worth chasing either. |
+| **Kruskal (1956)** | the spanning-tree algorithm they use. |
+
+---
+
 ## Bibliography
 
 Papers obtained and read for this edition, all now in `APhi_Papers/`:
