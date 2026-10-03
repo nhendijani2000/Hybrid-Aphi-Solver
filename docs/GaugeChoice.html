@@ -1064,6 +1064,58 @@ Coulomb gauge               ∇·A = 0
 <ul><li>the same hazard appeared in that solver&#x27;s handling of the inward normal, which</li></ul>
 <p>is a natural bug to write: &quot;inward normal&quot; is unambiguous for every port on the outer boundary, and the first mixed-material port is where the assumption silently stops holding.</p>
 <hr>
+<h3>15.9 Can a better tree fix it? No — and the reason is structural</h3>
+<p>Before reaching for a new gauge it was worth asking whether the failure is simply a <strong>bad tree</strong>. §1.3 and §15 both show the damage concentrated at the port, and the literature has a rule for exactly this: Stysch&#x27;s thesis §6.6.1, citing Klis 2015, says to <strong>contract each boundary component to a single graph vertex</strong> and span the insulator first. Our builder already does that — for the outer boundary only, because one mask did two jobs.</p>
+<p><strong>Spike A</strong> gave <code>build_tree_cotree</code> a second mask so an interior terminal&#x27;s face could be <em>contracted</em> without being made <em>Dirichlet</em>:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>mask</th>
+<th>job</th>
+<th>contents</th>
+</tr></thead>
+<tbody>
+<tr><td><code>dirichlet_edge</code></td><td>physics: <code>n×A = 0</code>, eliminate A</td><td>outer boundary</td></tr>
+<tr><td><code>contract_edge</code></td><td>gauge: span first, treat as one graph vertex</td><td>boundary ∪ interior terminal faces</td></tr>
+</tbody></table></div>
+<p>Separating them is necessary: folding the port into <code>dirichlet_edge</code> would impose <code>n×A = 0</code> on the port face, and tell <code>gauge_variants.cpp</code> the face&#x27;s cotree edges were unavailable.</p>
+<p>Measured, same harness, three trees:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>§15 baseline</th>
+<th>Spike A</th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><strong>J</strong></td><td>7.72e‑01</td><td><strong>7.55e‑02</strong></td><td>10× better</td></tr>
+<tr><td><strong>E</strong></td><td>1.45e‑01</td><td><strong>5.71e‑03</strong></td><td>25× better</td></tr>
+<tr><td><strong>L</strong></td><td>3.1e‑02</td><td><strong>1.37e‑02</strong></td><td>2.3× better</td></tr>
+<tr><td><strong>B, H</strong></td><td>4.95e‑01</td><td><strong>6.68e‑01</strong></td><td><strong>worse</strong></td></tr>
+<tr><td>R error vs exact</td><td>0.12 %</td><td><strong>0.006 %</strong></td><td>20× better</td></tr>
+</tbody></table></div>
+<p>Ten times, where nine orders were needed. <strong>Not a fix.</strong></p>
+<h4>Why no tree can do it</h4>
+<p>The partial result has an exact explanation, and it generalizes.</p>
+<p>Contracting the face makes it one graph vertex, so ψ is <strong>constant</strong> across it — which is why the <em>variation</em> of the field over the face dropped by 10–25×. Constant is not zero. The gauge line reads <code>2 surface(s), 1 root(s)</code>: the outer boundary holds the root, where ψ = 0, and the port face is a <strong>second</strong>, non-root group. Its ψ follows from the tree path that reaches it,</p>
+<pre><code>    ψ_face − ψ_root  =  − ∫_path  A_physical · dl</code></pre>
+<p>which is <strong>path-dependent, hence tree-dependent</strong> — the residual 1.4 % on <code>L</code>.</p>
+<p>To force <code>ψ_face = 0</code> one would have to force <code>∮A·dl = 0</code> around every loop running from the boundary to the face and back, i.e. <strong>zero magnetic flux through surfaces spanning those loops. That is a physical constraint, not a gauge.</strong></p>
+<p>And merging the face into the root <em>group</em> does not help: <code>node_group</code> is, in the header&#x27;s own words, <em>&quot;bookkeeping, not collapsing: no node loses its identity&quot;</em> — used only by the Munteanu fundamental-cycle walk. The assembled gauge comes from <code>is_tree_edge</code> alone, so merging groups relabels and constrains nothing.</p>
+<p>The remaining route is <code>n×A = 0</code> over the whole face. The face is a triangulated disk — 104 vertices, 269 edges, 166 triangles — so it carries <code>E − V + 1 = 166</code> independent cycles, i.e. <strong>166 flux degrees of freedom</strong>. Contraction zeroes 103 edges (a tree) and leaves all 166 free; <code>n×A = 0</code> zeroes all 269 and sets all 166 to zero, forcing <code>B·n = 0</code> pointwise on the port.</p>
+<p>For <em>this</em> geometry that costs nothing — an axial current makes <code>B</code> azimuthal, so <code>B·ẑ = 0</code> on a z-normal cross-section already. <strong>It is wrong in general</strong>, and silently: a coax port sheet <em>is</em> the dielectric annulus, which carries azimuthal flux straight through it (<code>COAX_PORT_ANALYSIS.md</code>); side-by-side conductors see each other&#x27;s flux through their port faces, so mutual inductance shifts; and nothing in the output reports a suppressed flux. Correctness would depend on whether the geometry happened to be axisymmetric.</p>
+<blockquote><p><strong>Result.</strong> <strong>Tree–cotree cannot protect an interior terminal.</strong> Every route to pinning ψ on an interior face either leaves it path-dependent, and so unprotected, or imposes a spurious flux constraint, and so wrong. This is not a choice between tree variants.</p></blockquote>
+<h4>Which also explains §15.4&#x27;s control</h4>
+<p>Boundary ports are not protected by the gauge. They are protected by the <strong>physics</strong>: <code>n×A = 0</code> is a real boundary condition there, it forces <code>A_tangential = 0</code>, and that makes the boundary genuinely an equipotential for ψ. The 1e‑12 invariance is a consequence of <code>flux_tangential</code>, not of tree–cotree. An interior terminal has no such condition available to it.</p>
+<h4>Not committed, and why</h4>
+<p>Spike A&#x27;s code is <strong>deliberately not in the tree</strong>. The 20× gain in <code>R</code> accuracy is real and tempting, but:</p>
+<ul><li>**<code>B</code> and <code>H</code> got worse**, 50 % → 67 %, and that is unexplained. <code>E</code> and <code>J</code></li></ul>
+<p>improved 10–25× while <code>B = ∇×A</code> degraded. The benign reading is that contraction made the three trees differ <em>more</em> from each other (<code>A</code> now moves 103–110 % against 66–100 %). The other reading is that with two zero-A surfaces — the boundary by physics, the face by gauge — an all-zero cycle can pin a flux, which <code>tree_cotree.cpp</code>&#x27;s step 2 comment warns is <em>&quot;a physical constraint, not a gauge&quot;</em>. Not ruled out.</p>
+<ul><li>**<code>L</code> shifted 30 %** on the base solve, 20.38 → 26.42 nH. One of those is badly</li></ul>
+<p>wrong and this case has **no trustworthy reference for <code>L</code>** — the free-wire formula gives ~14.7 nH but the rod sits in a 40 mm box with one end grounded. That is a gap in the case&#x27;s design.</p>
+<ul><li>Above all, <strong>§15&#x27;s numbers are the acceptance test.</strong> Committing a half-fix</li></ul>
+<p>would mean the solver no longer reproduces them, and the baseline a new gauge must beat would become 7.6 %/1.4 % from a partial patch instead of the clean 77 %/3.1 %.</p>
+<p>The change is ~40 lines and is fully described above, so it is reproducible if wanted. What it bought is the <strong>derivation</strong>, which is kept and which is worth more than the 10×.</p>
+<hr>
 <h2>Bibliography</h2>
 <p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
 <div class="tw"><table>

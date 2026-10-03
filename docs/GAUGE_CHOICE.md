@@ -2062,6 +2062,118 @@ gauge. Three details of this case line up with that account:
 
 ---
 
+### 15.9 Can a better tree fix it? No — and the reason is structural
+
+Before reaching for a new gauge it was worth asking whether the failure is
+simply a **bad tree**. §1.3 and §15 both show the damage concentrated at the
+port, and the literature has a rule for exactly this: Stysch's thesis §6.6.1,
+citing Klis 2015, says to **contract each boundary component to a single graph
+vertex** and span the insulator first. Our builder already does that — for the
+outer boundary only, because one mask did two jobs.
+
+**Spike A** gave `build_tree_cotree` a second mask so an interior terminal's face
+could be *contracted* without being made *Dirichlet*:
+
+| mask | job | contents |
+|---|---|---|
+| `dirichlet_edge` | physics: `n×A = 0`, eliminate A | outer boundary |
+| `contract_edge` | gauge: span first, treat as one graph vertex | boundary ∪ interior terminal faces |
+
+Separating them is necessary: folding the port into `dirichlet_edge` would impose
+`n×A = 0` on the port face, and tell `gauge_variants.cpp` the face's cotree edges
+were unavailable.
+
+Measured, same harness, three trees:
+
+| | §15 baseline | Spike A | |
+|---|---|---|---|
+| **J** | 7.72e‑01 | **7.55e‑02** | 10× better |
+| **E** | 1.45e‑01 | **5.71e‑03** | 25× better |
+| **L** | 3.1e‑02 | **1.37e‑02** | 2.3× better |
+| **B, H** | 4.95e‑01 | **6.68e‑01** | **worse** |
+| R error vs exact | 0.12 % | **0.006 %** | 20× better |
+
+Ten times, where nine orders were needed. **Not a fix.**
+
+#### Why no tree can do it
+
+The partial result has an exact explanation, and it generalizes.
+
+Contracting the face makes it one graph vertex, so ψ is **constant** across it —
+which is why the *variation* of the field over the face dropped by 10–25×.
+Constant is not zero. The gauge line reads `2 surface(s), 1 root(s)`: the outer
+boundary holds the root, where ψ = 0, and the port face is a **second**,
+non-root group. Its ψ follows from the tree path that reaches it,
+
+```
+    ψ_face − ψ_root  =  − ∫_path  A_physical · dl
+```
+
+which is **path-dependent, hence tree-dependent** — the residual 1.4 % on `L`.
+
+To force `ψ_face = 0` one would have to force `∮A·dl = 0` around every loop
+running from the boundary to the face and back, i.e. **zero magnetic flux through
+surfaces spanning those loops. That is a physical constraint, not a gauge.**
+
+And merging the face into the root *group* does not help: `node_group` is, in the
+header's own words, *"bookkeeping, not collapsing: no node loses its identity"* —
+used only by the Munteanu fundamental-cycle walk. The assembled gauge comes from
+`is_tree_edge` alone, so merging groups relabels and constrains nothing.
+
+The remaining route is `n×A = 0` over the whole face. The face is a triangulated
+disk — 104 vertices, 269 edges, 166 triangles — so it carries
+`E − V + 1 = 166` independent cycles, i.e. **166 flux degrees of freedom**.
+Contraction zeroes 103 edges (a tree) and leaves all 166 free; `n×A = 0` zeroes
+all 269 and sets all 166 to zero, forcing `B·n = 0` pointwise on the port.
+
+For *this* geometry that costs nothing — an axial current makes `B` azimuthal, so
+`B·ẑ = 0` on a z-normal cross-section already. **It is wrong in general**, and
+silently: a coax port sheet *is* the dielectric annulus, which carries azimuthal
+flux straight through it (`COAX_PORT_ANALYSIS.md`); side-by-side conductors see
+each other's flux through their port faces, so mutual inductance shifts; and
+nothing in the output reports a suppressed flux. Correctness would depend on
+whether the geometry happened to be axisymmetric.
+
+> **Result.** **Tree–cotree cannot protect an interior terminal.** Every route to
+> pinning ψ on an interior face either leaves it path-dependent, and so
+> unprotected, or imposes a spurious flux constraint, and so wrong. This is not a
+> choice between tree variants.
+
+#### Which also explains §15.4's control
+
+Boundary ports are not protected by the gauge. They are protected by the
+**physics**: `n×A = 0` is a real boundary condition there, it forces
+`A_tangential = 0`, and that makes the boundary genuinely an equipotential for ψ.
+The 1e‑12 invariance is a consequence of `flux_tangential`, not of tree–cotree.
+An interior terminal has no such condition available to it.
+
+#### Not committed, and why
+
+Spike A's code is **deliberately not in the tree**. The 20× gain in `R` accuracy
+is real and tempting, but:
+
+- **`B` and `H` got worse**, 50 % → 67 %, and that is unexplained. `E` and `J`
+  improved 10–25× while `B = ∇×A` degraded. The benign reading is that
+  contraction made the three trees differ *more* from each other (`A` now moves
+  103–110 % against 66–100 %). The other reading is that with two zero-A
+  surfaces — the boundary by physics, the face by gauge — an all-zero cycle can
+  pin a flux, which `tree_cotree.cpp`'s step 2 comment warns is *"a physical
+  constraint, not a gauge"*. Not ruled out.
+- **`L` shifted 30 %** on the base solve, 20.38 → 26.42 nH. One of those is badly
+  wrong and this case has **no trustworthy reference for `L`** — the free-wire
+  formula gives ~14.7 nH but the rod sits in a 40 mm box with one end grounded.
+  That is a gap in the case's design.
+- Above all, **§15's numbers are the acceptance test.** Committing a half-fix
+  would mean the solver no longer reproduces them, and the baseline a new gauge
+  must beat would become 7.6 %/1.4 % from a partial patch instead of the clean
+  77 %/3.1 %.
+
+The change is ~40 lines and is fully described above, so it is reproducible if
+wanted. What it bought is the **derivation**, which is kept and which is worth
+more than the 10×.
+
+---
+
 ## Bibliography
 
 Papers obtained and read for this edition, all now in `APhi_Papers/`:
