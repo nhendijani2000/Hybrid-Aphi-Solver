@@ -463,7 +463,7 @@ Coulomb gauge               ∇·A = 0
 <th>why it matters</th>
 </tr></thead>
 <tbody>
-<tr><td><strong>Eller, Reitzinger, Schöps &amp; Zaglmayr (2017)</strong>, SIAM J. Sci. Comput. <strong>39</strong>(4) B703–B731, <a href="https://doi.org/10.1137/16M1077817">doi:10.1137/16M1077817</a></td><td><em>&quot;monolithic, symmetric, low-frequency stable, broadband… no auxiliary variables… stable even if the frequency equals zero.&quot;</em> Symmetric <strong>and</strong> stable <strong>and</strong> monolithic answers all three of the spike&#x27;s complaints at once. Paywalled; no preprint found.</td></tr>
+<tr><td><strong>Eller, Reitzinger, Schöps &amp; Zaglmayr (2017)</strong>, SIAM J. Sci. Comput. <strong>39</strong>(4) B703–B731, <a href="https://doi.org/10.1137/16M1077817">doi:10.1137/16M1077817</a></td><td><em>&quot;monolithic, symmetric, low-frequency stable, broadband… no auxiliary variables… stable even if the frequency equals zero.&quot;</em> Symmetric <strong>and</strong> stable <strong>and</strong> monolithic answers all three of the spike&#x27;s complaints at once. Paywalled, no preprint — but <strong>not worth buying</strong>, because §11.8 obtained its method from two open sources.</td></tr>
 <tr><td><strong>Jochum, Farle &amp; Dyczij-Edlinger (2015)</strong>, IEEE Trans. Magn. <strong>51</strong>(3) 7402304, and the 2016 SCEE companion <em>A symmetric and low-frequency stable potential formulation</em></td><td>Previously flagged, still unread.</td></tr>
 <tr><td><strong>Demerdash &amp; Wang (1990)</strong></td><td>Coulomb-gauge breakdown at permeability contrast. Still unread.</td></tr>
 <tr><td><strong>Zhu &amp; Jiao (2010)</strong>, IEEE Trans. Adv. Packag. <strong>33</strong>(4) 1043–1050</td><td><em>&quot;theoretically rigorous full-wave FEM solution of Maxwell&#x27;s equations from dc to high frequencies&quot;</em> — the reference both Darmstadt papers cite for the breakdown itself.</td></tr>
@@ -485,6 +485,54 @@ Coulomb gauge               ∇·A = 0
 <tr><td><code>Clemens2022_DarwinTypeQuasistatic.pdf</code></td><td><a href="https://arxiv.org/abs/2204.06286">arXiv:2204.06286</a>, Darwin-type quasistatic formulations. Cited by both; unread.</td></tr>
 <tr><td><code>ShinFan2013_EigenvalueEngineering_OE21.pdf</code></td><td>Source of Chew&#x27;s <code>α &gt; 0</code> eigenvalue claim. Extracted, unread.</td></tr>
 </tbody></table></div>
+<hr>
+<h3>11.8 Eller&#x27;s method, obtained without Eller — and a competing design for our exact application</h3>
+<p>Both sources below are open access and were obtained after §11.6 listed Eller et al. as the paper we most wanted. <strong>Eller no longer needs to be bought.</strong></p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><code>Stysch2022_BroadbandFEM_Impedance_ParasiticExtraction.pdf</code></td><td>Stysch, Klaedtke &amp; De Gersem, <em>Electrical Engineering</em> <strong>104</strong>(2) 855–867, 2022, <a href="https://doi.org/10.1007/s00202-021-01348-9">doi:10.1007/s00202-021-01348-9</a>. Also <a href="https://arxiv.org/abs/2009.08232">arXiv:2009.08232</a> — it was free all along.</td></tr>
+<tr><td><code>Stysch2022_PhDThesis_StableBroadbandParasiticExtraction.pdf</code></td><td>Stysch, PhD thesis, TU Darmstadt, 2022, handle <code>tuda/8889</code>. <strong>Chapter 6, 24 pages, is a full treatment of Eller&#x27;s scheme</strong>, including §6.6.1 tree–cotree splitting, §6.6.2 gradient-space splitting, and §6.3.2 <em>Stabilizing the Lorenz-gauged system matrix</em> — which Eller&#x27;s own paper, being E-field only, does not cover.</td></tr>
+</tbody></table></div>
+<p>Robert Bosch GmbH + TU Darmstadt (De Gersem is also a co-author of Balian et al., §11.1). The application is <strong>parasitic extraction for EMC</strong> — ours.</p>
+<h4>Eller&#x27;s mechanism, as the article states it</h4>
+<p>Split the trial and test space three ways, <code>H(curl, Ω) = V ⊕ W ⊕ U</code>, with</p>
+<pre><code>    V :  ∫_Ω |curl v|² dV  ≠  0                                      (36a)
+    W :  curl w = 0   and   ∫_Ωc |w|² dV  ≠  0                       (36b)
+    U := { u ∈ H(curl,Ω) : curl u = 0  ∧  u = 0 in Ω_c }             (36c)</code></pre>
+<p>so <code>V</code> is the part with real curl, <code>W</code> the gradient fields that live in the conductor, <code>U</code> the gradient fields that vanish there. Then scale the three parts by <strong>different powers of ω</strong>:</p>
+<pre><code>    E  =  jω E_V  +  (jω)^(1/2) E_W  +  E_U                           (37)</code></pre>
+<p>and test the equation separately with each subspace, which scales each of the three resulting equations independently. **That fractional <code>ω^(1/2)</code> is what Balian et al. meant** by <em>&quot;a scaling by fractional powers of ω was similarly applied in [12]&quot;</em> — their [12] is Eller et al. Same family as §11.1&#x27;s variant (i), applied to a three-way space split rather than a two-way material one.</p>
+<p>**At lowest order the <code>V</code> basis is found by a tree–cotree split** (their [19]). That is now the third independent paper in this section that keeps the spanning tree and changes only what is done with it.</p>
+<h4>The part that bears on case 06 and 07 directly</h4>
+<p>§2 of the article is the cleanest published statement of what our gauge tests measured. They start from the problem by name — <em>&quot;To reconcile the path-dependent voltage concept of electromagnetic field theory with the path-independent voltage concept of electrical circuits poses a challenge&quot;</em> — and resolve it by subtracting the return path&#x27;s partial inductance:</p>
+<pre><code>    V_c  :=  V − jω I L_r  =  ∫_c E·dl + jω ∫_c A·dl  =  Φ(T_b) − Φ(T_a)</code></pre>
+<p>their (5)–(7). So the terminal Φ-difference <strong>is</strong> a path-independent quantity, and it is <em>not</em> the full terminal voltage: it is the voltage minus the return path&#x27;s partial inductance. And then, explicitly:</p>
+<blockquote><p><em>&quot;The values of these partial inductances depend on the gauge condition chosen for the magnetic vector potential A and electric scalar potential Φ.&quot;</em> <em>&quot;As it incorporates a partial inductance, V_c formally depends on the gauge condition of potentials Φ and A.&quot;</em></p></blockquote>
+<p><strong>This is our ωL/R mechanism, published.</strong> The gauge-sensitive part of a terminal Φ-difference is exactly the split of the loop inductance into the conductor&#x27;s partial inductance and the return path&#x27;s — <code>L_loop = L_c + L_r</code> is gauge-invariant while the two terms separately are not (their (4)). <code>07_GaugeInvariance</code> measured the same thing from the other end.</p>
+<p>The consequence for how we present our results: a tree-dependent Φ is <strong>not simply an error to be driven to zero</strong>. For parasitic extraction the partial inductance is the quantity you want, and the gauge is what <em>defines</em> how the loop inductance is attributed between conductor and return path. It is a modelling convention that must be fixed, not a defect. What is a defect is leaving it <em>implicitly</em> fixed by a spanning-tree traversal order, which is what we do today.</p>
+<h4>How they make Φ unique — the answer to the question that started this file</h4>
+<p>They impose the gauge as <strong>an explicit PDE for Φ</strong>, and solve it. Lorenz gauge (their (12), <code>div(ν_r A) + jωΦ/c² = 0</code>) combined with <code>E = −grad Φ − jωA</code> eliminates <code>A</code> and leaves a scalar boundary-value problem:</p>
+<pre><code>    −div(ν_r grad Φ) − (ω²/c²) Φ  =  div(ν_r E)                       (13)</code></pre>
+<p>with, after the inductive compensation term is added (their (27)):</p>
+<pre><code>    Φ_c = const.          on Γ_el
+    n̂ · ν_r grad Φ_c = 0  on Γ_mag</code></pre>
+<p>**<code>Φ = const.</code> on the electrode, with the constant not prescribed, is a floating potential condition** — the &quot;single potential port, no ground defined&quot; behaviour you described from Maxwell, as a boundary condition rather than a special port type.</p>
+<p>So Φ is unique because it solves its own well-posed BVP. No tree, no gauge ambiguity in Φ at all. The gauge condition has become the equation that determines it. Structurally this is Chew&#x27;s decoupled Φ-equation and Ostrowski &amp; Hiptmair&#x27;s EQS-as-gauge (§11.3) reached a third way.</p>
+<p>Their full procedure is three sequential solves — <code>g</code>, then <code>E</code>, then <code>Φ_c</code> (their Fig. 2) — and the MQS limit is reached by dropping the <code>ω²</code> term, which they note <em>&quot;is equivalent to choosing the Coulomb gauge condition for the calculation of Φ&quot;</em>, necessary at high frequency for consistency between the two PDEs.</p>
+<h4>Why this is a competing design and not just a reference</h4>
+<p>They considered our formulation and rejected it. Quoting their §3.1 on the two options for computing Φ:</p>
+<blockquote><p><em>&quot;It is more advantageous to use the latter &#x27;E approach&#x27; for several reasons: The two fields E and Φ can be calculated in sequence… thereby avoiding a computationally more expensive coupled boundary value problem (BVP), which occurs in the &#x27;A‑Φ approach&#x27;. Furthermore, the E approach allows for an easy treatment of conductors modeled as perfect electric conductors… Finally, the use of the E-field formulation allows for an elegant stabilization of the low-frequency instability.&quot;</em></p></blockquote>
+<p>Three reasons, from the same institute, for the same application. This belongs in §8&#x27;s ranking as a genuine alternative to A‑Φ, not a footnote. Against it, for our purposes: <code>E</code> in <code>H(curl)</code> gives up the potentials we need for a potential-based BI coupling (§4), and their own §4.1.1 shows the volumetric discretization saturating the resistance above ~10 MHz, which is a hard limit for a THz target.</p>
+<h4>Still unread here</h4>
+<p>Chapter 6 of the thesis. Neither our extractor nor TUprints&#x27; own text layer recovers it — TUprints&#x27; stops mid-chapter 5, and the thesis PDF yields only 14 k characters from 148 streams because of its font encoding. The PDF renders normally and can be read page by page; chapter 6 spans pp. 63–86.</p>
+<hr>
+<h3>11.9 Where this leaves the decision</h3>
+<p>Three papers now keep tree–cotree and change what is done with it (Herles, Eller/Stysch, and the Manges–Cendes line they both cite), and two independent groups obtain a unique Φ by <strong>making the gauge condition an explicit equation for Φ</strong> rather than by fixing degrees of freedom on a tree (Chew via <code>χ</code>, Stysch via the Lorenz PDE, Ostrowski &amp; Hiptmair via EQS). That convergence is the strongest signal in this document, and it points at the same place from three directions: <strong>stop setting tree DOFs arbitrarily and give Φ its own equation.</strong></p>
+<p>What that does <em>not</em> settle is the mixed-material port, which is still the project&#x27;s actual blocker. Stysch&#x27;s <code>Φ_c = const.</code> on an electrode is the closest published thing to the floating-potential port, and it is a boundary condition on a scalar BVP — which is only available once Φ has its own equation. The two problems may therefore have one solution, but that is a conjecture and is not demonstrated by anything read so far.</p>
 <hr>
 <h2>Bibliography</h2>
 <p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
