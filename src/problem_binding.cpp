@@ -327,11 +327,35 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
                                  " faces lie on the domain boundary. An internal cut needs a "
                                  "tetrahedron on each side");
             }
+        } else if (on_boundary == 0) {
+            // WHOLLY interior, and deliberate: the single-potential interior
+            // port. A non-internal port gets PhiDof::Port, i.e. ONE Phi
+            // unknown shared by every node of the surface, with no grounded
+            // side -- unlike an internal cut, which is two-sided. Put that one
+            // unknown on a surface inside the domain and it is a terminal whose
+            // potential floats, which is what a mixed conductor/air port needs
+            // and what tree-cotree has no principled rule for (GAUGE_CHOICE.md
+            // Sec. 1.2). It is the configuration this project most needs to
+            // measure, so it is allowed -- loudly.
+            out.warnings.push_back(
+                "port '" + p.name +
+                "' is a boundary-type port on a surface that lies entirely INSIDE the domain. It "
+                "therefore carries a single floating Phi unknown on an interior surface. This is "
+                "deliberate and supported, but note what it means: n x A = 0 does not pin psi "
+                "here, so unlike a port on the outer boundary this terminal's Phi and V are NOT "
+                "protected from the tree-cotree gauge (GAUGE_CHOICE.md Sec. 1.2 and 1.3). Treat "
+                "the terminal quantities as gauge dependent until a gauge that fixes Phi is in "
+                "place.");
         } else if (on_boundary != n_faces) {
+            // Partly on the boundary is still the typo the original check was
+            // written to catch: a boundary surface that picked up a few
+            // interior faces, or the wrong name.
             fail(p.line, "port '" + p.name + "' is declared a boundary port, but " +
                              std::to_string(n_faces - on_boundary) + " of its " +
                              std::to_string(n_faces) +
-                             " faces are interior to the mesh");
+                             " faces are interior to the mesh. Either all of a boundary port's "
+                             "faces lie on the domain boundary, or none of them do (an interior "
+                             "single-potential terminal)");
         }
 
         // Orientation.
@@ -381,16 +405,92 @@ BoundProblem bind_to_mesh(const Problem& problem, const Mesh& mesh) {
             }
             bp.rim_edges = rim_of(mesh, bp.surface.faces);
         } else {
-            // A boundary terminal: positive current enters the domain, so d
-            // is the inward normal. The one adjacent tet is the inside, so
-            // its opposite vertex says which way that is.
-            const int f = bp.surface.faces.front();
-            const FaceTets& ft = mesh.face_tets[static_cast<std::size_t>(f)];
-            const int apex = opposite_vertex(mesh, ft.tets[0], f);
-            const Vec3 inward = mesh.nodes[static_cast<std::size_t>(apex)] - face_centroid(mesh, f);
+            // A terminal carrying ONE Phi unknown. On the outer boundary,
+            // positive current enters the domain, so d is the inward normal
+            // and the single adjacent tet fixes which way that is.
+            //
+            // WHOLLY INTERIOR -- the mixed-material single-potential port --
+            // there are TWO adjacent tets and "inward" means nothing. The
+            // convention generalizes to POSITIVE CURRENT ENTERS THE CONDUCTOR,
+            // which is well defined exactly when the surface has conductor on
+            // one side and insulator on the other, i.e. precisely the mixed
+            // port this is for.
+            //
+            // ft.tets[0] MUST NOT be used for an interior face: which tet
+            // lands at index 0 follows mesh node numbering, so the sign of I
+            // and V would depend on the node order with no symptom whatever --
+            // and 07_GaugeInvariance permutes node order, so it would have
+            // turned a sign flip into a fake gauge effect.
+            const int f0 = bp.surface.faces.front();
+            const bool interior_terminal = !mesh.is_boundary_face(f0);
+
+            if (interior_terminal) {
+                // One normal has to serve the whole surface, so it must be
+                // planar -- the same requirement an internal cut has.
+                for (int f : bp.surface.faces) {
+                    const double alignment = std::abs(face_normal(mesh, f).dot(n0));
+                    if (std::abs(alignment - 1.0) > 1e-8) {
+                        fail(p.line, "port '" + p.name +
+                                         "' is an interior terminal but is not planar: its faces "
+                                         "do not share a normal (worst |n.n0| = " +
+                                         std::to_string(alignment) + ")");
+                    }
+                }
+            }
+
+            auto conductor_side = [&](int f) -> int {
+                const FaceTets& ft = mesh.face_tets[static_cast<std::size_t>(f)];
+                int found = -1, count = 0;
+                for (int i = 0; i < ft.count; ++i) {
+                    const int t = ft.tets[static_cast<std::size_t>(i)];
+                    const int b = out.body_of_tet[static_cast<std::size_t>(t)];
+                    if (b >= 0 && out.bodies[static_cast<std::size_t>(b)].is_conductor()) {
+                        found = t;
+                        ++count;
+                    }
+                }
+                return count == 1 ? found : -1;
+            };
+
+            int ref_tet = mesh.face_tets[static_cast<std::size_t>(f0)].tets[0];
+            if (interior_terminal) {
+                ref_tet = conductor_side(f0);
+                if (ref_tet < 0) {
+                    fail(p.line,
+                         "port '" + p.name +
+                             "' is an interior terminal, so positive current is defined as "
+                             "entering the conductor -- but its faces do not have a conductor on "
+                             "exactly one side. A conductor on both sides is an internal cut "
+                             "(type = internal_current); a conductor on neither side is not a "
+                             "terminal at all");
+                }
+            }
+            const int apex = opposite_vertex(mesh, ref_tet, f0);
+            const Vec3 inward = mesh.nodes[static_cast<std::size_t>(apex)] - face_centroid(mesh, f0);
             bp.direction = inward.dot(n0) > 0.0 ? n0 : n0 * -1.0;
             bp.direction_from_hint = false;
             bp.plus_side_tet.assign(bp.surface.faces.size(), -1);
+
+            // Every face must agree, or d is right for some of the surface and
+            // backwards for the rest, which would quietly cancel current.
+            if (interior_terminal) {
+                for (int f : bp.surface.faces) {
+                    const int cond = conductor_side(f);
+                    if (cond < 0) {
+                        fail(p.line, "port '" + p.name +
+                                         "': not every face has a conductor on exactly one side");
+                    }
+                    const int ap = opposite_vertex(mesh, cond, f);
+                    const Vec3 into =
+                        mesh.nodes[static_cast<std::size_t>(ap)] - face_centroid(mesh, f);
+                    if (into.dot(bp.direction) <= 0.0) {
+                        fail(p.line, "port '" + p.name +
+                                         "': the conductor is not on the same side of every face, "
+                                         "so 'positive current enters the conductor' has no single "
+                                         "direction on this surface");
+                    }
+                }
+            }
         }
 
         out.ports.push_back(std::move(bp));

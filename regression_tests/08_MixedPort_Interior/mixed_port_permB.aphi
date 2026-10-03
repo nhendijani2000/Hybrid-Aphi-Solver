@@ -1,0 +1,107 @@
+# ---------------------------------------------------------------------------
+# 08_MixedPort_Interior -- a single-potential current port on an INTERIOR
+# conductor/air face. The configuration tree-cotree has no rule for.
+#
+#     ../run_case.bat mixed_port.aphi        (from this folder)
+#
+# WHAT THIS CASE IS FOR
+#
+# docs/GAUGE_CHOICE.md Sec. 1.2 argues that case 07's gauge-invariance result
+# -- terminal V, I, R, L and Z invariant to 1e-12 across three spanning trees
+# -- holds only because every port in the suite sits on the OUTER boundary,
+# where `n x A = 0` pins the gauge function psi to zero. Sec. 1.3 then measures
+# what happens one step in: at case 05's cut inside a conductor, the LOCAL J and
+# B move by 8.3 % and 7.4 % with the spanning tree while L moves by 0.018 %.
+#
+# Neither of those is the configuration that matters most. This is: a terminal
+# on a face with CONDUCTOR ON ONE SIDE AND AIR ON THE OTHER, inside the domain.
+# It is the port type reported to fail in a commercial A-Phi solver, and the
+# reason this project went looking for another gauge at all.
+#
+# HOW IT DIFFERS FROM CASE 03, AND IN ONE RESPECT ONLY
+#
+# Case 03 is this same wire, same material, same 1 A drive, with both caps on
+# the box boundary. Here the wire stops 12 mm short of the top face, so its top
+# cap is interior. Everything else is identical, which makes case 03 the
+# control: any difference is the interior mixed port and nothing else.
+#
+# Current enters the interior cap, runs down the rod, and leaves through the
+# grounded cap on the boundary. That closed path is deliberate -- an earlier
+# attempt put a cut across a rod floating entirely inside the domain, which has
+# no return path at all, and the resulting garbage had nothing to do with the
+# gauge. The conductor-only control caught it and the case was deleted.
+#
+# WHAT THE PORT IS
+#
+# `boundary_current` is the SINGLE-POTENTIAL port: dof_map.cpp gives a
+# non-internal port PhiDof::Port, which maps every node of the surface onto ONE
+# shared Phi unknown, with no grounded side. An internal cut is the two-sided
+# alternative (PhiDof::Cut) and is NOT what is wanted here -- a cut has
+# conductor on both sides.
+#
+# Placing that single unknown on an interior surface required one solver change
+# (problem_binding.cpp): a boundary-type port used to be rejected if any of its
+# faces were interior. It is now accepted when ALL of them are, with a warning,
+# and the partially-interior case still fails because that is the typo the
+# original check existed to catch. The same change derives the port's direction
+# from WHICH SIDE IS THE CONDUCTOR rather than from the first adjacent tet,
+# because on an interior face the adjacency order follows node numbering -- and
+# 07_GaugeInvariance permutes node numbering, so the old rule would have turned
+# a sign flip into a fake gauge effect.
+#
+# WHAT TO EXPECT -- AND THIS CASE HAS NO ASSERTED ANSWER YET
+#
+# R and L are NOT expected to match case 03: the rod is 28 mm, not 40 mm, and
+# the interior cap radiates into air rather than being fed flush. The quantity
+# of interest is not the impedance but how much of it MOVES when the spanning
+# tree changes, measured by 07_GaugeInvariance's permutation harness. Until
+# that has been run there is nothing to assert, so expected.txt is deliberately
+# minimal and the case is a measurement, not yet a regression test.
+# ---------------------------------------------------------------------------
+
+[mesh]
+file        = stub_rod_permB.msh
+length_unit = mm
+
+[output]
+directory   = output_permB
+
+[analysis]
+type        = frequency
+frequencies = 50                           # Hz
+formulation = full_wave
+
+# Phi must reach into the air for the interior cap to be a terminal at all: at
+# DC, Phi's support is the conductor only and the cap would sit on the edge of
+# it. full_wave puts Phi on the whole domain, which is what makes this port
+# mixed rather than simply a conductor end face.
+[boundary]
+outer       = flux_tangential
+
+[Body B1]
+volume      = wire
+sigma       = 5.8e7                        # copper
+eps_r       = 1
+mu_r        = 1
+
+[Body B2]
+volume      = air
+sigma       = 0
+
+# THE PORT UNDER TEST. Interior, single Phi unknown, current driven. Positive
+# current enters the conductor.
+[port P1]
+type        = boundary_current
+surface     = wire_top
+current     = 1.0                          # A
+
+# The reference, and an ordinary boundary terminal: this cap IS on the box's
+# bottom face. Without it Phi is determined only up to a constant and the
+# parser refuses the file.
+[port P2]
+type        = boundary_voltage
+surface     = wire_bottom
+voltage     = 0.0                          # V
+
+[solver]
+conditioning = row_scaled

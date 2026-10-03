@@ -1,0 +1,43 @@
+output dir    output
+edges         95215 total = 79262 free + 14252 tree + 1701 Dirichlet
+gauge         14253 groups (569 boundary nodes as one) wants 14252 interior tree edges, has 14252   complete
+A-Phi solver 0.0.1-dev -- solve_mesh
+
+input         mixed_port.aphi
+mesh          stub_rod.msh   79828 tets
+backend       internal   (this project's LDL^T)
+conditioning  row_scaled   (symmetric, upper triangle stored)
+unknowns      188554   3992303 stored nonzeros
+warning       port 'P1' is a boundary-type port on a surface that lies entirely INSIDE the domain. It therefore carries a single floating Phi unknown on an interior surface. This is deliberate and supported, but note what it means: n x A = 0 does not pin psi here, so unlike a port on the outer boundary this terminal's Phi and V are NOT protected from the tree-cotree gauge (GAUGE_CHOICE.md Sec. 1.2 and 1.3). Treat the terminal quantities as gauge dependent until a gauge that fixes Phi is in place.
+
+ordering      amd   nnz(L) = 129188582   2464.08 MB   [2730.9 ms]
+
+     frequency   resid plain   resid equil  backward err   d max/min      min |D|      max |D|     max |L|  factor ms
+         50 Hz            --    1.6846e-09   2.94901e-21 7.04547e+12   0.00447307            1     3.73184     298863
+                wrote output/potential.out   110036 nodes, 12590 KB, 16.182 ms
+                fields A,B,H,E at 110036 nodes in 80.3603 ms   33333 on a material interface
+                wrote output/potential.vtk   20100 KB, 30.7114 ms   (Phi)
+                wrote output/A_field.out / .vtk   22547 + 29854 KB, 74.9914 ms
+                wrote output/B_field.out / .vtk   22599 + 40643 KB, 84.961 ms
+                wrote output/H_field.out / .vtk   20657 + 38225 KB, 84.7368 ms
+                wrote output/E_field.out / .vtk   22496 + 40350 KB, 84.3906 ms
+                wrote output/J_field.out / .vtk   16461 + 27835 KB, 67.3914 ms
+
+timing                     seconds   percent
+  matrix assembly             0.31     0.10 %
+  factorization             298.86    98.40 %
+  triangular solve            0.40     0.13 %
+  field computation           0.08     0.03 %
+  writing fields              0.44     0.15 %
+  mesh, dofs, other           3.64     1.20 %
+  TOTAL                     303.73   100.00 %
+
+  the solve ran ONCE, equilibrated. Pass --compare-plain to also solve
+  it unequilibrated and compare residuals -- that is a second
+  factorization and roughly doubles the runtime.
+
+                wrote output/run_summary.txt
+
+Nothing is EXTRACTED from these solutions yet: no currents, voltages, R or
+L come out of this. The residual says the linear system was solved; whether
+the physics is right is the DC milestone, step 9 of docs/SOLVER_PLAN.md.

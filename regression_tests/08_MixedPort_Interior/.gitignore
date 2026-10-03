@@ -1,0 +1,12 @@
+# The repo's root .gitignore covers regression_tests/*/output/* but not the
+# per-permutation output directories this case adds, and it force-includes
+# *.msh, which would commit the permuted meshes too. Both are derived.
+
+# ~307 MB each.
+output_perm*/
+
+# Regenerate with the seeds recorded in measure_gauge.py's header and
+# ../07_GaugeInvariance/permute_nodes.py:
+#     permute('stub_rod.msh', 'stub_rod_permA.msh', 12345)
+#     permute('stub_rod.msh', 'stub_rod_permB.msh', 777)
+stub_rod_perm*.msh

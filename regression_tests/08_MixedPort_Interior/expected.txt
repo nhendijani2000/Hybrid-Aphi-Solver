@@ -1,0 +1,31 @@
+# Known-good physics for 08_MixedPort_Interior.
+#
+# This case exists to MEASURE a defect, so most of its interesting numbers are
+# gauge dependent and must NOT be asserted -- asserting them would assert the
+# defect and freeze it. See README.md for the measured gauge movement.
+#
+# What IS asserted here is what must hold under ANY gauge:
+#
+#  1. the single-potential port really is a single Phi unknown, and
+#  2. the DC resistance, which is gauge invariant and which pins down that the
+#     interior mixed port is physically correct and not merely well posed.
+#
+# Geometry: case 02's cylinder, shortened. a = 1.5 mm, 40-gon, rod 28 mm in a
+# 40 mm box, so the top cap sits 12 mm clear of the top face.
+a_mm                   1.5
+length_mm              28.0
+ngon                   40
+sigma                  5.8e7
+frequency              50.0
+
+drive_current          1.0          1.0e-6
+
+# R_dc = L/(sigma*A_poly) with A_poly = 7.0635 mm2 and L = 28 mm, so
+# 6.8578e-05 ohm. MEASURED 6.86593e-05, i.e. 0.12 % high -- the same margin
+# case 02/03 show on the 40 mm rod, so it is the polygon-vs-circle and mesh
+# discretization, not the interior port.
+R_rel_error_max        0.005
+
+# L is NOT asserted. It was measured at 20.38 nH on the base tree and 19.75 nH
+# on a permuted one -- a 3.1 % spread that depends on nothing but the spanning
+# tree. There is no correct value to assert until the gauge is fixed.
