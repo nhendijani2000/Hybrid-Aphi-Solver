@@ -128,6 +128,30 @@
 <p>A face crossing <strong>conductor and dielectric</strong> is worse than merely interior. The tree gauge grounds tree paths to conductors; on a face that is partly conductor and partly dielectric there is no principled rule for which edges to take, and — by Rapetti et al. (§1.1) — <strong>no continuum condition to appeal to</strong>, because the tree gauge is not a discretization of one. There is nothing to be right or wrong against.</p>
 <blockquote><p><strong>This is not a high-frequency problem.</strong> Ansari et al. (§3.1) demonstrate non-unique potentials in the <strong>quasi-static</strong> regime: a conductive prism in a conductive background, driven by a grounded wire — a galvanic low-frequency geophysics problem with material contrasts inside the domain. Their fields were fine and their potentials were not. <strong>The failure mode is about material contrast and port placement, not about frequency.</strong></p></blockquote>
 <p><strong>What this project has and has not measured.</strong> We have measured, thoroughly, that tree–cotree is sound for boundary-mounted ports. <strong>We have never built a case with an interior or mixed-material port, so we have not measured the failure either</strong> — it is predicted by the mechanism above and documented in the literature, not yet observed here. §9 proposes closing that gap, and it should be closed <em>before</em> the gauge change, so that there is a failing baseline to compare against.</p>
+<h3>1.3 Measured: an interior cut&#x27;s LOCAL field is tree-dependent at 8 %</h3>
+<p>The strongest evidence in this report is not from the literature. It is a measurement on <code>05_Loop_1A_50Hz</code>, a case that <strong>passes all its assertions</strong>, at <strong>50 Hz</strong>, through a cut that lies <strong>entirely inside a conductor</strong> — the most favourable interior-port configuration there is, with one side of the cut even pinned at 0 V.</p>
+<p>Case 05&#x27;s ring is driven by an internal cut and asserts <code>L_nH = 19.7854 ± 0.05</code>, obtained from <code>Z = V / I_drive</code>, so the assertion rides on a potential. Running <code>07_GaugeInvariance</code>&#x27;s permutation harness on it, three spanning trees:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>base → permA</th>
+<th>base → permB</th>
+</tr></thead>
+<tbody>
+<tr><td><code>L</code> (asserted 19.7854 ± 0.05 nH)</td><td><strong>+0.0035 nH</strong></td><td>+0.0009 nH</td></tr>
+<tr><td>`\</td><td>V\</td><td>`</td><td>~3e‑6 relative</td><td>~3e‑6 relative</td></tr>
+<tr><td>**<code>J</code> within 2 mm of the cut**</td><td><strong>8.3 %</strong></td><td>—</td></tr>
+<tr><td>**<code>B</code> within 2 mm of the cut**</td><td><strong>7.4 %</strong></td><td>—</td></tr>
+</tbody></table></div>
+<p>and the field change decays sharply away from the cut — <code>J</code> goes <strong>8.3 % → 2.3e‑4 → 7.2e‑6</strong> across the 0–2, 2–5 and 5–10 mm bands. It is localized at the port, not global.</p>
+<p><strong>Three checks say it is real rather than numerical noise:</strong></p>
+<ul><li>all three solves are exact — backward errors 9.1e‑23, 9.0e‑23, 9.2e‑23;</li><li><code>ΔE = ΔJ/σ</code> to a ratio of <strong>1.0000</strong>, so the <code>E</code> and <code>J</code> changes are one</li></ul>
+<p>physical change reported against different global maxima;</p>
+<ul><li>it decays smoothly over ~11,000 nodes, so it is not the 205 cut nodes being</li></ul>
+<p>mislabelled in the output.</p>
+<p><strong>The integrated quantities survive and the local ones do not.</strong> <code>L</code> moves by 0.018 %, comfortably inside a tolerance it was never in danger of failing — which is exactly why case 05 passes and why nothing flagged this. <strong>Case 05 is not wrong.</strong> What is wrong is that the current distribution within a couple of millimetres of the feed depends on an arbitrary spanning tree, and current distribution near a feed is precisely what a phased-array analysis is for.</p>
+<blockquote><p><strong>Practitioner experience, recorded as corroboration.</strong> From the project owner&#x27;s own use of a commercial A‑Φ solver: a mixed-material port ran to completion without crashing and returned wrong solutions, and a Coulomb-type gauge improved matters without fully fixing them. The working assumption there was that <strong>internal ports lying inside a conductor were fine under tree–cotree, and only mixed-material interior ports were problematic.</strong> (Observed user-visible behaviour only; nothing here is a claim about that tool&#x27;s internals.)</p><p><strong>This measurement refines that assumption rather than contradicting it.</strong> For the quantities such a port is normally asked for — terminal voltage, R, L, Z — the assumption holds, and holds well: 0.018 % on <code>L</code>. It is the <strong>local field</strong> that moves, by 8 %, and no integrated check would ever reveal it. So the conductor-only interior port is not &quot;fine&quot;; it is <strong>fine for circuit quantities and unreliable for field quantities</strong>, and the distinction has probably gone unnoticed because the things people assert about such ports are all integrals.</p></blockquote>
+<p><strong>Why this is the report&#x27;s most useful result.</strong> It is ours, it is measured, it is at low frequency, and it is on a case that passes — so it cannot be dismissed as a pathological configuration or a high-frequency effect. It also sets the bar for the replacement: a new gauge has to make the local field near an interior port tree-independent, not merely keep <code>L</code> inside tolerance.</p>
 <hr>
 <h2>2. Chew 2014 is the keystone</h2>
 <p>W. C. Chew, <em>Vector Potential Electromagnetics with Generalized Gauge for Inhomogeneous Media: Formulation</em> (Invited Paper), <strong>Progress In Electromagnetics Research, Vol. 149, pp. 69–84, 2014</strong>, DOI 10.2528/PIER14060904. Open access; now in <code>APhi_Papers/Chew2014_GeneralizedGauge_PIER149.pdf</code>.</p>

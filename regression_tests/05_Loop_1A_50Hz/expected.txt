@@ -104,4 +104,11 @@ R_rel_tol              2.0e-3
 # The tolerance below is 0.25 % of the value, which is a regression guard; the
 # agreement with theory is the 0.09 % above, and section 5.6 of LoopValidation
 # carries the comparison.
+# MEASURED GAUGE-SAFE, AND ONLY BECAUSE IT IS AN INTEGRAL. L comes from
+# Z = V/I_drive, so it rides on a potential, and potentials are what the tree
+# gauge moves. Solving this case on three different spanning trees moves L by
+# 0.0035 nH and 0.0009 nH -- 0.018 % of itself, 7 % of the tolerance below.
+# The LOCAL field does not get off so lightly: J and B within 2 mm of the cut
+# move by 8.3 % and 7.4 %. No assertion in this file can see that, because they
+# are all integrals. See LoopValidation.md section 7.1.
 L_nH                   19.7854      0.05

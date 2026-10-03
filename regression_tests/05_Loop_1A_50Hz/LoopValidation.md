@@ -780,7 +780,50 @@ sweeps — the second starting from the first's end face — gives a count ratio
 > globally while half the ring stayed coarse, so it was measuring the wrong thing. Resolution *is*
 > part of it.
 
-## 7. What is asserted automatically
+## 7.1 The cut's local field is tree-dependent — the assertions are not
+
+Everything this case asserts is an **integral**, and that turns out to be the
+only reason it passes.
+
+Running `07_GaugeInvariance`'s permutation harness on this case — the same
+problem solved on three different spanning trees, which changes nothing physical
+— gives:
+
+| | base → permA | base → permB |
+|---|---|---|
+| `L`, asserted 19.7854 ± 0.05 nH | **+0.0035 nH** | +0.0009 nH |
+| `\|V\|` | ~3e‑6 relative | ~3e‑6 relative |
+| **`J` within 2 mm of the cut** | **8.3 %** | — |
+| **`B` within 2 mm of the cut** | **7.4 %** | — |
+
+and the change dies away from the cut: `J` moves 8.3 % inside 2 mm,
+**2.3e‑4** at 2–5 mm and **7.2e‑6** at 5–10 mm.
+
+**It is not numerical noise.** All three solves are exact (backward errors
+9.1e‑23, 9.0e‑23, 9.2e‑23); `ΔE = ΔJ/σ` to a ratio of 1.0000, so the `E` and `J`
+figures are one physical change reported against different global maxima; and it
+decays smoothly over some 11,000 nodes rather than sitting on the 205 cut nodes,
+so it is not an artifact of which side of the cut the output happens to print.
+
+**So this case is correct and its tolerances are honest.** `L` moves by 0.018 %
+of itself, which is 7 % of a tolerance it was never close to failing.
+
+**What is not safe is the local field at the feed.** The current distribution
+within a couple of millimetres of the cut depends on which spanning tree the
+gauge happened to pick. Nothing in `expected.txt` could catch that, because every
+assertion here is an integral and integrals average the discrepancy away.
+
+> **Read the right thing off this case.** `R`, `L`, `Z`, the current through a
+> plane, and the fields away from the cut are all sound. **`J` and `B` within a
+> few millimetres of the cut are not** — treat them as indicative, not
+> quantitative, until the gauge is replaced.
+
+This is the measurement that sets the bar for that replacement: a new gauge has
+to make the local field near an interior port tree-independent, not merely keep
+`L` inside tolerance. See `docs/GAUGE_CHOICE.md` §1.3, where it is recorded
+alongside the literature and the practitioner experience it refines.
+
+## 8. What is asserted automatically
 
 `check.bat` runs this case through `verify_loop.py`, not `../verify.py`: the rod verifier finds the
 drive by differencing Φ between two end caps, and a ring has none. A case-local `verify_*.py` wins
