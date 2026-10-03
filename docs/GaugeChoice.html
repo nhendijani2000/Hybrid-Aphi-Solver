@@ -747,6 +747,110 @@ Coulomb gauge               ∇·A = 0
 <tr><td>interface condition</td><td><code>n̂·A</code> continuous in a weak, ε-blind sense</td><td><code>n̂·(ε₁A₁) = n̂·(ε₂A₂)</code>, ε-weighted, built into the PDE</td></tr>
 </tbody></table></div>
 <hr>
+<h2>13. Jochum, Farle &amp; Dyczij-Edlinger — a gauge interface condition at the conductor/dielectric boundary</h2>
+<p><code>APhi_Papers/Jochum_SymmetricLowFreqStablePotentialFormulation.pdf</code>, pp. 63–71 of <em>Scientific Computing in Electrical Engineering</em> (SCEE 2014, Wuppertal), Mathematics in Industry <strong>23</strong>, Springer 2016, <a href="https://doi.org/10.1007/978-3-319-30399-4_7">doi:10.1007/978-3-319-30399-4_7</a>. This is §11.6&#x27;s entry [8], listed as unread through four editions of this file.</p>
+<p><strong>It is the closest published match to our problem that this investigation has found</strong>, and the reason is in its abstract:</p>
+<blockquote><p><em>&quot;A low-frequency stable potential formulation is presented. It covers <strong>lossy and lossless regions</strong>, results in <strong>symmetric</strong> finite-element matrices, and <strong>guarantees unique solutions</strong>. … Moreover, it clarifies <strong>the interface condition to be imposed on the gauge on the common boundaries of the lossy and lossless regions</strong>.&quot;</em></p></blockquote>
+<p>A gauge interface condition at the conductor/dielectric boundary is exactly the object the mixed-material port has been missing.</p>
+<h3>13.1 The formulation</h3>
+<p>Unknowns are <code>A_c</code> (reduced vector potential, edge), and <code>ψ</code>, <code>V</code> (nodal). The split is an <strong>inexact Helmholtz splitting</strong></p>
+<pre><code>    H_curl,0(Ω) = Q̃H_curl,0(Ω) ⊕ ∇H¹_0(Ω)                        (14)
+    A = A_c + ∇ψ                                                  (15)
+    μ₀ν_r H = ∇×A_c ,    E = −∇V − ik₀(A_c + ∇ψ)              (16),(17)</code></pre>
+<p>and — note — <em>&quot;in the discrete setting, (14) is realized by a <strong>tree–cotree splitting</strong> of the FE basis functions of lowest order&quot;</em>, citing Albanese &amp; Rubinacci 1988. <strong>The fourth independent paper in this file that keeps the tree and changes what it is for.</strong> This is also the source Stysch credits for Eller&#x27;s &quot;tree–cotree <em>as</em> a Helmholtz decomposition&quot; perspective (§11.10.1) — here it is first-hand.</p>
+<p>The governing equations differ by region. In the <strong>lossy</strong> sub-domain <code>Ω_C</code>:</p>
+<pre><code>    ∇×(ν_r∇×A_c) + (σ₀ + ik₀ε_r)[ik₀(A_c + ∇ψ) + ∇V] = μ₀J_i     (18a)  Ampère
+    ∇·[(σ₀ + ik₀ε_r)(A_c + ∇ψ)] = 0                               (18b)  GAUGE</code></pre>
+<p>In the <strong>lossless</strong> sub-domain <code>Ω_N</code>:</p>
+<pre><code>    ∇×(ν_r∇×A_c) + ik₀ε_r[ik₀(A_c + ∇ψ) + ∇V] = μ₀J_i            (19a)  Ampère
+    ∇·{ε_r[ik₀(A_c + ∇ψ) + ∇V]} = μ₀c₀ρ                           (19b)  Gauss</code></pre>
+<p>The asymmetry is the whole design. <strong>In the conductor the second equation is a gauge</strong> — <code>∇·[(σ + ik₀ε)A] = 0</code>, which is Herles&#x27;s (17) <code>div(κA) = 0</code> with <code>κ = σ + iωε</code> (§11.2), reached independently and nine years earlier. <strong>In the insulator the second equation is physics</strong>, Gauss&#x27;s law, and <em>&quot;a gauge will be imposed in the discrete setting&quot;</em> — i.e. by the tree–cotree splitting, not by a PDE.</p>
+<p>So <code>σ</code> never appears in a gauge condition outside the conductor, and the insulator never carries a <code>σ</code>-weighted operator at all. <strong>That is a structural answer to the spike&#x27;s finding 2</strong>, in a potential formulation rather than an E-field one.</p>
+<h3>13.2 The symmetry trick</h3>
+<p>Each equation is tested twice, against different spaces:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>weak form</th>
+<th>equation</th>
+<th>test function</th>
+<th>gives the row for</th>
+</tr></thead>
+<tbody>
+<tr><td>(21)</td><td>Ampère (18a)</td><td><code>w_c ∈ Q̃H_curl,0</code></td><td><code>A_c</code></td></tr>
+<tr><td>(22)</td><td>Ampère (18a)</td><td><code>∇ψ̄</code>, <code>ψ̄ ∈ H¹_0</code></td><td><code>ψ</code></td></tr>
+<tr><td>(23)</td><td>gauge (18b)</td><td><code>V̄ ∈ H¹_0</code></td><td><code>V</code></td></tr>
+</tbody></table></div>
+<p>The <code>ψ</code> row comes from <strong>Ampère</strong> and the <code>V</code> row from the <strong>gauge</strong>. That cross placement is what makes the <code>(ψ,V)</code> and <code>(V,ψ)</code> blocks transposes of one another, and they state the result plainly:</p>
+<blockquote><p><em>&quot;Assuming (complex)-symmetric material tensors, it can be seen from the weak forms … that the resulting FE matrices will also be <strong>complex-symmetric</strong>, which can be exploited to reduce memory consumption and compute time.&quot;</em></p></blockquote>
+<p>Symmetric <strong>with</strong> losses <strong>and</strong> uniqueness, which is the combination <code>GENERALIZED_LORENZ_GAUGE.md</code> §11 could not reach: there the choice appeared to be symmetric <em>or</em> well-conditioned. Here it is a consequence of where the test functions are placed, not of a scaling applied afterwards.</p>
+<h3>13.3 The interface conditions — the part we came for</h3>
+<p>Imposed in <strong>strong</strong> form, by single-valued potentials on <code>Γ</code>:</p>
+<pre><code>    (A_c,C − A_c,N) × n̂ = 0        (29)      tangential, i.e. edge elements
+    ψ_C − ψ_N = 0                  (30)
+    V_C − V_N = 0                  (31)</code></pre>
+<p>*(The extracted text renders the cross and dot products with the same garbled glyph. (29) follows from their (3a)/(3c), which are tangential conditions, so it is read here as tangential continuity of <code>A_c</code> — standard for edge elements. Worth confirming against the typeset page before anything is built on it.)*</p>
+<p>Then the one that matters. Requiring the boundary integrals of (23) and (27) to cancel yields:</p>
+<blockquote><p><em>&quot;the gauge condition (18b) is supplemented by the constraint&quot;</em></p></blockquote>
+<pre><code>    [ (σ₀ + ik₀ε_r)_C (A_c + ∇ψ)_C  +  (ε_r E)_N ] · n̂  =  0    on Γ   (32)</code></pre>
+<p><strong>This is a gauge condition on the normal direction at a conductor/dielectric interface, and it carries the materials of both sides</strong> — <code>(σ + ik₀ε)</code> on the conductor side against <code>ε_r</code> on the insulator side. It is emphatically <em>not</em> &quot;<code>n̂·A</code> continuous&quot;, which is the ε-blind condition that §12.3 identified as the structural ceiling on the Coulomb family.</p>
+<p>Compare the three candidates on this one point:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>normal interface condition on the gauge</th>
+</tr></thead>
+<tbody>
+<tr><td>Zhao <code>χ</code> / Ansari <code>ψ</code></td><td><code>n̂·A</code> continuous in a weak sense. <strong>No material weighting</strong> → §12.3&#x27;s ceiling.</td></tr>
+<tr><td><strong>Chew</strong></td><td><code>n̂·(ε₁A₁) = n̂·(ε₂A₂)</code> — ε-weighted, embedded in the PDE (§2.2).</td></tr>
+<tr><td><strong>Jochum (32)</strong></td><td><code>n̂·[(σ+ik₀ε)A]_C = −n̂·(εE)_N</code> — <strong>σ- and ε-weighted, and it couples the gauge flux to the physical flux across the interface.</strong></td></tr>
+</tbody></table></div>
+<p>Chew and Jochum are the only two with a materially-weighted normal condition, and Jochum&#x27;s is the only one that distinguishes conductor from insulator.</p>
+<h3>13.4 The implementation recipe, in one sentence</h3>
+<blockquote><p>*&quot;The computationally cheapest choice of gauge in <code>Ω_N</code> is to set all FE coefficients <code>x_ψ</code> associated with <code>ψ</code> basis functions <strong>in the interior</strong> of <code>Ω_N</code> to zero. In this case (26) still contributes to unknowns **on <code>Γ</code>**.&quot;*</p></blockquote>
+<p>So <code>ψ</code> is eliminated throughout the insulator&#x27;s interior but <strong>retained on the interface</strong>. The gauge degrees of freedom live exactly where the material discontinuity is — which is the opposite of what tree–cotree does, where the eliminated DOFs are wherever the traversal happens to put them.</p>
+<h3>13.5 Measured</h3>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Partially filled cavity</strong> — box half-filled with lossy dielectric, <code>ν_N = ν_C = 1</code>, <code>ε_N = ε_C = 1</code>, <code>σ_N = 0</code>, <code>σ_C = 1 S/m</code></td><td>condition number <em>&quot;remains almost constant for the new formulation, whereas that of the EFF grows rapidly as the frequency tends to zero.&quot;</em> EFF saturates at 1e21–1e25 on numerical noise. <strong>This is a mixed-material geometry</strong> — a conductor/insulator interface cutting the domain.</td></tr>
+<tr><td><strong>Voltage-driven RLC circuit</strong>, lossy wires and electrodes, lossless elsewhere</td><td><em>&quot;In the static case, the structure serves as an ideal open circuit&quot;</em>; skin and proximity effects appear in the wires as frequency rises. Correct DC behaviour through a capacitive gap.</td></tr>
+</tbody></table></div>
+<p>The cavity is the nearest published analogue of our mixed-material benchmark. It is still not a <em>port</em> on a mixed face — there is no terminal condition on the interface — so §12.3&#x27;s gap is narrowed, not closed.</p>
+<h3>13.6 Their survey of the alternatives</h3>
+<p>Useful because it is a competitor&#x27;s assessment of everything in §§11–12:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>their verdict</th>
+</tr></thead>
+<tbody>
+<tr><td>Dyczij-Edlinger, Peng &amp; Lee (1999)</td><td><em>&quot;does not consider ohmic losses&quot;</em></td></tr>
+<tr><td><strong>Hiptmair, Krämer &amp; Ostrowski (2008)</strong></td><td><em>&quot;leads to non-symmetric matrices and non-unique solutions&quot;</em> — matches Stysch&#x27;s account (§11.10.1)</td></tr>
+<tr><td>Ke, Hubing &amp; Maradei (2010), LU recombination</td><td><em>&quot;relies on numerical break-down&quot;</em></td></tr>
+<tr><td><strong>Zhu &amp; Jiao (2011, 2012)</strong></td><td><em>&quot;require an LF threshold and cannot recover magnetostatic fields&quot;</em>. The 2011 paper&#x27;s title names <em>&quot;inhomogeneous lossless/lossy dielectrics and nonideal conductors&quot;</em> — worth obtaining regardless.</td></tr>
+<tr><td><strong>Badics &amp; Pávó (2015)</strong>, <em>Full wave potential formulation with low-frequency stability including ohmic losses</em></td><td><em>&quot;A promising approach; however, its matrices are non-symmetric.&quot;</em> New to this file and on-topic.</td></tr>
+<tr><td>Jochum et al. (2015), their own [7]</td><td>superseded here: [7] <em>&quot;requires all impressed currents to be solenoidal, and the lossless region to be free of charges&quot;</em>, both of which this chapter removes.</td></tr>
+</tbody></table></div>
+<p>Note the consequence for §11.6: <strong>[7] no longer needs obtaining</strong> — this chapter is its strict improvement. And §11.10.1&#x27;s claim that Jochum&#x27;s cost is <em>&quot;extra DoFs in the conducting regions and significantly less sparse matrices&quot;</em> comes from Stysch, not from Jochum, and §13.4 suggests it may be overstated for the cheapest gauge choice. Worth checking against [7] if the number matters.</p>
+<h3>13.7 What this does and does not change</h3>
+<p><strong>Does not change the §0 decision.</strong> Chew remains recommended, for the reason §0 gives and that nothing here touches: it is the only candidate where the FEM half, the interface conditions and <strong>the boundary-integral half</strong> come from one formulation. Jochum is FEM-only. For the hybrid endgame that is decisive.</p>
+<p><strong>Does change what the next spike should test.</strong> Jochum demonstrates, in our own discretization (edge <code>A</code>, nodal scalars, tree–cotree), that all three of the spike&#x27;s open problems are simultaneously solvable:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>spike&#x27;s open problem</th>
+<th>Jochum&#x27;s answer</th>
+</tr></thead>
+<tbody>
+<tr><td><code>σ</code> wrecks conditioning</td><td>don&#x27;t put <code>σ</code> in a gauge outside the conductor. Region-split equations, gauge only in <code>Ω_C</code> with weight <code>σ + ik₀ε</code>.</td></tr>
+<tr><td>symmetric <em>or</em> well-conditioned</td><td>both, by testing Ampère with <code>∇ψ̄</code> and the gauge with <code>V̄</code> so the off-diagonal blocks are transposes.</td></tr>
+<tr><td>the interface/surface term</td><td>it is not an obstacle but <strong>the answer</strong> — (32) <em>is</em> the gauge&#x27;s interface condition, obtained by requiring exactly those boundary integrals to cancel.</td></tr>
+</tbody></table></div>
+<p>That last row is the important one. The spike listed &quot;the surface term of (24)&quot; as a nuisance to be made to vanish. Jochum shows that the surface term is where the mixed-material physics lives, and that requiring it to cancel <em>derives</em> the interface condition. **Chew&#x27;s omitted surface term in <code>K_NE</code> should be re-examined in that light before it is discarded.**</p>
+<p><strong>A candidate the ranking now has to carry.</strong> Jochum is the strongest FEM-only option in the file — symmetric, lossy-capable, unique, tree–cotree-compatible, with a materially-weighted gauge interface condition — and it is a plausible <em>interim</em> target that would fix the mixed port without committing to the BI rewrite. §8 should be re-ranked to say so, which is a change to the decision record and is left for you rather than taken unilaterally.</p>
+<hr>
 <h2>Bibliography</h2>
 <p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
 <div class="tw"><table>
