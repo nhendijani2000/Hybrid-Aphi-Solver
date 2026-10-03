@@ -15,3 +15,7 @@ stub_rod_perm*.msh
 # permuted copies of case 02's mesh. All derived -- see README.md "The control".
 output_control03_*/
 control03_perm*.msh
+
+# Per-run solver logs from the gauge-free potential runs; the numbers that
+# matter are in README.md and GAUGE_CHOICE.md 15.10.
+gf_*.log

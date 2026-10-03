@@ -29,6 +29,7 @@
 #include "aphi_solver/gmsh_reader.hpp"
 #include "aphi_solver/input_file.hpp"
 #include "aphi_solver/mumps_backend.hpp"
+#include "aphi_solver/gauge_free_potential.hpp"
 #include "aphi_solver/postprocess.hpp"
 #include "aphi_solver/version.hpp"
 
@@ -324,6 +325,33 @@ int main(int argc, char** argv) {
             std::cout << "\n";
             std::cout << "                wrote " << vtk_path << "   " << vs.bytes / 1024
                       << " KB, " << vs.milliseconds << " ms   (Phi)\n";
+
+            // The gauge-free potential, recovered from the fields rather than
+            // read out of the gauged system. At a terminal inside the domain
+            // the two differ: 08_MixedPort_Interior measures the gauged one
+            // moving 3.8 % with the spanning tree and this one 1.1e-14.
+            // See gauge_free_potential.hpp for what that does and does NOT fix.
+            const GaugeFreePotential gfp =
+                recover_gauge_free_potential(mesh, bound, dofs, fields, omega);
+            if (gfp.unknowns > 0) {
+                std::cout << "                gauge-free Phi: " << gfp.unknowns
+                          << " unknowns, residual " << gfp.residual << ", "
+                          << (gfp.assemble_ms + gfp.solve_ms) << " ms";
+                if (!gfp.converged) std::cout << "   *** DID NOT CONVERGE";
+                std::cout << "\n";
+                for (std::size_t pi = 0; pi < bound.ports.size(); ++pi) {
+                    if (dofs.port_is_fixed[pi]) continue;
+                    std::cout << "                  port '" << bound.ports[pi].name
+                              << "'  Phi = " << gfp.port_potential[pi].real() << " "
+                              << (gfp.port_potential[pi].imag() < 0 ? "-" : "+") << " "
+                              << std::abs(gfp.port_potential[pi].imag()) << "j V\n";
+                }
+                const WriteStats gs =
+                    write_gauge_free_potential(stem + "_gaugefree.out", mesh, bound, gfp, &run);
+                write_ms += gs.milliseconds;
+                std::cout << "                wrote " << stem << "_gaugefree.out   "
+                          << gs.bytes / 1024 << " KB, " << gs.milliseconds << " ms\n";
+            }
 
             // One pair of files per field. Opening B_field.vtk gives a source
             // with B on it and nothing else to pick through. There is no

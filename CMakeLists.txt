@@ -37,6 +37,7 @@ add_library(aphi_core
     src/basis_functions.cpp
     src/tree_cotree.cpp
     src/gauge_variants.cpp
+    src/gauge_free_potential.cpp
 )
 target_include_directories(aphi_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

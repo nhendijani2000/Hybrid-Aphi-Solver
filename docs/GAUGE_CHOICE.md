@@ -2174,6 +2174,99 @@ more than the 10×.
 
 ---
 
+### 15.10 Shipped: a gauge-free Φ, and exactly what it does not fix
+
+`src/gauge_free_potential.cpp`. Φ is no longer only read out of the gauged
+system — it is also **recovered from the field**, by solving its own boundary
+value problem:
+
+```
+    ⟨β ∇Φ, ∇λ⟩  =  − ⟨β E, ∇λ⟩ ,        β = σ + jωε
+```
+
+Stysch §3.1/§6.3 (§11.8), and the third independent route in this file to a
+unique Φ after Chew's `χ` and Ostrowski & Hiptmair's EQS gauge. **Because its
+only input is `E`, and `E` does not depend on the gauge, neither does this Φ.**
+
+P1 on mesh vertices — the source `div(βE)` is piecewise constant per tet, so P2
+would double the system and buy nothing. Terminals are handled exactly as the
+main solve handles them, so the two potentials are directly comparable. It
+reuses the existing complex-symmetric `LDLᵀ`.
+
+#### Validated first on the case whose answer is already right
+
+Case 03, both ports on the boundary:
+
+| | gauge-free Φ | gauged Φ |
+|---|---|---|
+| Re | 9.79686e‑05 | 9.796995e‑05 — **agree to 0.0014 %** |
+| Im | **−3.0e‑16 ≈ 0** | +7.0986e‑06 (L = 22.6 nH) |
+
+The real parts agree to the P1-vs-P2 discretization gap. The imaginary part is
+**zero**, which is not a defect but the whole mechanism showing itself — see
+below.
+
+#### Measured on the mixed interior port
+
+Case 08, three spanning trees, against the analytic
+`R = L/(σ·A_poly) = 6.857804222298e‑05 Ω`:
+
+| | gauged Φ | gauge-free Φ |
+|---|---|---|
+| base | 68.659272 µΩ | **68.57804222150 µΩ** |
+| permA | 68.660045 | 68.57804222146 |
+| permB | 68.606254 | 68.57804222188 |
+| **error vs exact** | **0.12 % high** | **2.2e‑11** |
+| **tree spread** | 7.7e‑04 on R, **3.1e‑02 on L** | **5.5e‑12** |
+| Im | +6.4e‑06 | −1.0e‑16 |
+
+**R becomes exact to ~11 figures and tree-invariant to 5.5e‑12** — about eight
+orders better on both counts. Cost: 319 ms against a 219 s factorization,
+**0.15 % of the run**.
+
+*Caution on the 11 figures:* a uniform bar has a Φ linear in `z`, which P1
+represents exactly, so this geometry flatters the accuracy. Expect ordinary
+discretization error on a non-uniform conductor. **The tree-invariance is the
+geometry-independent part, and that is the result.**
+
+#### What it does not fix, which is most of it
+
+`E`, `B`, `H` and `J` are **inputs** here and are returned unchanged. At a mixed
+port they still move 12 %, 91 %, 91 % and 77 % with the tree (§15.3). An
+energy-based inductance does not rescue them either — measured at **42 %**
+spread across three trees (`RESULTS_SPIKEC.md`).
+
+The reason it works is the reason it cannot do more. The three solutions differ
+by a **solenoidal** field, `div(β ΔE) = 0`, so `div` annihilates the difference.
+This recovers the **irrotational (galvanic)** part of the solution exactly —
+which is where `R` lives — and is blind to the **solenoidal** part, which
+carries the flux, the inductance and the local field errors.
+
+| quantity at a mixed interior port | status |
+|---|---|
+| **R** | **fixed** — exact, gauge-free |
+| **B, H, local J** | wrong; no post-process can reach them |
+| **L** | wrong; the energy route fails too |
+
+So this is **not** a replacement for the gauged potential and must not be read as
+"mixed ports are fixed". It is a complementary extraction, reliable precisely
+where the gauged one is not. The usage rule, which is in both the header and the
+`.out` file's own header: **read `R` from the gauge-free file, read `L` from the
+gauged one, and know that at an interior mixed port the latter is wrong by
+3.1 %.**
+
+#### Why this bounds what any post-process could achieve
+
+Two cheap remedies have now been tried and both failed structurally rather than
+for want of effort: the tree contraction of §15.9 (10×, where nine orders were
+needed) and the energy integral (42 % spread). Together with the solenoidal
+argument above, that closes the post-processing avenue. **Correct fields at a
+mixed port require the gauge itself to change** — Jochum's materially-weighted
+interface condition (32), or the exterior condition a boundary-integral
+formulation would supply.
+
+---
+
 ## Bibliography
 
 Papers obtained and read for this edition, all now in `APhi_Papers/`:
