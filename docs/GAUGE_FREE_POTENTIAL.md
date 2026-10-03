@@ -139,6 +139,60 @@ spread across three trees). The post-processing avenue is closed; correct
 
 ---
 
+### 2.5 Provenance — the equation is published, the usage is ours
+
+Worth separating, because the two carry different amounts of warranty.
+
+**The equation is Stysch's (6.25)**, verbatim up to two terms we do not have:
+
+> *"Find `φ_c ∈ H¹(Ω)` such that*
+> `⟨ε_r grad φ_c, grad ψ⟩ + (2/r)⟨φ_c, ψ⟩_Γa = −⟨ε_r E, grad ψ⟩ + jμ₀ck⟨g, ψ⟩`*"*
+
+| his (6.25) | ours, (3) |
+|---|---|
+| `⟨ε_r ∇φ_c, ∇ψ⟩` | `⟨β ∇Φ, ∇λ⟩` |
+| `−⟨ε_r E, ∇ψ⟩` | `−⟨β E, ∇λ⟩` |
+| `(2/r)⟨φ_c, ψ⟩_Γa` | absent — we have no absorbing boundary |
+| `jμ₀ck⟨g, ψ⟩` | absent — his explicit source current; ours is already inside `E` |
+
+His (6.26) is the Lorenz-gauged variant, carrying an extra `−k²⟨φ_c, ψ⟩` mass
+term; (3) is his Coulomb form, which is the MQS limit of it. He also states the
+well-posedness this relies on: *"The weak-form BVP (6.25) does not possess a
+general LF breakdown. If the boundary is not purely magnetic… the resulting
+system matrix always has full rank."*
+
+**Three independent sources converge on this same scalar problem** — Stysch
+(6.25), Ostrowski & Hiptmair's electro-quasistatic gauge, and Chew's `α → 0`
+limit, which `RESULTS_SPIKEC.md` milestone 3 measured degenerating to exactly
+it. That convergence is the main reason to trust the equation.
+
+**The usage is not published, and that is the part to be careful with.**
+Stysch never solves A‑Φ at all: his §3.1 explicitly chooses the "E approach"
+over the "A‑Φ approach", so (6.25) is his formulation's **only** `Φ` — primary,
+not recovered. We instead solve a tree-gauged A‑Φ system that *already produces
+a `Φ`*, then recover a **second** one from the resulting `E`, and tell the
+reader to take `R` from the second and `L` from the first. That is his equation
+applied as a **repair to another formulation's output**, and it has not been
+found reported anywhere.
+
+Two consequences follow, and neither is resolved:
+
+- **No joint consistency guarantee.** His `Φ` and his `E` come out of one
+  formulation and satisfy one set of equations by construction. Ours come from
+  two. Nothing guarantees that `Φ_recovered` and the gauged `E` together
+  satisfy any single system. The 0.0014 % agreement on case 03 (§5.1) is
+  reassuring, but it is one number on one geometry.
+- **It invites the obvious objection.** If a separate scalar solve is needed
+  anyway, why tree-gauge the first one? That *is* Stysch's argument, and it
+  points at restructuring the formulation rather than patching it. The absence
+  of this trick from the literature may mean it is an unremarkable shortcut, or
+  may mean the field went the other way for a reason. **We do not know which.**
+
+So: the formulation is published and well grounded; the application is ours and
+is tested on two cases.
+
+---
+
 ## 3. Discretization
 
 ### 3.1 Spaces
@@ -310,3 +364,23 @@ latter is worth.**
   excludes them.
 - **Not asserted in any regression test yet.** The numbers above are measured
   and recorded, not pinned.
+
+---
+
+## 8. Bibliography
+
+The sources this rests on, all in `APhi_Papers/`, and what each one supplies.
+`GAUGE_CHOICE.md` carries the full reading of each.
+
+| | |
+|---|---|
+| **Stysch (2022)**, *Stable Broadband Finite Element Parasitic Extraction and Sensitivity Analysis*, PhD thesis, TU Darmstadt, open access (handle `tuda/8889`) — `Stysch2022_PhDThesis_StableBroadbandParasiticExtraction.pdf` | **The equation.** §6.3's (6.25) is (3) up to an absorbing-boundary term and an explicit source current; (6.26) is its Lorenz-gauged variant. §6.3 also states the full-rank property (3) relies on. §3.1 is his case for solving `E` first and `Φ` as a post-process — and, read carefully, an argument against the way we use it (§2.5). |
+| **Stysch, Klaedtke & De Gersem (2022)**, *Broadband finite-element impedance computation for parasitic extraction*, Electrical Engineering **104**(2) 855–867, [doi:10.1007/s00202-021-01348-9](https://doi.org/10.1007/s00202-021-01348-9), preprint [arXiv:2009.08232](https://arxiv.org/abs/2009.08232) | The article form. Its §2 is the clearest published statement of why a terminal potential is gauge-dependent at all: `V = V_c + jωI·L_r` with `V_c = Φ(T_b) − Φ(T_a)`, and *"as it incorporates a partial inductance, `V_c` formally depends on the gauge condition."* That is the sentence this whole document is downstream of. |
+| **Ostrowski & Hiptmair (2021)**, *Frequency-Stable Full Maxwell in Electro-Quasistatic Gauge*, SIAM J. Sci. Comput. **43**(4) B1008–B1028 (ETH SAM report 2020‑43) — `ETH2020_FreqStableFullMaxwell_EQSGauge.pdf` | The same scalar problem reached independently, as a **gauge condition** rather than a post-process: the electro-quasistatic problem used to fix the potentials in a two-step scheme. |
+| **Chew (2014)**, *Vector Potential Electromagnetics with Generalized Gauge for Inhomogeneous Media: Formulation*, PIER **149** 69–84 | The third convergence. His decoupled `Φ` equation (2) with `χ = αμε²` degenerates to (3) as `α → 0`, measured in `RESULTS_SPIKEC.md` milestone 3 — where it also shows why `α ≠ 0` is unusable for a lossy conductor. |
+| **Rapetti, Alonso Rodríguez & De Los Santos (2022)**, *J* **5**(1) 52–63 — `Rapetti2022_OnTheTreeGauge_J5.pdf` | Why the gauged `Φ` has no continuum limit to begin with: tree gauges *"are not a discretization of the Coulomb gauge and enforce no orthogonality"*, and the tree degrees of freedom are *"set arbitrarily"*. The reason §1's problem is structural rather than a matter of mesh quality. |
+| **Ansari, Farquharson & MacLachlan (2017)**, GJI **210**(1) 105–129 — `Ansari2017_GaugedFE_CoulombLagrange_GJI210.pdf` | The galvanic/inductive decomposition of `E`, which is the same split (1) performs — `Φ` carries the galvanic part, `A` the inductive. He obtains unique potentials by an explicit Lagrange-multiplier Coulomb gauge rather than by recovery, so the route differs; the decomposition does not. |
+| **COMSOL**, *Computing and Using Partial Inductance with COMSOL®* (vendor documentation) | Independent public confirmation of the limit in §6: total inductance comes from stored energy, `L_tot = 2W_m/I²`, while partial inductance is a free choice of subdivision and *"we can never measure any of these partial inductances, as only the total inductance of a closed loop is measurable."* |
+
+**Not found reported anywhere:** recovering `Φ` this way as a *repair* applied
+to a tree-gauged A‑Φ solve, which is what this implementation does. §2.5.
