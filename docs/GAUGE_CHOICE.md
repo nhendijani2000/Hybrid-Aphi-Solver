@@ -1482,6 +1482,72 @@ experiment that would distinguish mechanism 1 from mechanism 2.
 
 ---
 
+### 12.6 Ansari already documented what is wrong with this family
+
+Ansari et al. was read for §3.1 and §6.3.1, but not re-read against Zhao & Fu —
+and it should have been, because **the two use the same device.** Zhao adds
+`−∇χ` to the curl–curl equation with `∇·A + χ = 0`; Ansari adds `+∇ψ` with
+`∇·A = 0` as a third equation. One is the other with the multiplier renamed. So
+Ansari's criticisms apply directly to what Maxwell shipped.
+
+**The mechanism, stated outright** (and this is the sentence worth quoting at
+anyone who proposes a Coulomb gauge on edge elements):
+
+> *"the non-uniqueness again occurs because the normal component of the
+> approximate vector potential, that is, edge-element basis function, **is not
+> necessarily continuous across the boundary interfaces** … even though it is
+> divergence-free inside a cell by construction. In particular, **employing
+> linear edge basis functions does not necessarily form a solenoidal vector
+> potential**."*
+> *"In contrast to the nodal-based FE methods, **enforcing the Coulomb gauge
+> condition on the A‑Φ system is a non-trivial task if edge-elements are used**."*
+
+**On tree–cotree**, he is harsher than anything else in this collection:
+
+> *"this method fixes the problem (**however in a weak sense** as described in
+> Manges & Cendes 1995) by removing the degrees of freedom associated with … tree
+> edges … However, this method **has been criticized as a non-optimal choice** as
+> a result of **diminishing the highly sparse pattern** of the discretized
+> coefficient matrix and also **difficulty in finding the ideal graph tree that
+> gives a fast convergence** to the solution (Li et al. 2015; Zhang & Cen 2016)."*
+
+Two more references for the tree-dependence claim, and the explicit statement
+that tree gauging works only *weakly* — consistent with §11.8's finding that the
+gauge-dependent part of a terminal quantity is a modelling convention left
+implicit.
+
+**On his own gauged system — the shortcomings of this Coulomb family:**
+
+| | |
+|---|---|
+| it is a **saddle-point / KKT system** | *"saddle-point or Karush–Kuhn–Tucker system."* Requires a purpose-built preconditioner — block-diagonal with an approximate Schur complement, following Murphy et al. 2000. |
+| **a conventional preconditioner converges to the wrong answer** | *"With conventional pre-conditioning using the LU factorization of the entire gauged system, an iterative solver **can fail to converge to the correct solution**."* Not slow — *wrong*. |
+| the symmetric alternative was rejected | the unsymmetric variant is *"ill-conditioned … suffers from a very slow convergence"*, which is why the multiplier was introduced at all. |
+| **cost** | Table 1, grounded-wire example: the incomplete-gauged system runs in 234–379 s by GMRES; **the gauged system needs 9.0 GB and 1102.3 s** by MUMPS. Roughly 3–5×. |
+
+So the multiplier-Coulomb family is, by its own authors' accounts: a saddle-point
+system, 3–5× more expensive, fragile under ordinary preconditioning to the point
+of returning plausible wrong answers, and — per §12.3 — still ε-blind at the
+interface it was built to fix. That is a complete account of "some improvement
+but not fully correct behaviour."
+
+**It also sharpens the contrast with Chew.** Both Ansari's `ψ` and Zhao's `χ`
+are Lagrange multipliers *bolted onto* a curl–curl system to impose a constraint
+from outside. Chew's `χ` is not a multiplier at all — it is a **material
+coefficient inside the gauge condition**, `∇·(εA) = −χ ∂Φ/∂t` with `χ = αμε²`,
+which is why his interface condition carries `ε` and theirs cannot. The
+similarity of the symbol has been a persistent source of confusion in this file
+and the two should not be conflated:
+
+| | Ansari `ψ` / Zhao `χ` | Chew `χ` |
+|---|---|---|
+| what it is | a Lagrange multiplier, an extra unknown | a scalar material coefficient, `αμε²` |
+| value at the solution | provably **zero** | nonzero, position-dependent (§11 of the spec) |
+| system it creates | saddle-point, indefinite | two decoupled definite Helmholtz problems |
+| interface condition | `n̂·A` continuous in a weak, ε-blind sense | `n̂·(ε₁A₁) = n̂·(ε₂A₂)`, ε-weighted, built into the PDE |
+
+---
+
 ## Bibliography
 
 Papers obtained and read for this edition, all now in `APhi_Papers/`:

@@ -713,6 +713,40 @@ Coulomb gauge               ∇·A = 0
 <p>It does not reach the mixed port, for the reasons above, and §12.3&#x27;s reason 1 is structural rather than a matter of implementation effort. That keeps the ranking of §8 as it stands: **Coulomb-family gauges improve the interface behaviour without resolving it, because the condition they impose does not carry <code>ε</code>.**</p>
 <p>Your own observation — that Maxwell&#x27;s Coulomb option improved matters without fixing them — is now matched to a mechanism, and §12.3&#x27;s reason 2 gives a cheap experiment that would distinguish mechanism 1 from mechanism 2.</p>
 <hr>
+<h3>12.6 Ansari already documented what is wrong with this family</h3>
+<p>Ansari et al. was read for §3.1 and §6.3.1, but not re-read against Zhao &amp; Fu — and it should have been, because <strong>the two use the same device.</strong> Zhao adds <code>−∇χ</code> to the curl–curl equation with <code>∇·A + χ = 0</code>; Ansari adds <code>+∇ψ</code> with <code>∇·A = 0</code> as a third equation. One is the other with the multiplier renamed. So Ansari&#x27;s criticisms apply directly to what Maxwell shipped.</p>
+<p><strong>The mechanism, stated outright</strong> (and this is the sentence worth quoting at anyone who proposes a Coulomb gauge on edge elements):</p>
+<blockquote><p><em>&quot;the non-uniqueness again occurs because the normal component of the approximate vector potential, that is, edge-element basis function, <strong>is not necessarily continuous across the boundary interfaces</strong> … even though it is divergence-free inside a cell by construction. In particular, <strong>employing linear edge basis functions does not necessarily form a solenoidal vector potential</strong>.&quot;</em> <em>&quot;In contrast to the nodal-based FE methods, <strong>enforcing the Coulomb gauge condition on the A‑Φ system is a non-trivial task if edge-elements are used</strong>.&quot;</em></p></blockquote>
+<p><strong>On tree–cotree</strong>, he is harsher than anything else in this collection:</p>
+<blockquote><p><em>&quot;this method fixes the problem (<strong>however in a weak sense</strong> as described in Manges &amp; Cendes 1995) by removing the degrees of freedom associated with … tree edges … However, this method <strong>has been criticized as a non-optimal choice</strong> as a result of <strong>diminishing the highly sparse pattern</strong> of the discretized coefficient matrix and also <strong>difficulty in finding the ideal graph tree that gives a fast convergence</strong> to the solution (Li et al. 2015; Zhang &amp; Cen 2016).&quot;</em></p></blockquote>
+<p>Two more references for the tree-dependence claim, and the explicit statement that tree gauging works only <em>weakly</em> — consistent with §11.8&#x27;s finding that the gauge-dependent part of a terminal quantity is a modelling convention left implicit.</p>
+<p><strong>On his own gauged system — the shortcomings of this Coulomb family:</strong></p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td>it is a <strong>saddle-point / KKT system</strong></td><td><em>&quot;saddle-point or Karush–Kuhn–Tucker system.&quot;</em> Requires a purpose-built preconditioner — block-diagonal with an approximate Schur complement, following Murphy et al. 2000.</td></tr>
+<tr><td><strong>a conventional preconditioner converges to the wrong answer</strong></td><td><em>&quot;With conventional pre-conditioning using the LU factorization of the entire gauged system, an iterative solver <strong>can fail to converge to the correct solution</strong>.&quot;</em> Not slow — <em>wrong</em>.</td></tr>
+<tr><td>the symmetric alternative was rejected</td><td>the unsymmetric variant is <em>&quot;ill-conditioned … suffers from a very slow convergence&quot;</em>, which is why the multiplier was introduced at all.</td></tr>
+<tr><td><strong>cost</strong></td><td>Table 1, grounded-wire example: the incomplete-gauged system runs in 234–379 s by GMRES; <strong>the gauged system needs 9.0 GB and 1102.3 s</strong> by MUMPS. Roughly 3–5×.</td></tr>
+</tbody></table></div>
+<p>So the multiplier-Coulomb family is, by its own authors&#x27; accounts: a saddle-point system, 3–5× more expensive, fragile under ordinary preconditioning to the point of returning plausible wrong answers, and — per §12.3 — still ε-blind at the interface it was built to fix. That is a complete account of &quot;some improvement but not fully correct behaviour.&quot;</p>
+<p><strong>It also sharpens the contrast with Chew.</strong> Both Ansari&#x27;s <code>ψ</code> and Zhao&#x27;s <code>χ</code> are Lagrange multipliers <em>bolted onto</em> a curl–curl system to impose a constraint from outside. Chew&#x27;s <code>χ</code> is not a multiplier at all — it is a <strong>material coefficient inside the gauge condition</strong>, <code>∇·(εA) = −χ ∂Φ/∂t</code> with <code>χ = αμε²</code>, which is why his interface condition carries <code>ε</code> and theirs cannot. The similarity of the symbol has been a persistent source of confusion in this file and the two should not be conflated:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>Ansari <code>ψ</code> / Zhao <code>χ</code></th>
+<th>Chew <code>χ</code></th>
+</tr></thead>
+<tbody>
+<tr><td>what it is</td><td>a Lagrange multiplier, an extra unknown</td><td>a scalar material coefficient, <code>αμε²</code></td></tr>
+<tr><td>value at the solution</td><td>provably <strong>zero</strong></td><td>nonzero, position-dependent (§11 of the spec)</td></tr>
+<tr><td>system it creates</td><td>saddle-point, indefinite</td><td>two decoupled definite Helmholtz problems</td></tr>
+<tr><td>interface condition</td><td><code>n̂·A</code> continuous in a weak, ε-blind sense</td><td><code>n̂·(ε₁A₁) = n̂·(ε₂A₂)</code>, ε-weighted, built into the PDE</td></tr>
+</tbody></table></div>
+<hr>
 <h2>Bibliography</h2>
 <p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
 <div class="tw"><table>
