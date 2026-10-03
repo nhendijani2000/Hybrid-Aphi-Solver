@@ -90,7 +90,7 @@
 <tbody>
 <tr><td><strong>Recommended gauge</strong></td><td><strong>Chew&#x27;s generalized gauge</strong> — <code>∇·(εA) = −χ ∂Φ/∂t</code>, <code>χ = αε²μ</code></td></tr>
 <tr><td><strong>Why, in one line</strong></td><td>It is the only candidate under which the FEM half, the interface conditions, and the BEM half all come from one formulation.</td></tr>
-<tr><td><strong>Is anything broken today?</strong></td><td><strong>Not for any geometry in the suite — and every one of them puts its terminals on the outer boundary.</strong> <code>E</code>, <code>B</code>, <code>H</code>, <code>J</code>, terminal <code>V</code>, <code>I</code>, <code>R</code>, <code>L</code>, <code>Z</code> are correct and gauge-invariant there, measured to 1e‑12 by <code>07_GaugeInvariance</code>. That result does <strong>not</strong> extend to a port inside the domain: see §1.2.</td></tr>
+<tr><td><strong>Is anything broken today?</strong></td><td>**Yes — <code>08_MixedPort_Interior</code> is broken, measured (§15).<strong> A single-potential port on an interior conductor/air face moves its inductance by </strong>3.1 %<strong> and the current density near it by </strong>77 %** when the spanning tree changes, against 1e‑12 for the same wire with both caps on the boundary. For every <em>other</em> geometry in the suite, nothing is broken — and every one of those puts its terminals on the outer boundary. <code>E</code>, <code>B</code>, <code>H</code>, <code>J</code>, terminal <code>V</code>, <code>I</code>, <code>R</code>, <code>L</code>, <code>Z</code> are correct and gauge-invariant there, measured to 1e‑12 by <code>07_GaugeInvariance</code>. That result does <strong>not</strong> extend to a port inside the domain: see §1.2.</td></tr>
 <tr><td><strong>What is wrong</strong></td><td>Φ in the interior is not physical; tree–cotree postpones rather than removes low-frequency breakdown; and <strong>at a port face inside the domain — especially one crossing conductor and dielectric — it has no principled rule at all, at any frequency</strong>.</td></tr>
 <tr><td><strong>What it costs us</strong></td><td>Less than the first edition assumed: **our Whitney‑1 <code>A</code> space is already the one Chew&#x27;s gauge requires.** Φ moves P2 → P1 and the gauge term is added; the <code>A</code> discretization is untouched.</td></tr>
 <tr><td><strong>Still open</strong></td><td>Whether <code>A</code> stays a Whitney 1‑form <strong>at the boundary-integral surface</strong>. This is now the real research question — see §6.</td></tr>
@@ -355,7 +355,8 @@ Coulomb gauge               ∇·A = 0
 <hr>
 <h2>9. What to measure before committing</h2>
 <ol><li><strong>Is Φ mesh-independent?</strong> Refine twice; Φ must converge pointwise. Tree–cotree fails this by construction. <strong>Case 07&#x27;s permutation harness is directly reusable</strong> — under a real gauge, its <em>potential-moves</em> assertions should invert while every field assertion holds unchanged.</li><li><strong>Condition number against frequency</strong>, to the static limit, against the tree–cotree baseline.</li><li><strong>The mixed conductor/dielectric port</strong>, with Chew&#x27;s embedded interface conditions — does the port behave with no special-casing?</li><li><strong>Both quasi-static limits in tandem</strong> (§7): electroquasistatic from the Φ equation, magnetoquasistatic from the <code>A</code> equation, both accurate at once.</li><li><strong>Factorization cost and memory</strong> at case 05/06 scale.</li><li><strong>A genus &gt; 0 case</strong> — case 05&#x27;s ring — for the null magnetostatic solution.</li><li><strong>Solver-independence</strong>, following Ansari (§3.1): solve the same gauged system with a direct and an iterative solver and require the <em>potentials</em> to agree, not just the fields. It is a cheap check and it is the one that exposed the problem for him.</li></ol>
-<p><strong>And one measurement to take first, before any gauge work begins.</strong> Build a minimal case with a port face <strong>inside</strong> the domain crossing conductor and dielectric, and run case 07&#x27;s tree-permutation harness on it. Two outcomes, both worth having:</p>
+<p><strong>And one measurement to take first, before any gauge work begins. — TAKEN; see §15.</strong> It was the first outcome: <code>L</code> moves 3.1 % and <code>J</code> 77 %, against 1e‑12 for the boundary-port control. The paragraph below is kept as written because the reasoning for taking it stands, and because it names the alternative that did <em>not</em> happen.</p>
+<p>Build a minimal case with a port face <strong>inside</strong> the domain crossing conductor and dielectric, and run case 07&#x27;s tree-permutation harness on it. Two outcomes, both worth having:</p>
 <ul><li><strong>Φ and the terminal quantities move with the tree</strong> — the predicted failure is</li></ul>
 <p>now <em>measured</em> in this project rather than inherited from the literature, and there is a quantitative baseline the new gauge must fix.</p>
 <ul><li><strong>They do not move</strong> — then the premise behind the whole gauge programme needs</li></ul>
@@ -922,6 +923,146 @@ Coulomb gauge               ∇·A = 0
 <tr><td><strong>Chew&#x27;s omitted surface term must be re-derived, not dropped</strong></td><td>§13.7: in Jochum the analogous term, forced to cancel, <em>is</em> the gauge&#x27;s interface condition (32). The spike treated it as a nuisance. That was the wrong frame.</td></tr>
 </tbody></table></div>
 <p>The honest summary is that <strong>Chew remains the strategic target and Jochum is the better engineering answer for everything short of the boundary-integral coupling</strong> — and that the two are closer than §13 assumed, because <code>E_V ≈ A</code> and <code>E_W, E_U ≈ ∇Φ</code> (§11.10.1) means these are all the same splitting seen from different sides.</p>
+<hr>
+<h2>15. Measured: the mixed-material interior port fails, by nine orders</h2>
+<p><code>regression_tests/08_MixedPort_Interior/</code>. This is the experiment §9 called for and listed as &quot;one measurement to take first, before any gauge work begins&quot;. It has now been taken, and it returns the first of the two outcomes §9 anticipated: <strong>the predicted failure is real, and there is now a quantitative baseline in our own solver that a new gauge has to beat.</strong></p>
+<h3>15.1 The case</h3>
+<p>Case 02&#x27;s copper cylinder with its top cap pulled <strong>inside</strong> the box, carrying a <strong>single-potential current port</strong> on a face with conductor on one side and air on the other. <code>wire_bottom</code> stays on the box floor as the 0 V reference, so current enters the interior cap, runs down the rod and leaves through the grounded cap — a closed path, which is what makes the case well-posed where an earlier attempt was not.</p>
+<p>Two solver changes were needed, both in <code>problem_binding.cpp</code>:</p>
+<ul><li>a <strong>boundary-type port may now sit on a wholly interior surface</strong>. A</li></ul>
+<p>non-internal port gets <code>PhiDof::Port</code>, i.e. <strong>one shared Φ unknown with no grounded side</strong> — the single-potential port. An internal cut is the two-sided alternative and has conductor on <em>both</em> sides, so it is not this. Partially interior still fails, since that is the typo the original check existed to catch.</p>
+<ul><li>the port&#x27;s direction is derived from <strong>which side is the conductor</strong>, not from</li></ul>
+<p><code>ft.tets[0]</code>. This mattered: adjacency order follows node numbering and the permutation harness reorders nodes, so the old rule could have reversed the current and the sign flip would have been recorded as a gauge effect. The convention generalizes from &quot;positive current enters the domain&quot; to <strong>positive current enters the conductor</strong>.</p>
+<h3>15.2 The port is sound before any gauge claim is made</h3>
+<p>The previous attempt at this measurement was deleted because its geometry had no return path and the conductor-only control was equally wrecked. So:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td>Φ spread across the 373-node port face</td><td><strong>exactly 0.0</strong> — one shared DOF, as <code>dof_map.cpp</code> specifies</td></tr>
+<tr><td>backward error, three solves</td><td>2.95e‑21, 2.94e‑21, 2.87e‑21</td></tr>
+<tr><td><strong>R</strong></td><td><strong>68.659 µΩ</strong> against <strong>68.58 µΩ</strong> expected for a 28 mm rod — <strong>0.12 %</strong>, the same margin cases 02/03 show at 40 mm</td></tr>
+</tbody></table></div>
+<p>Resistance scales with length as it must, so the interior mixed port is <strong>physically correct</strong>, not merely well-posed.</p>
+<h3>15.3 The measurement</h3>
+<p>Three spanning trees, from permuting node order (97.9 % and 97.7 % of nodes moved):</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>R (µΩ)</th>
+<th>L (nH)</th>
+<th>ΔR</th>
+<th>ΔL</th>
+</tr></thead>
+<tbody>
+<tr><td>base</td><td>68.659272</td><td>20.382779</td><td>—</td><td>—</td></tr>
+<tr><td>permA</td><td>68.660045</td><td><strong>19.747798</strong></td><td>1.1e‑05</td><td><strong>3.1e‑02</strong></td></tr>
+<tr><td>permB</td><td>68.606254</td><td>20.435042</td><td>7.7e‑04</td><td>2.6e‑03</td></tr>
+</tbody></table></div>
+<p><strong>L moves 3.1 % with the choice of spanning tree. R barely moves.</strong></p>
+<p>That split is §7&#x27;s <code>ωL/R</code> mechanism behaving exactly as derived. Here <code>ωL/R = 0.093</code>, so the gauge-sensitive fraction of the terminal voltage is small and almost entirely <strong>inductive</strong> — and it is the inductance that moves. The theory predicted <em>which</em> terminal quantity would break before it was measured.</p>
+<p>The gauge-invariant fields are not invariant:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>field</th>
+<th>base→permA</th>
+<th>base→permB</th>
+</tr></thead>
+<tbody>
+<tr><td>E</td><td>1.45e‑01</td><td>1.20e‑01</td></tr>
+<tr><td>B</td><td>4.95e‑01</td><td>7.32e‑01</td></tr>
+<tr><td>H</td><td>4.95e‑01</td><td>7.32e‑01</td></tr>
+<tr><td><strong>J</strong></td><td><strong>7.72e‑01</strong></td><td>6.37e‑01</td></tr>
+</tbody></table></div>
+<p><code>E</code>, <code>B</code>, <code>H</code> and <code>J</code> <strong>cannot</strong> depend on the gauge. When they move by tens of percent, the three runs are not three gauges of one solution — they are <strong>three different discrete solutions.</strong></p>
+<p>And it is sharply localized at the port. <code>J</code> by distance, against each band&#x27;s own maximum as well as the global one (the global maximum sits at the port, so normalizing by it alone would flatter the far field):</p>
+<div class="tw"><table>
+<thead><tr>
+<th>band</th>
+<th>nodes</th>
+<th>vs global max</th>
+<th>vs this band&#x27;s max</th>
+</tr></thead>
+<tbody>
+<tr><td>0–2 mm</td><td>10559</td><td><strong>7.72e‑01</strong></td><td><strong>7.72e‑01</strong></td></tr>
+<tr><td>2–5 mm</td><td>11282</td><td>1.76e‑03</td><td>4.71e‑03</td></tr>
+<tr><td>5–10 mm</td><td>18980</td><td>1.09e‑04</td><td>2.92e‑04</td></tr>
+<tr><td>10 mm+</td><td>69215</td><td>5.31e‑05</td><td>1.42e‑04</td></tr>
+</tbody></table></div>
+<h3>15.4 The control, which closes the alternatives</h3>
+<p>Same wire, same 1 A drive, the <strong>same permutation seeds</strong>, the same measurement script — with both caps on the outer boundary. That is case 03, and if the 77 % were an artefact of the harness, the position matching or the stub-rod mesh, it would appear here too.</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>R (µΩ)</th>
+<th>L (nH)</th>
+<th>ΔR</th>
+<th>ΔL</th>
+</tr></thead>
+<tbody>
+<tr><td>base</td><td>97.969950</td><td>22.595612</td><td>—</td><td>—</td></tr>
+<tr><td>permA</td><td>97.969950</td><td>22.595612</td><td>4.2e‑12</td><td>9.9e‑12</td></tr>
+<tr><td>permB</td><td>97.969950</td><td>22.595612</td><td>6.5e‑12</td><td>1.3e‑11</td></tr>
+</tbody></table></div>
+<p>Identical to ten significant figures, with <code>E</code>, <code>B</code>, <code>H</code>, <code>J</code> at 1e‑11 to 4e‑11 and <code>J</code> <strong>flat</strong> across every band. And <code>Z = 9.796995e‑05 + j7.0986e‑06</code> reproduces case 02&#x27;s published impedance exactly, so the harness measures the <em>right</em> physics and not merely the same physics twice.</p>
+<p><strong>Crucially, the gauge really did change in the control.</strong> <code>A</code> moves <strong>66–100 %</strong> and <code>Φ</code> moves 0.79–0.95 %, comparable to the mixed-port run.</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>boundary ports</th>
+<th>interior mixed port</th>
+<th>ratio</th>
+</tr></thead>
+<tbody>
+<tr><td>terminal <code>L</code></td><td>9.9e‑12</td><td><strong>3.1e‑02</strong></td><td><strong>3e9×</strong></td></tr>
+<tr><td><code>J</code></td><td>1.5e‑11</td><td><strong>7.7e‑01</strong></td><td><strong>5e10×</strong></td></tr>
+<tr><td><code>A</code> moves — the gauge changing</td><td>1.0e+00</td><td>6.4e‑01</td><td>~1×</td></tr>
+<tr><td><code>Φ</code> moves</td><td>7.9e‑03</td><td>1.8e‑02</td><td>~2×</td></tr>
+</tbody></table></div>
+<p><strong>The gauge transformation is the same size in both. The response to it differs by ten orders of magnitude, and the only thing changed is where the port sits.</strong></p>
+<p>That is the cleanest statement of the problem this report exists to solve.</p>
+<h3>15.5 Against case 07&#x27;s own thresholds</h3>
+<p><code>07_GaugeInvariance/expected.txt</code> asserts two limits. Applied to case 08:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>assertion</th>
+<th>threshold</th>
+<th>case 08</th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><code>field_invariance_max</code></td><td>1.0e‑09</td><td><strong>7.7e‑01</strong></td><td>fails by <strong>~9 orders</strong></td></tr>
+<tr><td><code>terminal_exact_max</code></td><td>1.0e‑15</td><td><strong>3.1e‑02</strong></td><td>fails by <strong>~13 orders</strong></td></tr>
+</tbody></table></div>
+<p>Case 07 passes both on the same solver, same gauge, same harness — with its ports on the boundary.</p>
+<h3>15.6 The ladder, complete</h3>
+<div class="tw"><table>
+<thead><tr>
+<th>port configuration</th>
+<th>local <code>J</code></th>
+<th>terminal <code>L</code></th>
+</tr></thead>
+<tbody>
+<tr><td>both ports on the outer boundary (§15.4, and case 07)</td><td>1e‑11</td><td>1e‑12</td></tr>
+<tr><td>cut inside a conductor (§1.3, case 05)</td><td>8.3 %</td><td>0.018 %</td></tr>
+<tr><td><strong>interior conductor/air port (this case)</strong></td><td><strong>77 %</strong></td><td><strong>3.1 %</strong></td></tr>
+</tbody></table></div>
+<p>Roughly <strong>ten times worse in the field and 170 times worse in the inductance</strong> than an interior cut through a conductor — which was itself already outside what case 07&#x27;s invariance result covers.</p>
+<p>3.1 % on an inductance fails an engineering tolerance, and it is set by an arbitrary graph traversal.</p>
+<h3>15.7 What this establishes, and what it does not</h3>
+<p><strong>Establishes.</strong> The mixed-material interior port is expressible and physically correct, <em>and</em> its inductance and near fields are controlled by the spanning tree rather than by the physics. The failure this report has been arguing from the literature is now measured in our own code, under control, with the alternatives excluded. §1.2&#x27;s argument was right.</p>
+<p><strong>Does not establish a mechanism.</strong> The most likely one is the field singularity at the port rim, where the cap meets the cylinder&#x27;s lateral surface; the solver already warns, for internal cuts, that a rim interior to Φ&#x27;s support makes the field singular there and the gap capacitance mesh-dependent. A singular field has no determinate discrete value and the tree selects among the possibilities. That fits the sharp localization but is <strong>not proven</strong>.</p>
+<p><strong>Says nothing about which gauge fixes it.</strong> §§11–14 rank the candidates on other grounds. What this adds is the <strong>acceptance criterion</strong>: at this port, a new gauge must hold <code>J</code> and the other fields invariant to far better than 77 %, and <code>L</code> to far better than 3.1 %, across the same three trees. The harness and the case now exist, so that test is a re-run rather than a new build.</p>
+<h3>15.8 Practitioner corroboration, now with numbers attached</h3>
+<p>Reported independently from Ansys Maxwell, and recorded in §1.3: a mixed-material port there ran to completion without crashing and returned wrong solutions; its A‑Φ matrices were badly conditioned, and more so under a Coulomb gauge. Three details of this case line up with that account:</p>
+<ul><li>it <strong>runs and converges</strong> — backward error 2.9e‑21, no crash, no warning</li></ul>
+<p>beyond the one the new binding emits — and returns a wrong inductance. A silent wrong answer is exactly the reported failure mode;</p>
+<ul><li>the factorization reports <code>d max/min = 7.05e+12</code>, identically across all three</li></ul>
+<p>trees, on a problem case 03 solves at comparable size;</p>
+<ul><li>the same hazard appeared in that solver&#x27;s handling of the inward normal, which</li></ul>
+<p>is a natural bug to write: &quot;inward normal&quot; is unambiguous for every port on the outer boundary, and the first mixed-material port is where the assumption silently stops holding.</p>
 <hr>
 <h2>Bibliography</h2>
 <p>Papers obtained and read for this edition, all now in <code>APhi_Papers/</code>:</p>
