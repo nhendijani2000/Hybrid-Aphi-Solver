@@ -269,7 +269,21 @@
 <p>If that diagnosis is right, no arrangement of terminals rescues it: the fix would have to stop realizing the Helmholtz splitting with a tree. That points at §8&#x27;s second fallback — taking the condition from an exterior boundary-integral solution — rather than at any further rearrangement of Jochum&#x27;s rows.</p>
 <h3>10.5 The control that would settle it was attempted, and failed</h3>
 <p>The diagnosis in §10.3 needs one check: is <strong>Jochum without a terminal</strong> tree-independent on this mesh? If his published configuration is also tree-dependent here, my construction is faithful and the conclusion holds. If it is not, the terminal is what broke it, and §6 needs revisiting rather than abandoning.</p>
-<p>I built it — his configuration, Dirichlet <code>V</code> on faces, no terminal, measuring the dissipated power, which is gauge-invariant — and <strong>it does not work</strong>. It returns <code>P = 2.5e‑19 W</code> where 1 V across 11.5 µΩ should give about <code>4.3e+04 W</code>: <strong>twenty-three orders out</strong>. The Dirichlet lift for a prescribed <code>V</code> across all three blocks is wrong somewhere, so the 98–99 % tree-dependence it reports is meaningless and is not evidence of anything.</p>
+<p>I built it — his configuration, Dirichlet <code>V</code> on faces, no terminal, measuring the dissipated power, which is gauge-invariant — and <strong>it does not work.</strong> Two attempts:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>attempt</th>
+<th>symptom</th>
+<th>cause</th>
+<th>outcome</th>
+</tr></thead>
+<tbody>
+<tr><td>1, <code>ψ</code> on all interior nodes</td><td>`max\</td><td>V\</td><td>= 431 V<code> for a 1 V drive, </code>cond = 7.7e+26`</td><td>the system is numerically singular at double precision — the same ψ-everywhere conditioning collapse <code>RESULTS_COMPARE.md</code> measured at 5.6e+26</td><td><strong>not the lift</strong></td></tr>
+<tr><td>2, <code>ψ</code> restricted per Stysch §5.5</td><td>`max\</td><td>V\</td><td>= 1.000<code> ✓, </code>cond = 1.8e+10<code> ✓, but </code>P = 2.4e‑19 W<code> against an exact </code>4.35e+04 W`</td><td><code>E ≈ 0</code> inside the conductor, where 1 V across 6 mm should give ~167 V/m</td><td><strong>still wrong, different bug</strong></td></tr>
+</tbody></table></div>
+<p>Attempt 2 establishes that <strong>the Dirichlet lift was correct all along</strong> — <code>V</code> comes out in the right range once the conditioning is fixed. Something else in the voltage-driven assembly or in the <code>E</code> reconstruction is wrong, and I have not found it.</p>
+<p>The 98–99 % tree-dependence both attempts report is therefore <strong>meaningless</strong>: it is 98 % of a quantity that is numerically zero.</p>
+<p>Worth stating plainly: the <strong>current-driven</strong> assembly in §10.1 is right — it reproduces the A‑Φ solve digit-for-digit at three frequencies. The bug is specific to the voltage-driven variant built for this control, which shares the operator but not the right-hand side or the drive.</p>
 <p><strong>So §10.3 remains a hypothesis</strong>, and the two possibilities it was meant to separate are both still open:</p>
 <ul><li>my construction is faithful, and Jochum&#x27;s formulation inherits tree-dependence</li></ul>
 <p>through <code>A_c</code>&#x27;s tree-defined space; <strong>or</strong></p>

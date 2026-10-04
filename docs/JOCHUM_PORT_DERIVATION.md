@@ -392,11 +392,26 @@ is not, the terminal is what broke it, and §6 needs revisiting rather than
 abandoning.
 
 I built it — his configuration, Dirichlet `V` on faces, no terminal, measuring
-the dissipated power, which is gauge-invariant — and **it does not work**. It
-returns `P = 2.5e‑19 W` where 1 V across 11.5 µΩ should give about `4.3e+04 W`:
-**twenty-three orders out**. The Dirichlet lift for a prescribed `V` across all
-three blocks is wrong somewhere, so the 98–99 % tree-dependence it reports is
-meaningless and is not evidence of anything.
+the dissipated power, which is gauge-invariant — and **it does not work.**
+Two attempts:
+
+| attempt | symptom | cause | outcome |
+|---|---|---|---|
+| 1, `ψ` on all interior nodes | `max\|V\| = 431 V` for a 1 V drive, `cond = 7.7e+26` | the system is numerically singular at double precision — the same ψ-everywhere conditioning collapse `RESULTS_COMPARE.md` measured at 5.6e+26 | **not the lift** |
+| 2, `ψ` restricted per Stysch §5.5 | `max\|V\| = 1.000` ✓, `cond = 1.8e+10` ✓, but `P = 2.4e‑19 W` against an exact `4.35e+04 W` | `E ≈ 0` inside the conductor, where 1 V across 6 mm should give ~167 V/m | **still wrong, different bug** |
+
+Attempt 2 establishes that **the Dirichlet lift was correct all along** — `V`
+comes out in the right range once the conditioning is fixed. Something else in
+the voltage-driven assembly or in the `E` reconstruction is wrong, and I have
+not found it.
+
+The 98–99 % tree-dependence both attempts report is therefore **meaningless**:
+it is 98 % of a quantity that is numerically zero.
+
+Worth stating plainly: the **current-driven** assembly in §10.1 is right — it
+reproduces the A‑Φ solve digit-for-digit at three frequencies. The bug is
+specific to the voltage-driven variant built for this control, which shares the
+operator but not the right-hand side or the drive.
 
 **So §10.3 remains a hypothesis**, and the two possibilities it was meant to
 separate are both still open:
