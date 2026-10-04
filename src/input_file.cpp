@@ -352,9 +352,21 @@ std::string Parser::resolve_path(const std::string& raw) const {
 }
 
 void Parser::read_output(const Section& s) {
-    reject_unknown_keys(s, {"directory"});
+    reject_unknown_keys(s, {"directory", "gauge_free_potential"});
     const Entry& dir = require(s, "directory");
     result_.problem.output_dir = resolve_path(dir.value);
+
+    // Off unless asked for. A diagnostic, and a quasi-static one -- see the
+    // field's comment in problem.hpp for why it is not a default.
+    if (const Entry* g = find(s, "gauge_free_potential")) {
+        if (g->value == "yes" || g->value == "true") {
+            result_.problem.gauge_free_potential = true;
+        } else if (g->value == "no" || g->value == "false") {
+            result_.problem.gauge_free_potential = false;
+        } else {
+            fail(g->line, "'gauge_free_potential' takes yes or no, not '" + g->value + "'");
+        }
+    }
 }
 
 void Parser::read_mesh(const Section& s) {

@@ -12,14 +12,48 @@ Measurements: `GAUGE_CHOICE.md` §15.10, `tools/gauge_spike/RESULTS_SPIKEC.md`.
 
 ## 0. Summary
 
+**Off by default.** `[output] gauge_free_potential = yes` turns it on.
+
 | | |
 |---|---|
-| **What it is** | A second, independent scalar solve that recovers `Φ` from `E` |
-| **What it fixes** | `R` and the resistive part of a terminal voltage, at a port **inside** the domain, where the gauged `Φ` is tree-dependent by 3.1 % |
+| **What it is, primarily** | A **diagnostic**: comparing the recovered `Φ` against the gauged one measures how much of a terminal's potential is a spanning-tree artefact — in **one run**, where a permutation sweep needs three |
+| **What it also gives** | `R` exact and tree-free, in the quasi-static regime. A by-product, not the headline |
 | **What it does not fix** | `E`, `B`, `H`, `J` — unchanged inputs — and the **reactance**, which it cannot see at all |
 | **Does tree–cotree still run?** | **Yes, unchanged.** This is not a constraint on the gauged system; it is a separate system solved afterwards |
 | **Is it symmetric?** | **Yes**, complex-symmetric, upper triangle only, same `LDLᵀ` as the main solve |
 | **Cost** | 319 ms against a 219 s factorization — 0.15 % of the run |
+
+### The diagnostic reading
+
+The recovered `Φ` carries no reactance (§2.4), so only the **real** parts are
+comparable. Their gap is the discretization difference *plus* whatever of the
+gauged terminal potential is a tree artefact:
+
+| | gap, recovered vs gauged |
+|---|---|
+| case 03, both ports on the outer boundary | **0.0014 %** — discretization alone |
+| case 08, one terminal inside the domain | **0.118 %** — 85× larger |
+
+An **85× signal, not a 10¹⁰ one**, and confounded by the discretization gap: a
+screening indicator that says *look harder here*, not a proof.
+`07_GaugeInvariance`'s permutation harness remains the definitive test.
+
+### Why it is off by default
+
+Three objections, all real, none resolved by this implementation:
+
+1. it is a **second system solved after the first**, where one united system
+   with a PDE gauge — Jochum's, `JOCHUM_PORT_DERIVATION.md` — is the right
+   architecture;
+2. the equation is the **Coulomb/MQS** form, so the `k²` term it drops is order
+   unity by 1 GHz on a 40 mm domain and dominates at THz (§7). **Quasi-static
+   only**;
+3. its `Φ` is **P1** where the solve it corrects uses **P2** — a lower-order
+   answer replacing a higher-order one, computed from fields built with the
+   higher-order one.
+
+It will be superseded entirely by a united formulation with a PDE gauge. Until
+then it is a cheap check, deliberately opt-in rather than a default.
 
 ---
 
@@ -341,6 +375,16 @@ This is **not** a replacement for the gauged potential and must not be read as
 where the gauged one is not. Both file headers carry the same rule: **read `R`
 from the gauge-free file, read `L` from the gauged one, and know what the
 latter is worth.**
+
+Its primary use is the one line it prints per port:
+
+```
+    port 'P1'  recovered Re(Phi) = 6.8578e-05 V,  gauged 6.86593e-05 V,  gap 0.118 %
+```
+
+A gap at the discretization level means the terminals are where the gauge can
+protect them. A gap orders above it means at least one terminal is not, and the
+permutation harness should be run.
 
 ---
 

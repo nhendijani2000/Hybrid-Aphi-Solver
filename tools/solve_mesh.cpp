@@ -331,26 +331,51 @@ int main(int argc, char** argv) {
             // the two differ: 08_MixedPort_Interior measures the gauged one
             // moving 3.8 % with the spanning tree and this one 1.1e-14.
             // See gauge_free_potential.hpp for what that does and does NOT fix.
-            const GaugeFreePotential gfp =
-                recover_gauge_free_potential(mesh, bound, dofs, fields, omega);
-            if (gfp.unknowns > 0) {
-                std::cout << "                gauge-free Phi: " << gfp.unknowns
-                          << " unknowns, residual " << gfp.residual << ", "
-                          << (gfp.assemble_ms + gfp.solve_ms) << " ms";
-                if (!gfp.converged) std::cout << "   *** DID NOT CONVERGE";
-                std::cout << "\n";
-                for (std::size_t pi = 0; pi < bound.ports.size(); ++pi) {
-                    if (dofs.port_is_fixed[pi]) continue;
-                    std::cout << "                  port '" << bound.ports[pi].name
-                              << "'  Phi = " << gfp.port_potential[pi].real() << " "
-                              << (gfp.port_potential[pi].imag() < 0 ? "-" : "+") << " "
-                              << std::abs(gfp.port_potential[pi].imag()) << "j V\n";
+            if (p.gauge_free_potential) {
+                const GaugeFreePotential gfp =
+                    recover_gauge_free_potential(mesh, bound, dofs, fields, omega);
+                if (gfp.unknowns > 0) {
+                    std::cout << "                gauge-free Phi: " << gfp.unknowns
+                              << " unknowns, residual " << gfp.residual << ", "
+                              << (gfp.assemble_ms + gfp.solve_ms) << " ms";
+                    if (!gfp.converged) std::cout << "   *** DID NOT CONVERGE";
+                    std::cout << "\n";
+                    // THE DIAGNOSTIC. The recovered Phi cannot carry a
+                    // reactance (it is the irrotational part of E and nothing
+                    // else), so only the REAL parts are comparable. Their gap
+                    // is the discretization difference plus whatever of the
+                    // gauged terminal potential is a spanning-tree artefact.
+                    // Measured: 0.0014 % with both ports on the boundary,
+                    // 0.12 % with one inside the domain -- an 85x signal from
+                    // ONE run, where the permutation sweep needs three.
+                    //
+                    // A screening indicator, not a proof: 07_GaugeInvariance's
+                    // harness remains the definitive test.
+                    for (std::size_t pi = 0; pi < bound.ports.size(); ++pi) {
+                        if (dofs.port_is_fixed[pi]) continue;
+                        const Complex rec = gfp.port_potential[pi];
+                        // The gauged terminal potential: the port's own unknown
+                        // in the solution vector, scaled back to volts.
+                        const int gi = dofs.port_index[pi];
+                        const Complex gau =
+                            (gi >= 0) ? sol.x[static_cast<std::size_t>(gi)] * sol.phi_scale()
+                                      : Complex{};
+                        std::cout << "                  port '" << bound.ports[pi].name
+                                  << "'  recovered Re(Phi) = " << rec.real() << " V";
+                        if (gau.real() != 0.0) {
+                            const double gap = std::abs(rec.real() - gau.real()) /
+                                               std::abs(gau.real());
+                            std::cout << ",  gauged " << gau.real() << " V,  gap "
+                                      << 100.0 * gap << " %";
+                        }
+                        std::cout << "\n";
+                    }
+                    const WriteStats gs = write_gauge_free_potential(
+                        stem + "_gaugefree.out", mesh, bound, gfp, &run);
+                    write_ms += gs.milliseconds;
+                    std::cout << "                wrote " << stem << "_gaugefree.out   "
+                              << gs.bytes / 1024 << " KB, " << gs.milliseconds << " ms\n";
                 }
-                const WriteStats gs =
-                    write_gauge_free_potential(stem + "_gaugefree.out", mesh, bound, gfp, &run);
-                write_ms += gs.milliseconds;
-                std::cout << "                wrote " << stem << "_gaugefree.out   "
-                          << gs.bytes / 1024 << " KB, " << gs.milliseconds << " ms\n";
             }
 
             // One pair of files per field. Opening B_field.vtk gives a source

@@ -1,0 +1,215 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A terminal on Γ in Jochum&#x27;s formulation — derivation report</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#15181d; --ink-2:#4a5260; --ink-3:#6f7888;
+    --bg:#fbfaf8; --card:#ffffff; --rule:#e3e0da;
+    --accent:#8a3324; --accent-soft:#f6ece9;
+    --ok:#2c5f2d; --warn:#8a5a00;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+      --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+      --accent:#e08b74; --accent-soft:#2a1f1c;
+      --ok:#8fc98f; --warn:#e0b467;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9eaee; --ink-2:#a8b0bd; --ink-3:#7e8796;
+    --bg:#14161a; --card:#1b1e24; --rule:#2c313a;
+    --accent:#e08b74; --accent-soft:#2a1f1c;
+    --ok:#8fc98f; --warn:#e0b467;
+    color-scheme: dark;
+  }
+  body{background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif; line-height:1.6; margin:0;}
+  .wrap{max-width:900px; margin:0 auto; padding-inline:16px; padding-block:40px 72px;}
+  h1{font-family:"Source Serif 4",Georgia,serif; font-weight:600;
+     font-size:clamp(1.9rem,5vw,2.6rem); line-height:1.15; margin:0 0 .5em;
+     text-wrap:balance; letter-spacing:-.01em;}
+  h2{font-family:"Source Serif 4",Georgia,serif; font-weight:600; font-size:1.5rem;
+     margin:2.6rem 0 .2em; padding-top:1.5rem; border-top:1px solid var(--rule);
+     text-wrap:balance;}
+  h3{font-size:1.02rem; font-weight:600; margin:1.8rem 0 .3em; color:var(--ink);}
+  p{margin:.7em 0; max-width:68ch;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:.88em;
+       background:var(--accent-soft); color:var(--accent);
+       padding:.08em .34em; border-radius:3px;}
+  pre{background:var(--card); border:1px solid var(--rule); border-radius:6px;
+      padding:.8rem 1rem; overflow-x:auto; font-family:"IBM Plex Mono",monospace;
+      font-size:.82rem; line-height:1.5; margin:1rem 0;}
+  pre code{background:none; color:var(--ink); padding:0; font-size:1em;}
+  .tw{overflow-x:auto; margin:1.1rem 0;}
+  table{border-collapse:collapse; width:100%; font-size:.88rem;
+        font-variant-numeric:tabular-nums;}
+  th,td{text-align:left; padding:.45rem .7rem; border-bottom:1px solid var(--rule);
+        vertical-align:top;}
+  th{font-weight:600; color:var(--ink-2); font-size:.78rem;
+     text-transform:uppercase; letter-spacing:.04em;}
+  tbody tr:last-child td{border-bottom:none;}
+  blockquote{background:var(--card); border:1px solid var(--rule);
+      border-left:3px solid var(--accent); border-radius:6px;
+      padding:.9rem 1.1rem; margin:1.3rem 0;}
+  blockquote p{margin:.35em 0;}
+  blockquote strong{color:var(--accent);}
+  ul,ol{max-width:68ch; padding-left:1.15rem;}
+  li{margin:.35em 0;}
+  hr{border:none; border-top:1px solid var(--rule); margin:2.2rem 0;}
+  a{color:var(--accent);}
+  @media print{
+    :root{ color-scheme: light; }
+    body{ background:#fff; -webkit-print-color-adjust:exact;
+          print-color-adjust:exact; orphans:3; widows:3; }
+    .wrap{ max-width:none; padding-block:0 .5rem; }
+    h1{ font-size:2rem; }
+    h2{ margin-top:1.2rem; padding-top:.7rem; font-size:1.3rem;
+        break-after:avoid; page-break-after:avoid; }
+    h3{ margin-top:.9rem; break-after:avoid; page-break-after:avoid; }
+    .tw, table{ break-inside:avoid; page-break-inside:avoid; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    p, li, blockquote, ul, ol, pre{ break-inside:auto; page-break-inside:auto; }
+    a{ color:inherit; text-decoration:none; }
+  }
+</style></head><body>
+<div class="wrap">
+<h1>A terminal on Γ in Jochum&#x27;s formulation — derivation report</h1>
+<p><strong>Status: derivation in progress.</strong> §§1–5 are worked and I believe them. §6 is a proposed resolution with a dimension count that balances but is <strong>not yet verified</strong>, and §7 says what would verify it. Nothing here is implemented.</p>
+<p>Why this document exists: <code>tools/gauge_spike/RESULTS_SPIKEC.md</code> milestone 2 found that Jochum, Farle &amp; Dyczij-Edlinger&#x27;s formulation — the only one in the literature carrying a materially-weighted gauge interface condition at a conductor/insulator boundary, which is exactly where our failing port sits — has <strong>nowhere to put a port</strong>. This works out why, and what would have to change.</p>
+<hr>
+<h2>1. The formulation, in our convention</h2>
+<p>Jochum writes <code>e^{+ik₀·}</code> with a scaled potential; translated to ours (<code>e^{+jωt}</code>, <code>E = −jωA − ∇Φ</code>), with <code>κ = σ + jωε</code> and <code>ν = 1/μ</code>:</p>
+<pre><code>    A  =  A_c + ∇ψ ,       B = ∇×A_c ,                             (15),(16)
+    E  =  −∇V − jω(A_c + ∇ψ)                                       (17)</code></pre>
+<p>Three unknowns: <code>A_c</code> on cotree edges, <code>ψ</code> nodal, <code>V</code> nodal. <code>A_c</code> lives in the reduced space of the <strong>inexact Helmholtz splitting</strong> (14), realized discretely by tree–cotree — so the tree is still there, but it decomposes the space rather than fixing the gauge.</p>
+<p>In the lossy sub-domain <code>Ω_C</code>:</p>
+<pre><code>    ∇×(ν∇×A_c) + κ[jω(A_c+∇ψ) + ∇V]  =  J_i          Ampère        (18a)
+    ∇·[κ(A_c+∇ψ)]                     =  0            GAUGE         (18b)</code></pre>
+<p>In the lossless sub-domain <code>Ω_N</code>:</p>
+<pre><code>    ∇×(ν∇×A_c) + jωε[jω(A_c+∇ψ) + ∇V] =  J_i          Ampère        (19a)
+    ∇·{ε[jω(A_c+∇ψ) + ∇V]}            =  ρ            Gauss         (19b)</code></pre>
+<p>Since <code>κ|_Ω_N = jωε</code>, (19a) is (18a) with the local <code>κ</code> — one expression covers both. The asymmetry is entirely in the <strong>second</strong> equation: a gauge in the conductor, physics in the insulator.</p>
+<hr>
+<h2>2. Which equation lives in which row — the fact everything turns on</h2>
+<p>Jochum tests each equation against a different space (his §5.2):</p>
+<div class="tw"><table>
+<thead><tr>
+<th>weak form</th>
+<th>equation tested</th>
+<th>test function</th>
+<th>produces the row for</th>
+</tr></thead>
+<tbody>
+<tr><td>(21)</td><td>Ampère (18a)</td><td><code>w_c ∈ Q̃H(curl)</code></td><td>**<code>A_c</code>**</td></tr>
+<tr><td>(22)</td><td>Ampère (18a)</td><td>**<code>∇ψ̄</code>**, <code>ψ̄ ∈ H¹₀</code></td><td>**<code>ψ</code>**</td></tr>
+<tr><td>(23)</td><td><strong>gauge (18b)</strong></td><td><code>V̄ ∈ H¹₀</code></td><td>**<code>V</code>**</td></tr>
+</tbody></table></div>
+<p>and states that (22) is a weak form of the <strong>continuity equation</strong>.</p>
+<p>So, and this is the crux:</p>
+<blockquote><p>**<code>ψ</code>&#x27;s row is continuity. <code>V</code>&#x27;s row is the gauge.**</p></blockquote>
+<p>That cross-placement is what makes the off-diagonal blocks transposes and the matrix complex-symmetric — it is a feature, not an accident. But it <strong>inverts the usual A‑Φ correspondence</strong>, where a current-driven port&#x27;s row is the continuity equation and its unknown is the potential.</p>
+<hr>
+<h2>3. Deriving (32) without a terminal</h2>
+<p>Test (18b) by <code>V̄</code> over <code>Ω_C</code> and integrate by parts:</p>
+<pre><code>    −∫_Ω_C κ(A_c+∇ψ)·∇V̄  +  ∮_∂Ω_C V̄ n̂·[κ(A_c+∇ψ)]  =  0</code></pre>
+<p>Test (19b) by <code>V̄</code> over <code>Ω_N</code>, noting <code>ε[jω(A_c+∇ψ)+∇V] = −εE</code>:</p>
+<pre><code>    −∫_Ω_N (−εE)·∇V̄  +  ∮_∂Ω_N V̄ n̂·(−εE)  =  ∫ ρ V̄</code></pre>
+<p>Let <code>n̂</code> point from <code>Ω_C</code> into <code>Ω_N</code>, so <code>n̂_C = n̂</code> and <code>n̂_N = −n̂</code> on Γ. The two surface integrals contribute, on Γ,</p>
+<pre><code>    ∮_Γ V̄ { n̂·[κ(A_c+∇ψ)]_C  +  n̂·(εE)_N } dS                      (★)</code></pre>
+<p>With <code>V</code> single-valued and <strong>free</strong> on Γ, <code>V̄</code> is arbitrary there, so (★) vanishes only if its integrand does pointwise:</p>
+<pre><code>    n̂·[κ(A_c+∇ψ)]_C  +  n̂·(εE)_N  =  0        on Γ                 (32)</code></pre>
+<p><strong>This is Jochum&#x27;s (32), and it is not an extra assumption — it is the condition under which the two sub-domain weak forms assemble into one system with no leftover surface term.</strong> It is materially weighted on both sides: <code>κ = σ + jωε</code> from the conductor, <code>ε</code> from the insulator. That weighting is why §12.3 ranks it above the ε-blind Coulomb-family conditions.</p>
+<hr>
+<h2>4. What a terminal is, formally</h2>
+<p>A current-driven terminal on <code>Γ_T ⊆ Γ</code> is two statements:</p>
+<ol><li>**<code>V</code> is single-valued on <code>Γ_T</code>** — one unknown <code>V_T</code>, not one per node. In the discrete setting this is the aggregation <code>A = P Â Pᵀ</code> (Stysch §6.6.2, <code>GAUGE_CHOICE.md</code> §11.10.5), which is a congruence and so preserves symmetry.</li><li>**The total current through <code>Γ_T</code> is prescribed**:</li></ol>
+<pre><code>    I  =  ∫_Γ_T n̂·(κ E)_C dS                                        (33)</code></pre>
+<p>Statement 1 collapses the test space: on <code>Γ_T</code>, <code>V̄</code> is a single constant rather than an arbitrary function.</p>
+<hr>
+<h2>5. The obstacle, located exactly</h2>
+<p>With <code>V̄</code> constant on <code>Γ_T</code>, (★) no longer forces its integrand to vanish there. It forces only the <strong>integral</strong>:</p>
+<pre><code>    ∫_Γ_T { n̂·[κ(A_c+∇ψ)]_C + n̂·(εE)_N } dS  =  0                   (34)</code></pre>
+<p>That is one scalar equation, which is right — one equation for one unknown <code>V_T</code>. But now look at what it contains against what we need to impose:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>normal flux appearing</th>
+</tr></thead>
+<tbody>
+<tr><td><strong>(34)</strong>, the <code>V_T</code> row</td><td><code>n̂·(κ **A**)_C</code> — the <strong>gauge</strong> flux</td></tr>
+<tr><td><strong>(33)</strong>, the current</td><td><code>n̂·(κ **E**)_C</code> — the <strong>current</strong></td></tr>
+</tbody></table></div>
+<p><strong>These are different physical objects.</strong> <code>A</code> is not <code>E</code>. The gauge equation&#x27;s natural boundary datum is the normal component of <code>κA</code>, which is a statement about the gauge, and no choice of right-hand side turns it into a current.</p>
+<p>And the current flux <code>n̂·(κE)</code> does appear in the weak form — but in the **<code>ψ</code> row**, since (22) is continuity and its surface term is <code>∮ n̂·(κE) ψ̄</code>.</p>
+<p>So the terminal&#x27;s two requirements land in two different rows:</p>
+<pre><code>    the terminal POTENTIAL we want to read   is   V_T
+    the row V_T owns                         is   the GAUGE        (34)
+    the row carrying the CURRENT             is   ψ&#x27;s              (continuity)</code></pre>
+<p><strong>That is the whole obstacle</strong>, and it is structural rather than a matter of assembly detail.</p>
+<h3>5.1 It explains the measurement exactly</h3>
+<p>Spike C milestone 2 put the current drive on <code>V</code>&#x27;s row — the natural thing to do, and wrong here. Measured consequence: a terminal potential of <code>−1.149425e‑05</code> V identical across three trees to 2.4e‑14, with <strong>zero reactance</strong>, <strong>unchanged from 50 Hz to 50 GHz</strong>, and a V-coupling of <code>G_epsN = 4.2e‑02</code> against gauge terms <code>G_kap = 7.5e+07</code> — a factor 5.7e‑10.</p>
+<p>Every one of those follows from §5: the drive perturbed the gauge condition instead of injecting current, leaving a decoupled DC conduction problem whose solution is linear in <code>z</code> and therefore exact in P1. The spike did not fail; it measured this.</p>
+<h3>5.2 Why his paper never hit it</h3>
+<p>His §6.1 cavity sets <code>φ = 0</code> and <code>φ = 1</code> on faces, and §6.2 is a voltage-driven RLC field model. Both are **Dirichlet conditions on <code>V</code>**, which are trivial here — prescribe <code>V</code> and the row disappears. <strong>A voltage port in Jochum&#x27;s formulation is free; only a current-driven floating terminal is a problem.</strong> That is a useful narrowing: the gap is one port type, not the whole concept.</p>
+<hr>
+<h2>6. Proposed resolution — aggregate <code>ψ</code> as well as <code>V</code></h2>
+<p><strong>Not verified. The dimension count balances and the physics is plausible; that is all that can be claimed so far.</strong></p>
+<p>If <code>Γ_T</code> needs two conditions — the gauge (34) and the current (33) — then give it <strong>two unknowns</strong>: aggregate <code>ψ</code> on <code>Γ_T</code> as well as <code>V</code>.</p>
+<pre><code>    V_T  =  V        on Γ_T      one unknown    row:  aggregated gauge   (34)
+    ψ_T  =  ψ        on Γ_T      one unknown    row:  aggregated
+                                                      continuity  =  I   (33)</code></pre>
+<p><strong>Count.</strong> With <code>N_T</code> nodes on <code>Γ_T</code>, before: <code>N_T</code> <code>V</code>-unknowns and <code>N_T</code> <code>ψ</code>-unknowns against <code>N_T</code> gauge rows and <code>N_T</code> continuity rows. After: 2 unknowns against 2 rows. Balanced.</p>
+<p>**Legitimacy of aggregating <code>ψ</code>.** <code>ψ</code> is the gauge function. Forcing it constant on a surface is a <em>gauge choice</em>, not a physical constraint — it is precisely what contracting a surface in the tree does (§15.9), and what <code>n̂ × A = 0</code> achieves on the outer boundary. So it costs nothing physical.</p>
+<p><strong>Symmetry.</strong> Both aggregations are congruences <code>P(·)Pᵀ</code>, applied to the <code>V</code> and <code>ψ</code> blocks. A congruence preserves complex symmetry, so the system should remain symmetric — the property §13.2 identifies as Jochum&#x27;s main advantage over Chew.</p>
+<p>**What <code>V_T</code> then means.** <code>V_T</code> is the terminal potential, read as the answer. <code>ψ_T</code> is a gauge constant on the terminal, carrying no physical meaning — the analogue of <code>ψ = 0</code> on the outer boundary.</p>
+<h3>6.1 What is not yet established</h3>
+<ul><li><strong>Uniqueness.</strong> Does (33)+(34) determine <code>(V_T, ψ_T)</code> uniquely, or is the pair</li></ul>
+<p>singular in some limit? The count balances; that is necessary, not sufficient.</p>
+<ul><li>**Whether (32) survives off <code>Γ_T</code>.** The derivation in §3 assumed <code>V̄</code> free on</li></ul>
+<p>all of Γ. On <code>Γ \ Γ_T</code> it still is, so (32) should hold there — but the two regions share an edge, and the rim of <code>Γ_T</code> needs checking.</p>
+<ul><li><strong>The low-frequency limit.</strong> <code>κ → σ</code> in the conductor and <code>κ → 0</code> in the</li></ul>
+<p>insulator as <code>ω → 0</code>. §11.10 measured that an insulator-interior <code>ψ</code> row vanishes at DC, which is why Stysch&#x27;s §5.5 restricts <code>ψ</code> to the interface. <code>Γ_T</code> <strong>is</strong> on the interface, so <code>ψ_T</code> should survive — but that is an expectation, not a measurement.</p>
+<ul><li>**Whether <code>I</code> belongs on <code>ψ_T</code>&#x27;s row with a factor.** (33) is the current;</li></ul>
+<p>(22) is continuity tested by <code>∇ψ̄</code>. The aggregated continuity row equals the net current through <code>Γ_T</code> only up to a sign and possibly a scaling from the non-dimensionalization. That needs doing carefully, and <code>RESULTS_COMPARE.md</code> records what dropping such a factor costs.</p>
+<hr>
+<h2>7. How to test it, cheaply</h2>
+<p><code>tools/gauge_spike/spikeC.py</code> already has everything but this: a validated miniature (milestone 1: <code>R</code> exact to 0.06 %, terminal <code>Φ</code> moving 3.8 % with the tree), a Jochum assembly (milestone 2), and a terminal aggregation.</p>
+<p>The change is to <code>solve_jochum</code>: add a second aggregated unknown on the terminal face for <code>ψ</code>, move the drive from <code>V</code>&#x27;s row to <code>ψ</code>&#x27;s, and re-run. The acceptance test is unchanged and already written:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>must be</th>
+</tr></thead>
+<tbody>
+<tr><td><code>R</code></td><td>11.494253 µΩ — the analytic DC value</td></tr>
+<tr><td>reactance</td><td>present and frequency-dependent, <strong>not</strong> constant across decades</td></tr>
+<tr><td>terminal <code>Φ</code> across three trees</td><td>invariant</td></tr>
+<tr><td>symmetry residual</td><td>~1e‑16</td></tr>
+</tbody></table></div>
+<p>Milestone 2&#x27;s failure signature is specific enough to be diagnostic: if the reactance is again zero and frequency-independent, the drive is still in the gauge row and §6 is wrong.</p>
+<hr>
+<h2>8. If §6 fails</h2>
+<p>Two fallbacks, both more expensive:</p>
+<ul><li><strong>Re-derive (32) with the terminal present from the start</strong>, rather than</li></ul>
+<p>aggregating afterwards. (32) came from requiring the surface terms to cancel; with a terminal, the correct statement may be a <em>modified</em> interface condition on <code>Γ_T</code> rather than the same one aggregated. This is the honest version of &quot;the derivation&quot;, and §6 is the shortcut worth trying first.</p>
+<ul><li><strong>Take the condition from outside.</strong> A boundary-integral exterior supplies the</li></ul>
+<p>relation between <code>A</code> and <code>Φ</code> on a coupling surface from the exterior solution, which is what <code>GAUGE_CHOICE.md</code> §0 wants Chew for. That removes the need to invent an interface condition at all, at the cost of the whole BI programme.</p>
+<hr>
+<h2>9. Sources</h2>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Jochum, Farle &amp; Dyczij-Edlinger (2016)</strong>, <em>A Symmetric and Low-Frequency Stable Potential Formulation…</em>, in <em>Scientific Computing in Electrical Engineering</em> (SCEE 2014), Mathematics in Industry <strong>23</strong>, 63–71, <a href="https://doi.org/10.1007/978-3-319-30399-4_7">doi:10.1007/978-3-319-30399-4_7</a> — <code>APhi_Papers/Jochum_SymmetricLowFreqStablePotentialFormulation.pdf</code></td><td>Equations (14)–(19), (21)–(23), (32); §5.2&#x27;s test-function assignment, which §2 above turns on; §6&#x27;s examples, which are voltage-driven and so never meet this problem.</td></tr>
+<tr><td><strong>Stysch (2022)</strong>, PhD thesis, TU Darmstadt</td><td>§6.6.2&#x27;s aggregation <code>A = P Â Pᵀ</code>, which §4 and §6 use for the terminal; §5.5&#x27;s restriction of <code>ψ</code> to the interface, which §6.1 relies on.</td></tr>
+<tr><td><code>tools/gauge_spike/RESULTS_SPIKEC.md</code></td><td>Milestone 2&#x27;s measurement, which §5.1 explains.</td></tr>
+<tr><td><code>GAUGE_CHOICE.md</code> §13</td><td>The reading of Jochum this builds on.</td></tr>
+</tbody></table></div>
+</div>
+</body></html>

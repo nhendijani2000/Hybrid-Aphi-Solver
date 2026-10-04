@@ -347,6 +347,29 @@ struct Problem {
     /// lets a regression case own its own outputs. Empty means the working
     /// directory, which is the old behaviour.
     std::string output_dir;
+
+    /// `[output] gauge_free_potential = yes` -- run the second, scalar solve
+    /// that recovers `Phi` from `E` and write `potential_gaugefree.out`.
+    ///
+    /// **Off by default, deliberately.** It is a DIAGNOSTIC, not the answer:
+    /// comparing the recovered `Phi` against the gauged one measures how much
+    /// of a terminal's potential is a spanning-tree artefact, in one run
+    /// instead of the three a permutation sweep needs. Where every port sits on
+    /// the outer boundary the two agree to the discretization gap (0.0014 % on
+    /// case 03); at a port inside the domain they separate (0.12 % on case 08).
+    ///
+    /// Three reasons it is not on by default, all of them real:
+    ///
+    ///  - it is a SECOND system solved after the first, where one united
+    ///    system with a PDE gauge is the right architecture;
+    ///  - the equation implemented is the Coulomb/MQS form, so the `k^2` term
+    ///    it drops is order unity by 1 GHz on a 40 mm domain and dominates at
+    ///    THz. It is quasi-static only;
+    ///  - its `Phi` is P1 where the solve it corrects uses P2.
+    ///
+    /// `docs/GAUGE_FREE_POTENTIAL.md`.
+    bool gauge_free_potential = false;
+
     LengthUnit length_unit = LengthUnit::Metre;
 
     AnalysisType type = AnalysisType::DC;

@@ -82,19 +82,36 @@
 <p>Implementation: <code>src/gauge_free_potential.cpp</code>, <code>include/aphi_solver/gauge_free_potential.hpp</code>. Measurements: <code>GAUGE_CHOICE.md</code> §15.10, <code>tools/gauge_spike/RESULTS_SPIKEC.md</code>.</p>
 <hr>
 <h2>0. Summary</h2>
+<p><strong>Off by default.</strong> <code>[output] gauge_free_potential = yes</code> turns it on.</p>
 <div class="tw"><table>
 <thead><tr>
 <th></th>
 <th></th>
 </tr></thead>
 <tbody>
-<tr><td><strong>What it is</strong></td><td>A second, independent scalar solve that recovers <code>Φ</code> from <code>E</code></td></tr>
-<tr><td><strong>What it fixes</strong></td><td><code>R</code> and the resistive part of a terminal voltage, at a port <strong>inside</strong> the domain, where the gauged <code>Φ</code> is tree-dependent by 3.1 %</td></tr>
+<tr><td><strong>What it is, primarily</strong></td><td>A <strong>diagnostic</strong>: comparing the recovered <code>Φ</code> against the gauged one measures how much of a terminal&#x27;s potential is a spanning-tree artefact — in <strong>one run</strong>, where a permutation sweep needs three</td></tr>
+<tr><td><strong>What it also gives</strong></td><td><code>R</code> exact and tree-free, in the quasi-static regime. A by-product, not the headline</td></tr>
 <tr><td><strong>What it does not fix</strong></td><td><code>E</code>, <code>B</code>, <code>H</code>, <code>J</code> — unchanged inputs — and the <strong>reactance</strong>, which it cannot see at all</td></tr>
 <tr><td><strong>Does tree–cotree still run?</strong></td><td><strong>Yes, unchanged.</strong> This is not a constraint on the gauged system; it is a separate system solved afterwards</td></tr>
 <tr><td><strong>Is it symmetric?</strong></td><td><strong>Yes</strong>, complex-symmetric, upper triangle only, same <code>LDLᵀ</code> as the main solve</td></tr>
 <tr><td><strong>Cost</strong></td><td>319 ms against a 219 s factorization — 0.15 % of the run</td></tr>
 </tbody></table></div>
+<h3>The diagnostic reading</h3>
+<p>The recovered <code>Φ</code> carries no reactance (§2.4), so only the <strong>real</strong> parts are comparable. Their gap is the discretization difference <em>plus</em> whatever of the gauged terminal potential is a tree artefact:</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>gap, recovered vs gauged</th>
+</tr></thead>
+<tbody>
+<tr><td>case 03, both ports on the outer boundary</td><td><strong>0.0014 %</strong> — discretization alone</td></tr>
+<tr><td>case 08, one terminal inside the domain</td><td><strong>0.118 %</strong> — 85× larger</td></tr>
+</tbody></table></div>
+<p>An <strong>85× signal, not a 10¹⁰ one</strong>, and confounded by the discretization gap: a screening indicator that says <em>look harder here</em>, not a proof. <code>07_GaugeInvariance</code>&#x27;s permutation harness remains the definitive test.</p>
+<h3>Why it is off by default</h3>
+<p>Three objections, all real, none resolved by this implementation:</p>
+<ol><li>it is a <strong>second system solved after the first</strong>, where one united system with a PDE gauge — Jochum&#x27;s, <code>JOCHUM_PORT_DERIVATION.md</code> — is the right architecture;</li><li>the equation is the <strong>Coulomb/MQS</strong> form, so the <code>k²</code> term it drops is order unity by 1 GHz on a 40 mm domain and dominates at THz (§7). <strong>Quasi-static only</strong>;</li><li>its <code>Φ</code> is <strong>P1</strong> where the solve it corrects uses <strong>P2</strong> — a lower-order answer replacing a higher-order one, computed from fields built with the higher-order one.</li></ol>
+<p>It will be superseded entirely by a united formulation with a PDE gauge. Until then it is a cheap check, deliberately opt-in rather than a default.</p>
 <hr>
 <h2>1. The problem</h2>
 <p><code>Φ</code> from the gauged A‑Φ system is a <strong>gauge representative</strong>. Tree–cotree picks one by setting <code>a = 0</code> on a spanning tree, which fixes <code>ψ</code> at every node relative to the root through</p>
@@ -250,6 +267,9 @@
 <tr><td><code>B</code>, <code>H</code>, local <code>J</code></td><td>the field files — <strong>and they are wrong by 50–91 %</strong></td></tr>
 </tbody></table></div>
 <p>This is <strong>not</strong> a replacement for the gauged potential and must not be read as &quot;mixed ports are fixed&quot;. It is a complementary extraction, reliable precisely where the gauged one is not. Both file headers carry the same rule: **read <code>R</code> from the gauge-free file, read <code>L</code> from the gauged one, and know what the latter is worth.**</p>
+<p>Its primary use is the one line it prints per port:</p>
+<pre><code>    port &#x27;P1&#x27;  recovered Re(Phi) = 6.8578e-05 V,  gauged 6.86593e-05 V,  gap 0.118 %</code></pre>
+<p>A gap at the discretization level means the terminals are where the gauge can protect them. A gap orders above it means at least one terminal is not, and the permutation harness should be run.</p>
 <hr>
 <h2>7. Limits and known rough edges</h2>
 <ul><li><strong>No reactance, ever.</strong> §2.4. Structural, not a gap to be filled later.</li><li><strong>P1 against the solver&#x27;s P2</strong>, so the recovered <code>Φ</code> is one order lower than</li></ul>
