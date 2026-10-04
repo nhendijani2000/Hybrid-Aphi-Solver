@@ -408,6 +408,7 @@ def main():
     milestone2(nodes, tets, mats, omega, r_exact)
     milestone3(nodes, tets, mats, omega, r_exact)
     milestone4(nodes, tets, mats, omega, r_exact)
+    milestone5(nodes, tets, mats, r_exact)
 
 
 
@@ -656,6 +657,131 @@ def milestone4(nodes, tets, mats, omega, r_exact):
              100.0 * abs(b2.real - r_exact) / r_exact))
     print("    X = %.6e Ohm   ->   L = %.4f nH"
           % (b2.imag, b2.imag / omega * 1e9))
+
+
+
+
+# ------------------------- Jochum WITH a terminal, per JOCHUM_PORT_DERIVATION 6 ----
+def solve_jochum_port(nodes, tets, mats, omega, seed):
+    """Jochum with psi aggregated on the terminal too, and the drive on PSI's row.
+
+    TESTING docs/JOCHUM_PORT_DERIVATION.md Sec. 6.
+
+    Milestone 2 put the current on V's row and got a terminal potential that was
+    identical across three trees, had zero reactance, and did not move from
+    50 Hz to 50 GHz. Sec. 5 of that report explains it: his Sec. 5.2 tests
+    Ampere by w_c AND by grad(psi-bar), and the gauge by V-bar, so
+
+        psi's row is CONTINUITY  and  V's row is the GAUGE
+
+    which inverts the usual A-Phi correspondence. The V_T row carries the gauge
+    flux n.(kappa A); the current is n.(kappa E) and appears in psi's row. The
+    drive was perturbing the gauge instead of injecting current.
+
+    Sec. 6's proposal: a terminal needs TWO conditions, so give it TWO unknowns.
+    Aggregate psi on Gamma_T as well as V --
+
+        V_T   one unknown,  row = aggregated gauge
+        psi_T one unknown,  row = aggregated continuity = I
+
+    -- which balances the count (2 unknowns, 2 rows) and keeps symmetry, since
+    both aggregations are congruences P(.)P^T. Aggregating psi is a GAUGE
+    choice, not a physical constraint: it is what contracting a surface in the
+    tree does, and what n x A = 0 achieves on the outer boundary.
+
+    THE DRIVE'S SCALE. In the non-dimensional system the Ampere equation is
+    nu_r curl curl A~ + kappa~(j k0 A~ + grad Phi) = eta0 J. Testing by
+    grad(psi-bar) and integrating by parts puts eta0 * I on the terminal's row.
+    If that factor is wrong the recovered R is wrong by exactly it, which the
+    magnitude check below will show rather than hide.
+    """
+    k0 = omega / C0
+    edges, S, M_kap, C_kap, G_kap, G_epsN = assemble_jochum(
+        nodes, tets, mats, k0)
+    Ne, Nn = len(edges), len(nodes)
+    bedges = boundary_edges(nodes, tets, edges)
+    bnodes = set(v for k in bedges for v in edges[k])
+    _, tnodes = interior_terminal(nodes, tets, mats)
+    tset = set(tnodes)
+
+    tree = set(spanning_tree(nodes, edges, bedges, seed))
+    ke = np.array([k for k in range(Ne)
+                   if k not in tree and k not in set(bedges)])
+
+    node_mats = [set() for _ in range(Nn)]
+    for t, m in zip(tets, mats):
+        for n in t:
+            node_mats[n].add(m)
+
+    # psi per Sec. 5.5: interface and conductor, never strictly inside the
+    # insulator. The terminal IS on the interface, so psi_T survives the DC
+    # limit -- the expectation Sec. 6.1 flags as untested.
+    psi_all = [n for n in range(Nn) if n not in bnodes
+               and (len(node_mats[n]) > 1 or node_mats[n] == {CONDUCTOR})]
+    psi_free = [n for n in psi_all if n not in tset]
+    P_psi = np.zeros((Nn, len(psi_free) + 1))
+    for j, n in enumerate(psi_free):
+        P_psi[n, j] = 1.0
+    for n in tnodes:
+        P_psi[n, len(psi_free)] = 1.0          # psi_T
+    psi_T = len(psi_free)
+
+    v_free = [n for n in range(Nn) if n not in bnodes and n not in tset]
+    P_v = np.zeros((Nn, len(v_free) + 1))
+    for j, n in enumerate(v_free):
+        P_v[n, j] = 1.0
+    for n in tnodes:
+        P_v[n, len(v_free)] = 1.0              # V_T
+    v_T = len(v_free)
+
+    jw = 1j * k0
+    ix = np.ix_
+    A11 = (S + jw * M_kap)[ix(ke, ke)]
+    A12 = jw * (C_kap[ix(ke, np.arange(Nn))] @ P_psi)
+    A13 = C_kap[ix(ke, np.arange(Nn))] @ P_v
+    A22 = jw * (P_psi.T @ G_kap @ P_psi)
+    A23 = P_psi.T @ G_kap @ P_v
+    A33 = P_v.T @ G_epsN @ P_v
+
+    M = np.block([[A11, A12, A13],
+                  [A12.T, A22, A23],
+                  [A13.T, A23.T, A33]])
+    b = np.zeros(M.shape[0], dtype=complex)
+    b[len(ke) + psi_T] = I_DRIVE * ETA0        # the current, on PSI's row
+
+    asym = np.abs(M - M.T).max() / np.abs(M).max()
+    x = np.linalg.solve(M, b)
+    V_T = x[len(ke) + len(psi_free) + 1 + v_T]
+    return V_T, len(ke), len(psi_free) + 1, len(v_free) + 1, asym
+
+
+def milestone5(nodes, tets, mats, r_exact):
+    print("\n" + "=" * 72)
+    print("MILESTONE 5 -- JOCHUM_PORT_DERIVATION Sec. 6: psi aggregated too,")
+    print("               drive moved from V's row to psi's")
+    print("=" * 72)
+    print("    %-9s %-11s %-30s %-11s %s"
+          % ("freq", "k0", "terminal V (V)", "vs base", "asym"))
+    print("    " + "-" * 76)
+    for f in (5e1, 5e4, 5e7):
+        base = None
+        for lab, sd in (("base", None), ("permA", 12345), ("permB", 777)):
+            w = 2.0 * math.pi * f
+            V, nA, nps, nV, asym = solve_jochum_port(nodes, tets, mats, w, sd)
+            rel = 0.0 if base is None else abs(V - base) / abs(base)
+            if base is None:
+                base = V
+            tag = "%.0e %s" % (f, lab) if lab != "base" else "%.0e base" % f
+            print("    %-21s %+.6e%+.6ej  %-11.3e %.1e"
+                  % (tag, V.real, V.imag, rel, asym))
+        print()
+    print("    ACCEPTANCE (RESULTS_SPIKEC.md): R must be %.6f uOhm, the"
+          % (r_exact * 1e6))
+    print("    reactance must be present and FREQUENCY DEPENDENT, and the")
+    print("    terminal potential must not move with the tree.")
+    print("\n    Milestone 2's failure signature -- zero reactance, unchanged")
+    print("    across decades -- means the drive is still in the gauge row and")
+    print("    Sec. 6 is wrong.")
 
 
 if __name__ == "__main__":

@@ -78,7 +78,7 @@
 </style></head><body>
 <div class="wrap">
 <h1>A terminal on Γ in Jochum&#x27;s formulation — derivation report</h1>
-<p><strong>Status: derivation in progress.</strong> §§1–5 are worked and I believe them. §6 is a proposed resolution with a dimension count that balances but is <strong>not yet verified</strong>, and §7 says what would verify it. Nothing here is implemented.</p>
+<p><strong>Status: §6 has been tested. It gets the physics right and the gauge wrong.</strong> §§1–5 are worked and stand. §6&#x27;s construction reproduces the correct terminal impedance at every frequency — and is <strong>as tree-dependent as the tree–cotree solve it was meant to replace</strong>. §10 has the measurement and the diagnosis. Nothing is implemented in C++.</p>
 <p>Why this document exists: <code>tools/gauge_spike/RESULTS_SPIKEC.md</code> milestone 2 found that Jochum, Farle &amp; Dyczij-Edlinger&#x27;s formulation — the only one in the literature carrying a materially-weighted gauge interface condition at a conductor/insulator boundary, which is exactly where our failing port sits — has <strong>nowhere to put a port</strong>. This works out why, and what would have to change.</p>
 <hr>
 <h2>1. The formulation, in our convention</h2>
@@ -211,5 +211,71 @@
 <tr><td><code>tools/gauge_spike/RESULTS_SPIKEC.md</code></td><td>Milestone 2&#x27;s measurement, which §5.1 explains.</td></tr>
 <tr><td><code>GAUGE_CHOICE.md</code> §13</td><td>The reading of Jochum this builds on.</td></tr>
 </tbody></table></div>
+<hr>
+<h2>10. Result: §6 tested</h2>
+<p><code>tools/gauge_spike/spikeC.py</code>, milestone 5. Two findings, and the second undoes the first.</p>
+<h3>10.1 The readout in §6 was wrong, and fixing it gives correct physics</h3>
+<p>§6 said <code>V_T</code> is the terminal potential. <strong>It is not.</strong> From (17),</p>
+<pre><code>    E  =  −∇V − jk₀(A_c + ∇ψ)  =  −∇(V + jk₀ψ) − jk₀A_c</code></pre>
+<p>so the scalar content is **split between <code>V</code> and <code>ψ</code>**, and the effective potential — the one that plays the usual <code>Φ</code> against <code>A_c</code> as the vector potential — is</p>
+<pre><code>    Φ_eff  =  V + jk₀ψ                                               (35)</code></pre>
+<p>Read that way, the construction is <strong>exactly right</strong>:</p>
+<div class="tw"><table>
+<thead><tr>
+<th>freq</th>
+<th>Jochum <code>Φ_eff</code></th>
+<th>tree–cotree A‑Φ, same quantity</th>
+</tr></thead>
+<tbody>
+<tr><td>50 Hz</td><td>1.150074e‑05 + 1.043363e‑06j</td><td>1.150074461e‑05 + 1.043363113e‑06j</td></tr>
+<tr><td>50 kHz</td><td>3.011561e‑04 + 3.567000e‑04j</td><td>3.011561e‑04 + 3.567000e‑04j</td></tr>
+<tr><td>50 MHz</td><td>1.212789e‑03 + 3.528559e‑06j</td><td>1.212789e‑03 + 3.528559e‑06j</td></tr>
+</tbody></table></div>
+<p>Identical to every digit printed, at every frequency — <code>R</code> right, <strong>reactance present and frequency-dependent</strong>, symmetry residual 3.6e‑24. Milestone 2&#x27;s failure signature is gone: the drive now injects current instead of perturbing the gauge, exactly as §5 predicted it would once moved to <code>ψ</code>&#x27;s row.</p>
+<p>So §6&#x27;s <em>structure</em> — two aggregated unknowns, current on the continuity row — is correct. Reading <code>V_T</code> alone was the error, and it explains why milestone 5 first reproduced milestone 2&#x27;s symptom.</p>
+<h3>10.2 And it is exactly as tree-dependent as what it replaces</h3>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th><code>Φ_eff</code>, base→permA</th>
+<th>base→permB</th>
+</tr></thead>
+<tbody>
+<tr><td>50 Hz</td><td><strong>3.843e‑02</strong></td><td>3.533e‑02</td></tr>
+<tr><td>50 kHz</td><td>5.318e‑01</td><td>5.771e‑01</td></tr>
+<tr><td>50 MHz</td><td>2.823e+02</td><td>3.246e+02</td></tr>
+</tbody></table></div>
+<p>The tree–cotree A‑Φ solve moves the same quantity by <strong>3.84e‑02 and 3.53e‑02</strong>. Identical. And it degrades with frequency, to a factor of 282 at 50 MHz.</p>
+<p><strong>This fails the acceptance test.</strong> The whole point was a formulation whose terminal potential does not depend on the tree.</p>
+<h3>10.3 Why — and one hypothesis already falsified</h3>
+<p>First suspicion: Stysch&#x27;s §5.5 restriction of <code>ψ</code> to the interface and conductor, which I had carried over. <code>A = A_c + ∇ψ</code> spans the full edge space only if <code>ψ</code> spans all nodes — cotree is <code>#edges − #nodes + 1</code>, gradients are <code>#nodes − 1</code> — so restricting <code>ψ</code> punches a hole in the span, and the missing gradients would be tree-dependent.</p>
+<p><strong>Falsified.</strong> With <code>ψ</code> on every interior node the numbers are identical to every digit: 3.843e‑02 and 3.533e‑02. Only the conditioning changed, 1.8e+10 → 5.6e+26, which reproduces <code>RESULTS_COMPARE.md</code>&#x27;s finding that an insulator-interior <code>ψ</code> wrecks the conditioning.</p>
+<p>The remaining explanation, and it is a caution about the whole approach:</p>
+<blockquote><p>**<code>A_c</code> lives in the cotree space, and that space is defined by the tree.** Jochum&#x27;s (14) is an <em>&quot;inexact Helmholtz splitting&quot;</em> which he realizes discretely <strong>by tree–cotree</strong>. So the tree is baked into the trial space before the gauge condition ever acts. The gauge then determines <code>ψ</code> <em>given</em> a tree-dependent <code>A_c</code>, and the dependence survives into <code>Φ_eff</code>.</p></blockquote>
+<p>That would make the gauge condition a statement about how <code>A</code> is <em>split</em> between <code>A_c</code> and <code>∇ψ</code>, not about which <code>A</code> the discrete problem selects — which is precisely the distinction Rapetti draws when he says tree gauges <em>&quot;are not a discretization of the Coulomb gauge and enforce no orthogonality.&quot;</em></p>
+<p><strong>Stated as a limit of this work, not of his paper.</strong> My construction may be unfaithful: his examples are voltage-driven with no interior terminal (§5.2), so this configuration is outside what he demonstrates, and the aggregation is mine. What is measured is that <strong>the construction in §6 does not deliver a tree-independent terminal</strong>, and that the cause is not the <code>ψ</code> restriction.</p>
+<h3>10.4 What this leaves</h3>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td>§6&#x27;s structure</td><td><strong>right</strong> — correct <code>R</code>, correct reactance, symmetric, drive in the right row</td></tr>
+<tr><td>§6 as a fix for the gauge</td><td><strong>wrong</strong> — tree-dependence identical to tree–cotree&#x27;s, worsening with frequency</td></tr>
+<tr><td>the <code>ψ</code> restriction as the cause</td><td><strong>falsified</strong></td></tr>
+<tr><td>likely cause</td><td><code>A_c</code>&#x27;s space is tree-defined, so the tree precedes the gauge</td></tr>
+</tbody></table></div>
+<p>If that diagnosis is right, no arrangement of terminals rescues it: the fix would have to stop realizing the Helmholtz splitting with a tree. That points at §8&#x27;s second fallback — taking the condition from an exterior boundary-integral solution — rather than at any further rearrangement of Jochum&#x27;s rows.</p>
+<h3>10.5 The control that would settle it was attempted, and failed</h3>
+<p>The diagnosis in §10.3 needs one check: is <strong>Jochum without a terminal</strong> tree-independent on this mesh? If his published configuration is also tree-dependent here, my construction is faithful and the conclusion holds. If it is not, the terminal is what broke it, and §6 needs revisiting rather than abandoning.</p>
+<p>I built it — his configuration, Dirichlet <code>V</code> on faces, no terminal, measuring the dissipated power, which is gauge-invariant — and <strong>it does not work</strong>. It returns <code>P = 2.5e‑19 W</code> where 1 V across 11.5 µΩ should give about <code>4.3e+04 W</code>: <strong>twenty-three orders out</strong>. The Dirichlet lift for a prescribed <code>V</code> across all three blocks is wrong somewhere, so the 98–99 % tree-dependence it reports is meaningless and is not evidence of anything.</p>
+<p><strong>So §10.3 remains a hypothesis</strong>, and the two possibilities it was meant to separate are both still open:</p>
+<ul><li>my construction is faithful, and Jochum&#x27;s formulation inherits tree-dependence</li></ul>
+<p>through <code>A_c</code>&#x27;s tree-defined space; <strong>or</strong></p>
+<ul><li>my construction is unfaithful in some way the terminal exposes, and his</li></ul>
+<p>published configuration is fine.</p>
+<p>What is <strong>not</strong> in doubt, because it was measured three ways and cross-checked digit-for-digit against the A‑Φ solve: §6 gives the right impedance at every frequency, and it does not remove the tree-dependence. Whichever explanation is right, <strong>§6 is not the fix.</strong></p>
+<p>Fixing that control is the cheapest next step, and it is a prerequisite for trusting §10.3 either way.</p>
 </div>
 </body></html>
