@@ -450,6 +450,65 @@ digit-for-digit (§10.1); `A` and `B` now reproduce its *pathology* — the same
 assembly is the tree–cotree A‑Φ system re-parameterized**, and the gauge
 condition is contributing nothing.
 
+### 10.6a The assembly was unfaithful — and fixing it changed nothing
+
+Checking §§1–5 against the paper term by term found a real defect. Jochum's
+(26), the `ψ` row in `Ω_N`, satisfies
+
+```
+    row2|Ω_N  =  jk₀ × row3|Ω_N          exactly, since κ|Ω_N = jk₀ε
+```
+
+He says so — (28) is *"a wavenumber-scaled version of (19b), **in accordance
+with the lack of a gauge in `Ω_N`**"* — and instructs that **(26) be replaced by
+a suitable gauge condition, on the FE level.** My assembly never did: it carried
+the redundant row, so the matrix was rank-deficient by one per insulator-interior
+node.
+
+Replacing row 2 in `Ω_N` with `∇·(εA) = 0` fixes that. **The tree-dependence is
+unchanged**: 3.843e‑02, 5.318e‑01, 2.822e+02 — identical to three figures.
+
+So the redundancy was real and was not the cause.
+
+### 10.6b It is the `ψ` aggregation, and the count proves it
+
+Across the milestones the tree-dependence tracks one thing only:
+
+| | `ψ` aggregated on `Γ_T`? | reactance | tree-dependence |
+|---|---|---|---|
+| milestone 2, drive on `V`'s row | **no** | absent | **2.4e‑14** |
+| milestone 5, drive on `ψ`'s row | **yes** | correct | **3.8e‑02** |
+| milestone 5 + the `Ω_N` gauge fix | yes | correct | 3.8e‑02 |
+
+`A = A_c + ∇ψ` reaches the whole edge space only if `ψ` carries one DOF per
+node. Counted on this mesh:
+
+```
+    interior edges                 1154     what A must span
+    cotree (A_c)                   1054
+    interior nodes                  100
+    cotree + all interior nodes    1154     COMPLETE
+    psi AGGREGATED on the terminal   89     12 terminal nodes -> 1
+    cotree + aggregated psi        1143     SHORT BY 11
+```
+
+**Aggregating `ψ` removes exactly `N_T − 1 = 11` gradient directions**, and
+*which* 11 are unreachable is decided by the cotree. That is the tree, back in
+through the port model.
+
+So §6's proposal is structurally flawed, for a reason that can be counted rather
+than argued: **the terminal must not consume gradient degrees of freedom.**
+
+### 10.6c What that indicates
+
+Impose the total current **without** aggregating `ψ` — a Lagrange multiplier on
+`Γ_T` adds one unknown and one equation while removing none, so the span stays
+complete. `V` may still be aggregated, since `V` is not part of `A` and its
+aggregation cannot affect the span; milestone 2 confirms a `V`-only aggregation
+is tree-invariant to 2.4e‑14.
+
+That is the next thing to try, and it is a small change to the same bed.
+
 ### 10.7 Status, stated plainly
 
 | | |
@@ -467,11 +526,13 @@ would never expose. I cannot separate those, and the control that would have
 has failed twice.
 
 What is safe to conclude: **nothing in this line has yet produced a terminal
-potential that survives a change of tree**, and the obstacle is no longer a
-missing port model but `A` itself. Rearranging terminals cannot fix a
-tree-dependent `A`.
+potential that survives a change of tree** — but §10.6b now locates the obstacle
+precisely, and it is **the port model, not the formulation**. The terminal
+consumes gradient degrees of freedom that `A` needs in order to span the edge
+space, and the cotree fills the gap.
 
-That points away from further work on Jochum's rows and toward §8's second
-fallback — a condition supplied from outside, by a boundary-integral exterior —
-which is the only remaining route that does not start from a tree-defined trial
-space.
+That points **back** at Jochum's rows rather than away from them, and at a
+terminal that **adds a constraint instead of removing unknowns** (§10.6c). The
+earlier reading — that this indicted the formulation and favoured a
+boundary-integral exterior — is **withdrawn**: it rested on §10.6's diagnosis,
+which §10.6b supersedes.
