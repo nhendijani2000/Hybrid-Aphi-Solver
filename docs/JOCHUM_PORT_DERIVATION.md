@@ -426,5 +426,52 @@ digit-for-digit against the A‑Φ solve: §6 gives the right impedance at every
 frequency, and it does not remove the tree-dependence. Whichever explanation is
 right, **§6 is not the fix.**
 
-Fixing that control is the cheapest next step, and it is a prerequisite for
-trusting §10.3 either way.
+### 10.6 Tested directly instead — `A` itself moves, not just its split
+
+The broken control was a proxy. The question it stood for can be asked of the
+**current-driven** assembly, which demonstrably works (§10.1): solve on two
+trees and compare `A_c`, `∇ψ` and their sum.
+
+| | base → permA, 50 Hz | 50 kHz |
+|---|---|---|
+| `A_c` | 8.55e‑01 | 7.85e‑01 |
+| `∇ψ` | 8.37e‑01 | 7.86e‑01 |
+| **`A = A_c + ∇ψ`** | **8.67e‑01** | **7.85e‑01** |
+| **`B = ∇×A_c`** | **9.71e‑01** | **8.52e‑01** |
+
+**`A` itself moves by 87 %, not merely its split between `A_c` and `∇ψ`.** And
+`B` — physical and gauge-invariant — moves by 97 %, so the two runs are
+**different physical solutions**, not two gauges of one.
+
+That is the second branch of §10.3: **the cotree space is the culprit, and it is
+structural.** It also closes the chain. `Φ_eff` reproduced the A‑Φ solve
+digit-for-digit (§10.1); `A` and `B` now reproduce its *pathology* — the same
+91 % `B` movement `GAUGE_CHOICE.md` §15.3 measures at a mixed port. **This
+assembly is the tree–cotree A‑Φ system re-parameterized**, and the gauge
+condition is contributing nothing.
+
+### 10.7 Status, stated plainly
+
+| | |
+|---|---|
+| §6's structure | **right** — correct impedance at every frequency, symmetric, drive in the right row |
+| §6 as a gauge fix | **wrong**, and now explained: `A` is tree-dependent, so the gauge never had a chance |
+| the ψ restriction | **falsified** as the cause |
+| the cotree space | **confirmed** as where the tree enters |
+| is this faithful to Jochum? | **still unknown**, and that is the honest limit of this work |
+
+The last row matters. Three attempts have produced **no gauge benefit at all**,
+which is either a true property of realizing the Helmholtz splitting with a tree
+— his (14) — or a defect in my construction that his voltage-driven examples
+would never expose. I cannot separate those, and the control that would have
+has failed twice.
+
+What is safe to conclude: **nothing in this line has yet produced a terminal
+potential that survives a change of tree**, and the obstacle is no longer a
+missing port model but `A` itself. Rearranging terminals cannot fix a
+tree-dependent `A`.
+
+That points away from further work on Jochum's rows and toward §8's second
+fallback — a condition supplied from outside, by a boundary-integral exterior —
+which is the only remaining route that does not start from a tree-defined trial
+space.

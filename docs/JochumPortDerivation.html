@@ -290,6 +290,37 @@
 <ul><li>my construction is unfaithful in some way the terminal exposes, and his</li></ul>
 <p>published configuration is fine.</p>
 <p>What is <strong>not</strong> in doubt, because it was measured three ways and cross-checked digit-for-digit against the A‑Φ solve: §6 gives the right impedance at every frequency, and it does not remove the tree-dependence. Whichever explanation is right, <strong>§6 is not the fix.</strong></p>
-<p>Fixing that control is the cheapest next step, and it is a prerequisite for trusting §10.3 either way.</p>
+<h3>10.6 Tested directly instead — <code>A</code> itself moves, not just its split</h3>
+<p>The broken control was a proxy. The question it stood for can be asked of the <strong>current-driven</strong> assembly, which demonstrably works (§10.1): solve on two trees and compare <code>A_c</code>, <code>∇ψ</code> and their sum.</p>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th>base → permA, 50 Hz</th>
+<th>50 kHz</th>
+</tr></thead>
+<tbody>
+<tr><td><code>A_c</code></td><td>8.55e‑01</td><td>7.85e‑01</td></tr>
+<tr><td><code>∇ψ</code></td><td>8.37e‑01</td><td>7.86e‑01</td></tr>
+<tr><td>**<code>A = A_c + ∇ψ</code>**</td><td><strong>8.67e‑01</strong></td><td><strong>7.85e‑01</strong></td></tr>
+<tr><td>**<code>B = ∇×A_c</code>**</td><td><strong>9.71e‑01</strong></td><td><strong>8.52e‑01</strong></td></tr>
+</tbody></table></div>
+<p>**<code>A</code> itself moves by 87 %, not merely its split between <code>A_c</code> and <code>∇ψ</code>.** And <code>B</code> — physical and gauge-invariant — moves by 97 %, so the two runs are <strong>different physical solutions</strong>, not two gauges of one.</p>
+<p>That is the second branch of §10.3: <strong>the cotree space is the culprit, and it is structural.</strong> It also closes the chain. <code>Φ_eff</code> reproduced the A‑Φ solve digit-for-digit (§10.1); <code>A</code> and <code>B</code> now reproduce its <em>pathology</em> — the same 91 % <code>B</code> movement <code>GAUGE_CHOICE.md</code> §15.3 measures at a mixed port. <strong>This assembly is the tree–cotree A‑Φ system re-parameterized</strong>, and the gauge condition is contributing nothing.</p>
+<h3>10.7 Status, stated plainly</h3>
+<div class="tw"><table>
+<thead><tr>
+<th></th>
+<th></th>
+</tr></thead>
+<tbody>
+<tr><td>§6&#x27;s structure</td><td><strong>right</strong> — correct impedance at every frequency, symmetric, drive in the right row</td></tr>
+<tr><td>§6 as a gauge fix</td><td><strong>wrong</strong>, and now explained: <code>A</code> is tree-dependent, so the gauge never had a chance</td></tr>
+<tr><td>the ψ restriction</td><td><strong>falsified</strong> as the cause</td></tr>
+<tr><td>the cotree space</td><td><strong>confirmed</strong> as where the tree enters</td></tr>
+<tr><td>is this faithful to Jochum?</td><td><strong>still unknown</strong>, and that is the honest limit of this work</td></tr>
+</tbody></table></div>
+<p>The last row matters. Three attempts have produced <strong>no gauge benefit at all</strong>, which is either a true property of realizing the Helmholtz splitting with a tree — his (14) — or a defect in my construction that his voltage-driven examples would never expose. I cannot separate those, and the control that would have has failed twice.</p>
+<p>What is safe to conclude: <strong>nothing in this line has yet produced a terminal potential that survives a change of tree</strong>, and the obstacle is no longer a missing port model but <code>A</code> itself. Rearranging terminals cannot fix a tree-dependent <code>A</code>.</p>
+<p>That points away from further work on Jochum&#x27;s rows and toward §8&#x27;s second fallback — a condition supplied from outside, by a boundary-integral exterior — which is the only remaining route that does not start from a tree-defined trial space.</p>
 </div>
 </body></html>
